@@ -1,0 +1,868 @@
+import os
+import re
+import shutil
+import warnings
+from pathlib import Path
+
+import cv2
+import keras
+import matplotlib.cm as cm
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+import numpy as np
+import zea
+from keras import ops
+from matplotlib.animation import FuncAnimation
+from matplotlib.colors import ListedColormap
+from PIL import Image
+from zea import log
+from zea.display import scan_convert_2d
+from zea.io_lib import matplotlib_figure_to_numpy
+from zea.visualize import plot_image_grid
+
+
+def cache_remote_file_locally(remote_file, local_dir):
+    """
+    Download a remote file to a local path if it doesn't exist.
+    """
+    remote_file = Path(remote_file)
+    local_dir = Path(local_dir)
+    local_file = local_dir / remote_file.name
+    if not local_file.exists():
+        # copy the file to local
+        local_file.parent.mkdir(parents=True, exist_ok=True)
+        log.info(f"Downloading {remote_file} to {local_file}...")
+        shutil.copyfile(str(remote_file), str(local_file))
+        log.info("Download complete.")
+    else:
+        log.info(f"File {local_file} already exists. Skipping download.")
+
+    return local_file
+
+
+def save_animation(save_dir, filename, prefix, sort_key_fn, fps=1):
+    print("Making gif animation...")
+    paths = os.listdir(save_dir)
+    step_paths = list(filter(lambda path: prefix in path, paths))
+    if not step_paths:
+        print(f"❗️ No paths with prefix {prefix} were found for animation.")
+        return
+    step_paths_sorted = sorted(
+        step_paths,
+        key=sort_key_fn,
+    )
+    images_as_np = [
+        cv2.cvtColor(
+            cv2.imread(os.path.join(save_dir, path)), cv2.COLOR_BGR2RGB
+        ).astype(np.uint8)
+        for path in step_paths_sorted
+    ]
+    zea.utils.save_to_gif(
+        images_as_np,
+        os.path.join(save_dir, filename),
+        fps=fps,
+        shared_color_palette=False,
+    )
+
+
+def make_save_dir(path, prefix="run"):
+    """
+    Make a save dir with the current datetime as an ID
+    """
+    datestr = zea.utils.get_date_string("%Y_%m_%d_%H%M%S_%f")
+    run_id = f"{prefix}_{datestr}"
+    save_dir = path / Path(run_id)
+    os.makedirs(save_dir, exist_ok=True)
+    return save_dir, run_id
+
+
+def map_range(img, from_range=(-1, 1), to_range=(0, 255)):
+    img = ops.convert_to_numpy(img)
+    img = zea.utils.translate(img, from_range, to_range)
+    return np.clip(img, to_range[0], to_range[1])
+
+
+def deg2rad(x: float):
+    return x * (np.pi / 180)
+
+
+def _scan_convert(
+    img,
+    scan_conversion_angles: tuple = (-45, 45),
+    fill_value: float = 0.0,
+    order: int = 1,
+    resolution: float | None = 1.0,
+    **kwargs,
+):
+    """Scan conversion helper function (will handle casting to float32 if needed). If possible,
+    stay with floats and cast to int to avoid unnessesary quantization in between."""
+    img_height = img.shape[-2]
+    start_angle, end_angle = scan_conversion_angles
+
+    orig_dtype = ops.dtype(img)
+    int_type = "int" in orig_dtype
+    if int_type:
+        img = ops.cast(img, "float32")
+
+    sc, _ = scan_convert_2d(
+        img,
+        rho_range=(0, img_height),
+        theta_range=(deg2rad(start_angle), deg2rad(end_angle)),
+        order=order,
+        fill_value=fill_value,
+        resolution=resolution,
+        **kwargs,
+    )
+
+    # round sc to get rid of numerical errors leading to overflow
+    if int_type:
+        sc = ops.cast(ops.round(sc), orig_dtype)
+
+    return sc
+
+
+def gray_to_color_with_transparency(grayscale_image, transparency_mask=None):
+    transparency_mask = (
+        transparency_mask
+        if transparency_mask is not None
+        else np.ones_like(grayscale_image)
+    )
+    grayscale_image = ops.convert_to_numpy(grayscale_image)
+    colour_image = cv2.cvtColor(grayscale_image, cv2.COLOR_GRAY2BGRA)
+    colour_image[:, :, 3] = colour_image[:, :, 3] * transparency_mask
+    return colour_image
+
+
+map_error = lambda x: map_range(x, (0, 2), (0, 1))
+
+
+def apply_colormap_to_rgba(rgba_image: np.ndarray, cmap_name: str = "viridis"):
+    """
+    Apply a colormap to an RGBA image based on its grayscale values while preserving transparency.
+
+    Parameters:
+    - rgba_image (np.ndarray): Input image of shape (H, W, 4) where RGB channels define grayscale values.
+    - cmap_name (str): Name of the colormap to apply (default is 'viridis').
+
+    Returns:
+    - np.ndarray: RGBA image with the colormap applied and transparency preserved.
+    """
+
+    if rgba_image.shape[-1] != 4:
+        raise ValueError("Input image must have shape (H, W, 4) with an alpha channel.")
+
+    # Convert RGB to grayscale (luminosity method: best perceptual results)
+    gray = np.dot(rgba_image[..., :3], [0.2989, 0.5870, 0.1140])  # Weighted sum
+
+    # Normalize grayscale values to range [0, 1]
+    gray = (gray - gray.min()) / (gray.max() - gray.min() + 1e-8)  # Avoid div by zero
+
+    # Get the specified colormap
+    cmap = cm.get_cmap(cmap_name)
+
+    # Apply colormap (returns RGBA image with shape (H, W, 4))
+    color_mapped = cmap(gray)
+
+    # Preserve the original alpha channel
+    color_mapped[..., 3] = rgba_image[..., 3]  # Copy alpha values
+
+    return color_mapped
+
+
+def mask_heatmap_moving_average(masks, window_size=9):
+    masks = ops.convert_to_numpy(masks).astype(np.float32)
+    heatmap = np.zeros_like(masks)
+    for i, mask in enumerate(masks):
+        for j in range(window_size):
+            if i + j < len(masks):
+                heatmap[i + j] += mask
+    return heatmap / window_size
+
+
+def side_by_side_gif(
+    save_path,
+    *arrays,
+    vmin=0,
+    vmax=255,
+    fps=30,
+    interpolation="nearest",
+    dpi=300,
+    context=None,
+    labels=None,
+):
+    """
+    Generalized side-by-side gif for N arrays.
+    Usage: side_by_side_gif(save_path, arr1, arr2, arr3, ..., labels=[...])
+    """
+    if context is None:
+        context = {}
+
+    n_arrays = len(arrays)
+    if n_arrays == 0:
+        raise ValueError("At least one array must be provided.")
+
+    num_frames = arrays[0].shape[0]
+    for arr in arrays:
+        if arr.shape[0] != num_frames:
+            raise ValueError("All arrays must have the same number of frames.")
+
+    if not isinstance(interpolation, (tuple, list)):
+        interpolation = [interpolation] * n_arrays
+    if labels is None:
+        labels = [None] * n_arrays
+
+    with plt.style.context(context):
+        fig, axes = plt.subplots(
+            1, n_arrays, figsize=(4 * n_arrays, 4), layout="constrained"
+        )
+        if n_arrays == 1:
+            axes = [axes]
+        ims = []
+        for i, arr in enumerate(arrays):
+            im = axes[i].imshow(
+                arr[0],
+                cmap="gray",
+                vmin=vmin,
+                vmax=vmax,
+                interpolation=interpolation[i],
+            )
+            if labels[i] is not None:
+                axes[i].set_title(labels[i])
+            axes[i].axis("off")
+            ims.append(im)
+
+        def update(frame):
+            for i, arr in enumerate(arrays):
+                ims[i].set_data(arr[frame])
+            return ims
+
+        anim = FuncAnimation(fig, update, frames=num_frames, blit=True)
+        anim.save(save_path, writer="pillow", fps=fps, dpi=dpi)
+        plt.close(fig)
+        print(f"Saved animation to {save_path}")
+
+
+def get_heatmap(
+    masks,
+    io_config,
+    sigma=1.0,
+    resolution=0.1,
+    normalize=True,
+    cmap="inferno",
+    sc_order=1,
+    window_size=9,
+):
+    from scipy.ndimage import gaussian_filter
+
+    heatmap = mask_heatmap_moving_average(masks, window_size=window_size)
+
+    # Smooth
+    if sigma is not None:
+        # axis=-1 is the width axis
+        heatmap = gaussian_filter(heatmap, sigma=sigma, axes=-1)
+
+    # Scan convert
+    if io_config.scan_convert:
+        heatmap = _scan_convert(
+            heatmap,
+            io_config.scan_conversion_angles,
+            order=sc_order,
+            fill_value=np.nan,
+            resolution=resolution,
+        )
+
+    if normalize:
+        heatmap /= np.nanmax(heatmap)
+
+    # Cmap
+    cmap = plt.colormaps.get_cmap(cmap)
+    heatmap = cmap(heatmap).astype(np.float32)
+    heatmap = map_range(heatmap, from_range=(0, 1)).astype(np.uint8)
+    return heatmap
+
+
+def postprocess_agent_results(
+    data,
+    io_config,
+    scan_convert_order,
+    image_range,
+    drop_first_n_frames=0,
+    scan_convert_resolution=0.1,
+    reconstruction_sharpness_std=0.0,  # advise: 0.025
+    fill_value="black",
+    to_uint8=True,
+):
+    # Cast to float32 because scan conversion is weird for float16
+    data = ops.cast(data, "float32")
+
+    # Drop first n frames
+    if drop_first_n_frames > 0 and drop_first_n_frames < len(data):
+        data = data[drop_first_n_frames:]
+
+    # Add some noise (mainly for reconstructions)
+    # Scaled based on the image range
+    if reconstruction_sharpness_std > 0:
+        total_image_range = image_range[1] - image_range[0]
+        reconstruction_sharpness_std *= total_image_range
+        noised_data = data + keras.random.normal(
+            data.shape,
+            stddev=reconstruction_sharpness_std,
+            dtype=data.dtype,
+        )
+        data = ops.where(data > image_range[0], noised_data, data)
+
+    if isinstance(fill_value, str):
+        if fill_value == "black":
+            fill_value = image_range[0]
+        elif fill_value == "white":
+            fill_value = image_range[1]
+        elif fill_value == "transparent":
+            to_uint8 = False
+            fill_value = np.nan
+        else:
+            raise ValueError(
+                f"Unknown fill_value: {fill_value}. Use 'black', 'white', or 'transparent' "
+                "or a numeric value."
+            )
+
+    if io_config.scan_convert:
+        data = _scan_convert(
+            data,
+            io_config.scan_conversion_angles,
+            order=scan_convert_order,
+            fill_value=fill_value,
+            resolution=scan_convert_resolution,
+        )
+
+    # To uint8
+    if to_uint8:
+        data = map_range(data, image_range, (0, 255)).astype(np.uint8)
+
+    return data
+
+
+def plot_frames_for_presentation(
+    save_dir,
+    targets,  # shape (frames, height, width)
+    reconstructions,  # shape (frames, height, width)
+    masks,  # shape (frames, height, width)
+    measurements,  # shape (frames, height, width)
+    io_config,
+    dpi=150,
+    scan_convert_order=0,  # fixed to 0 for measurements!
+    scan_convert_resolution=0.1,
+    interpolation_matplotlib="nearest",
+    image_range=(0, 255),
+    context="active_sampling/ultrasound_line_scanning_agent/nvmu_assets/nvmu.mplstyle",
+    drop_first_n_frames=2,
+    window_size=7,
+    postfix_filename=None,
+    sigma_heatmap=None,
+):
+    save_dir = Path(save_dir)
+    Path(save_dir).mkdir(parents=True, exist_ok=True)
+
+    targets = postprocess_agent_results(
+        targets,
+        io_config,
+        scan_convert_order,
+        image_range,
+        drop_first_n_frames,
+        scan_convert_resolution,
+    )
+    reconstructions = postprocess_agent_results(
+        reconstructions,
+        io_config,
+        scan_convert_order,
+        image_range,
+        drop_first_n_frames,
+        scan_convert_resolution,
+        reconstruction_sharpness_std=io_config.get("reconstruction_sharpness_std", 0.0),
+    )
+    measurements = postprocess_agent_results(
+        measurements,
+        io_config,
+        scan_convert_order=0,  # always 0 for masks!
+        drop_first_n_frames=drop_first_n_frames,
+        image_range=image_range,
+        scan_convert_resolution=scan_convert_resolution,
+    )
+
+    if postfix_filename is None:
+        postfix_filename = ""
+    else:
+        postfix_filename = "_" + postfix_filename
+
+    first_frames_for_slides(
+        save_dir,
+        targets,
+        masks,
+        measurements,
+        io_config,
+        dpi,
+        scan_convert_order,
+        scan_convert_resolution,
+        interpolation_matplotlib,
+        context,
+        postfix_filename,
+    )
+
+    # Target and reconstruction side by side
+    side_by_side_gif(
+        save_dir / f"target_reconstruction{postfix_filename}.gif",
+        targets,
+        reconstructions,
+        dpi=dpi,
+        interpolation=interpolation_matplotlib,
+        fps=io_config.gif_fps,
+        context=context,
+        labels=["Target", "Reconstruction"],
+    )
+
+    # Measurements and reconstruction side by side
+    side_by_side_gif(
+        save_dir / f"measurements_reconstruction{postfix_filename}.gif",
+        measurements,
+        reconstructions,
+        dpi=dpi,
+        interpolation=interpolation_matplotlib,
+        fps=io_config.gif_fps,
+        context=context,
+        labels=["Measurements", "Reconstruction"],
+    )
+
+    # Action heatmap and reconstruction side by side
+    heatmap = get_heatmap(
+        masks, io_config, cmap="inferno", window_size=window_size, sigma=sigma_heatmap
+    )
+    offset = max(window_size, drop_first_n_frames)
+    if offset > len(heatmap):
+        offset = 0
+        log.warning(
+            f"Heatmap sequence is not long enough to cut of {offset} frames. Setting to 0."
+        )
+    if offset > drop_first_n_frames:
+        drop_extra_frames = offset - drop_first_n_frames
+    side_by_side_gif(
+        save_dir / f"heatmap_reconstruction{postfix_filename}.gif",
+        heatmap[offset:],
+        reconstructions[drop_extra_frames:],
+        dpi=dpi,
+        interpolation=[None, interpolation_matplotlib],
+        fps=io_config.gif_fps,
+        context=context,
+        labels=[f"Density over {window_size} frames", "Reconstruction"],
+    )
+
+
+def plot_belief_distribution_for_presentation(
+    save_dir,
+    belief_distribution,  # shape (num_beliefs, H, W, 1)
+    masks,  # shape (num_beliefs, H, W) or (num_beliefs, H, W, 1)
+    io_config,
+    dpi=150,
+    scan_convert_order=0,
+    interpolation_matplotlib="nearest",
+    image_range=(-1, 1),
+    fill_value=np.nan,
+    next_masks=None,
+    context="styles/darkmode.mplstyle",
+):
+    """
+    Plots a grid of scan-converted belief images, pixelwise variance, and a single data-space measurements image.
+
+    Args:
+        save_dir (str or Path): Directory to save the output images.
+        belief_distribution (ndarray): Array of shape (num_beliefs, H, W, 1).
+        masks (ndarray): Array of shape (num_beliefs, H, W) or (num_beliefs, H, W, 1).
+        io_config (dict): IO configuration.
+        dpi (int): Dots per inch for saved figures.
+        scan_convert_order (int): Order for scan conversion.
+        interpolation_matplotlib (str): Interpolation for matplotlib.
+        image_range (tuple): Range of image values.
+        context (str): Matplotlib style context.
+    """
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    beliefs = ops.clip(belief_distribution, image_range[0], image_range[1])
+    beliefs = ops.cast(beliefs, "float32")
+    num_beliefs = beliefs.shape[0]
+
+    # Remove channel dimension for scan conversion
+    # beliefs = beliefs[..., 0]  # shape: (num_beliefs, H, W)
+
+    # Prepare masks
+    if masks.shape[-1] == 1:
+        masks = masks[..., 0]
+    masks = ops.cast(masks, "bool")
+
+    # Compute measurements in data space (all beliefs share the same mask)
+    # Use the first belief as the reference image for masking
+    measurements = ops.where(
+        masks[0], beliefs[0], ops.ones_like(beliefs[0]) * image_range[0]
+    )
+    measurements = measurements * masks[0]  # zero-out the unmeasured vals
+
+    # Scan convert each belief image
+    scan_converted_beliefs = []
+    for i in range(num_beliefs):
+        sc_belief = _scan_convert(
+            beliefs[i],
+            io_config.scan_conversion_angles,
+            order=scan_convert_order,
+            fill_value=fill_value,
+            resolution=0.1,
+        )
+        scan_converted_beliefs.append(sc_belief)
+    scan_converted_beliefs = np.stack(scan_converted_beliefs, axis=0)
+
+    # Plot grid of beliefs
+    with plt.style.context(context):
+        fig_grid, _ = plot_image_grid(scan_converted_beliefs, ncols=2, figsize=(8, 8))
+        fig_grid.suptitle("Belief Distribution (Scan Converted)", fontsize=18)
+        plt.tight_layout()
+        fig_grid.savefig(
+            save_dir / "belief_distribution_grid.png", dpi=dpi, transparent=True
+        )
+        plt.close(fig_grid)
+        log.info(log.yellow(save_dir / "belief_distribution_grid.png"))
+
+    pixelwise_variance = np.var(beliefs, axis=0)
+    sc_variance = _scan_convert(
+        pixelwise_variance,
+        io_config.scan_conversion_angles,
+        order=scan_convert_order,
+        fill_value=fill_value,
+        resolution=0.1,
+    )
+
+    # Plot pixelwise variance
+    with plt.style.context(context):
+        fig_var, ax = plt.subplots(1, 1, figsize=(6, 6))
+        im = ax.imshow(
+            sc_variance,
+            cmap="magma",
+            interpolation=interpolation_matplotlib,
+        )
+        ax.set_title("Pixelwise Variance", fontsize=18)
+        ax.axis("off")
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, shrink=0.6)
+        plt.tight_layout()
+        fig_var.savefig(
+            save_dir / "belief_distribution_variance.png", dpi=dpi, transparent=True
+        )
+        plt.close(fig_var)
+        log.info(log.yellow(save_dir / "belief_distribution_variance.png"))
+
+    sc_measurements = _scan_convert(
+        measurements,
+        io_config.scan_conversion_angles,
+        order=scan_convert_order,
+        fill_value=fill_value,
+        resolution=0.1,
+    )
+    with plt.style.context(context):
+        fig_meas, ax = plt.subplots(1, 1, figsize=(6, 6))
+        im = ax.imshow(
+            sc_measurements, cmap="gray", interpolation=interpolation_matplotlib
+        )
+        ax.set_title("Measurements", fontsize=18)
+        ax.axis("off")
+        plt.tight_layout()
+        fig_meas.savefig(save_dir / "measurements.png", dpi=dpi)
+        plt.close(fig_meas)
+        log.info(log.yellow(save_dir / "measurements.png"))
+
+    # Plot measurements (masked image, data space, no scan conversion)
+    measurements_uint8 = map_range(measurements, image_range, (0, 255)).astype(np.uint8)
+    with plt.style.context(context):
+        fig_meas, ax = plt.subplots(1, 1, figsize=(6, 6))
+        im = ax.imshow(
+            measurements_uint8, cmap="gray", interpolation=interpolation_matplotlib
+        )
+        ax.set_title("Measurements (Data Space)", fontsize=18)
+        ax.axis("off")
+        plt.tight_layout()
+        fig_meas.savefig(save_dir / "measurements_data_space.png", dpi=dpi)
+        plt.close(fig_meas)
+        log.info(log.yellow(save_dir / "measurements_data_space.png"))
+
+    sc_selected = _scan_convert(
+        ops.cast(next_masks, "float32") * ops.max(pixelwise_variance)
+        + (pixelwise_variance * ~ops.cast(next_masks, "bool")),
+        io_config.scan_conversion_angles,
+        order=scan_convert_order,
+        fill_value=fill_value,
+        resolution=0.1,
+    )
+    with plt.style.context(context):
+        fig_meas, ax = plt.subplots(1, 1, figsize=(6, 6))
+        im = ax.imshow(
+            sc_selected, cmap="magma", interpolation=interpolation_matplotlib
+        )
+        ax.set_title("Mask t", fontsize=18)
+        ax.axis("off")
+        plt.tight_layout()
+        fig_meas.savefig(save_dir / "selected_next_t.png", dpi=dpi, transparent=True)
+        plt.close(fig_meas)
+        log.info(log.yellow(save_dir / "selected_next_t.png"))
+
+
+def plot_frame_overview(
+    save_dir,
+    frame_index,
+    target_img,
+    best_reconstruction,
+    pixelwise_error,
+    io_config,
+    images_from_posterior=None,
+    mask=None,
+    latent=None,
+    segmentation_mask=None,
+    params_dict={},
+):
+    """Images should be within (0, 255)"""
+    target_img = ops.squeeze(target_img)
+    best_reconstruction = ops.squeeze(best_reconstruction)
+    pixelwise_error = ops.squeeze(pixelwise_error)
+    has_mask = mask is not None
+    if has_mask:
+        mask = ops.squeeze(mask)
+    else:
+        mask = np.zeros_like(target_img)
+    if segmentation_mask is not None:
+        segmentation_mask = ops.squeeze(segmentation_mask)
+
+    # Check mask shape
+    assert target_img.shape == mask.shape, "Image and mask dimensions do not match"
+
+    pixelwise_error = map_error(pixelwise_error)
+    pixelwise_error_sc = _scan_convert(
+        pixelwise_error,
+        io_config.scan_conversion_angles,
+        fill_value=0,
+    )
+    scan_converted_region = _scan_convert(
+        np.ones_like(target_img),
+        io_config.scan_conversion_angles,
+        fill_value=0,
+    )
+    num_pixels_sc = np.sum(scan_converted_region)
+    mae = np.sum(pixelwise_error_sc) / num_pixels_sc
+
+    if "xlims" in io_config and "zlims" in io_config:
+        extent = [
+            io_config.xlims[0] * 1000,
+            io_config.xlims[1] * 1000,
+            io_config.zlims[1] * 1000,
+            io_config.zlims[0] * 1000,
+        ]
+    else:
+        extent = None
+
+    target_img_sc = _scan_convert(target_img, io_config.scan_conversion_angles)
+    target_img_sc_color = gray_to_color_with_transparency(
+        target_img_sc, scan_converted_region
+    )
+
+    mask_sc = _scan_convert(
+        mask * 255,
+        io_config.scan_conversion_angles,
+        fill_value=0,
+        order=0,
+    )
+    blue_mask = np.zeros_like(target_img_sc_color)
+    blue_mask[..., 2] = mask_sc  # blue channel
+    blue_mask[..., 3] = scan_converted_region  # alpha channel
+
+    result = cv2.addWeighted(target_img_sc_color, 1, blue_mask, 0.5, 0)
+
+    # Build axes list and width ratios
+    axes_list = ["target"]
+    if has_mask:
+        axes_list.append("measurements")
+    axes_list.append("mae")
+    axes_list.append("mae_cbar")
+    axes_list.append("reconstruction")
+    if images_from_posterior is not None:
+        axes_list.append("posterior")
+    if latent is not None:
+        axes_list.append("latent")
+    ncols = len(axes_list)
+    width_ratios = [1 if name != "mae_cbar" else 0.08 for name in axes_list]
+
+    fig = plt.figure(figsize=(4 * (ncols - 1) + 1, 6))
+    gs = gridspec.GridSpec(1, ncols, width_ratios=width_ratios, height_ratios=[1])
+    axs = [plt.subplot(gs[i]) for i in range(ncols)]
+    ax_map = {name: ax for name, ax in zip(axes_list, axs)}
+
+    darkmode = io_config.get("darkmode", False)
+    text_color = "white" if darkmode else "black"
+    if darkmode:
+        fig.patch.set_facecolor("black")
+        for ax in axs:
+            ax.set_facecolor("black")
+
+    # Target image
+    ax_map["target"].imshow(result, extent=extent)
+    ax_map["target"].set_title(
+        "Target image; selected measurements", fontsize=15, color=text_color
+    )
+    ax_map["target"].set_axis_off()
+
+    # Measurements plot (only if mask is provided)
+    if has_mask:
+        measurements = target_img * ops.cast(mask, "uint8")
+        measurements_sc = _scan_convert(measurements, io_config.scan_conversion_angles)
+        measurements_sc_color = gray_to_color_with_transparency(
+            measurements_sc, scan_converted_region
+        )
+        ax_map["measurements"].imshow(measurements_sc_color, extent=extent)
+        ax_map["measurements"].set_title("Measurements", fontsize=15, color=text_color)
+        ax_map["measurements"].set_axis_off()
+
+    # Error plot (MAE)
+    N = 256
+    vals = np.ones((N, 4))
+    vals[:, 0] = np.linspace(1, 1, N)
+    vals[:, 1] = np.linspace(1, 0, N)
+    vals[:, 2] = np.linspace(1, 0, N)
+    white_to_red_cmap = ListedColormap(vals)
+    pixelwise_error_map_rgba = white_to_red_cmap(pixelwise_error_sc)
+    pixelwise_error_map_rgba[..., 3] = (
+        pixelwise_error_map_rgba[..., 3] * scan_converted_region
+    )
+
+    im1 = ax_map["mae"].imshow(
+        pixelwise_error_sc, cmap=white_to_red_cmap, vmin=0, vmax=1, extent=extent
+    )
+    ax_map["mae"].set_title(f"MAE={round(mae, 2):.2f}", fontsize=15)
+    ax_map["mae"].set_axis_off()
+
+    # Colorbar for MAE plot (immediately to the right, half-height and with ticks)
+    # Get position of the MAE axis
+    pos = ax_map["mae"].get_position()
+    # Calculate colorbar axis position: same x, half height, centered vertically
+    cbar_height = pos.height
+    cbar_bottom = pos.y0 + (pos.height - cbar_height) / 2
+    cbar_ax = fig.add_axes(
+        [
+            pos.x1 + 0.01,  # x (just to the right of MAE plot)
+            cbar_bottom,  # y (centered)
+            0.02,  # width
+            cbar_height,  # height
+        ]
+    )
+    cbar = fig.colorbar(im1, cax=cbar_ax, orientation="vertical", ticks=[0, 0.5, 1])
+    cbar.ax.tick_params(axis="y", labelsize=12, colors=text_color)
+    cbar.set_label("Error", fontsize=13, color=text_color)
+    ax_map["mae_cbar"].set_axis_off()
+
+    # Reconstruction plot (with optional segmentation mask overlay)
+    best_reconstruction_color = gray_to_color_with_transparency(
+        _scan_convert(best_reconstruction, io_config.scan_conversion_angles),
+        scan_converted_region,
+    )
+    if segmentation_mask is not None:
+        # NOTE: assuming segmentation mask for echonet, is already in scan converted domain,
+        # and just needs to be padded
+        segmentation_mask_sc = ops.cast(segmentation_mask * 255, "uint8")
+        segmentation_mask_sc = ops.concatenate(
+            [
+                ops.zeros((112, 23)),
+                segmentation_mask_sc,
+                ops.zeros((112, 24)),
+            ],
+            axis=1,
+        )
+        red_mask = np.zeros_like(best_reconstruction_color)
+        red_mask[..., 0] = segmentation_mask_sc
+        red_mask[..., 3] = scan_converted_region
+        result_with_segmentation = cv2.addWeighted(
+            best_reconstruction_color, 1, red_mask, 0.3, 0
+        )
+        ax_map["reconstruction"].imshow(result_with_segmentation, extent=extent)
+    else:
+        ax_map["reconstruction"].imshow(best_reconstruction_color, extent=extent)
+    ax_map["reconstruction"].set_title("Reconstruction", fontsize=15, color=text_color)
+    ax_map["reconstruction"].set_axis_off()
+
+    # Posterior variance plot (only if images_from_posterior is not None)
+    if "posterior" in ax_map:
+        images_from_posterior = ops.squeeze(images_from_posterior)
+        if len(images_from_posterior.shape) == 2:
+            posterior_variance = ops.zeros_like(images_from_posterior)
+        else:
+            posterior_variance = ops.var(images_from_posterior, axis=0)
+        posterior_variance = map_range(
+            posterior_variance,
+            from_range=(ops.min(posterior_variance), ops.max(posterior_variance)),
+        ).astype(np.uint8)
+        posterior_variance_sc = _scan_convert(
+            posterior_variance, io_config.scan_conversion_angles
+        )
+        scan_converted_region_posterior_variance = _scan_convert(
+            np.ones_like(posterior_variance),
+            io_config.scan_conversion_angles,
+            fill_value=0,
+        )
+        posterior_variance_sc_color = gray_to_color_with_transparency(
+            posterior_variance_sc, scan_converted_region_posterior_variance
+        )
+        posterior_variance_sc_color_cmapped = apply_colormap_to_rgba(
+            posterior_variance_sc_color
+        )
+        ax_map["posterior"].imshow(posterior_variance_sc_color_cmapped, extent=extent)
+        ax_map["posterior"].set_title(
+            "Posterior Variance", fontsize=15, color=text_color
+        )
+        ax_map["posterior"].set_axis_off()
+
+    # Latent plot (if provided)
+    if "latent" in ax_map:
+        latent_scan_converted_region = _scan_convert(
+            np.ones_like(latent),
+            io_config.scan_conversion_angles,
+            fill_value=0,
+        )
+        latent_color = gray_to_color_with_transparency(
+            _scan_convert(latent, io_config.scan_conversion_angles),
+            latent_scan_converted_region,
+        )
+        ax_map["latent"].imshow(latent_color, extent=extent)
+        ax_map["latent"].set_title("Latent", fontsize=15, color=text_color)
+        ax_map["latent"].set_axis_off()
+
+    text_box = {
+        "boxstyle": "round",
+        "facecolor": "lightgray",
+        "edgecolor": "gray",
+        "alpha": 0.7,
+        "pad": 0.5,
+    }
+    text_context = "\n".join(f"{key}: {value}" for key, value in params_dict.items())
+    plt.text(-15, 1.4, text_context, bbox=text_box, fontsize=12, ha="center")
+    plt.savefig(f"{save_dir}/frame_{frame_index}.png", transparent=False, dpi=300)
+    log.info(f"frame saved to " + log.yellow(f"{save_dir}/frame_{frame_index}.png"))
+    plt.close(fig)
+
+    return mae
+
+
+def animate_overviews(save_dir, io_config):
+    if io_config.plot_step_overview:
+        sort_steps = lambda path: int(
+            re.findall(r"step_(\d+)_\d+\.png", str(path))[0]
+            + re.findall(r"step_\d+_(\d+)\.png", str(path))[0]
+        )
+        save_animation(
+            save_dir, prefix="step_", filename="steps.gif", sort_key_fn=sort_steps
+        )
+    sort_frames = lambda path: int(re.findall(r"frame_(\d+)\.png", str(path))[0])
+    save_animation(
+        save_dir,
+        prefix="frame_",
+        filename="frames.gif",
+        sort_key_fn=sort_frames,
+        fps=io_config.gif_fps,
+    )

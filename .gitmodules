@@ -1,0 +1,3 @@
+[submodule "zea"]
+	path = zea
+	url = git@github.com:tue-bmd/zea.git
