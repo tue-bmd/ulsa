@@ -14,7 +14,7 @@ def parse_args():
     parser.add_argument(
         "--agent_config",
         type=str,
-        default="./active_sampling/configs/ultrasound/agent_v3_echonet_3_frames.yaml",
+        default="./configs/echonet_3_frames.yaml",
         help="Path to agent config yaml.",
     )
     parser.add_argument(
@@ -88,12 +88,9 @@ from pathlib import Path
 import jax
 import keras
 import numpy as np
-import zea
 from keras import ops
-from zea import Config, Dataset, init_device, log, set_data_paths
-from zea.config import Config
-from zea.data.augmentations import RandomCircleInclusion
 
+import zea
 from active_sampling_temporal import (
     apply_downstream_task,
     fix_paths,
@@ -105,6 +102,9 @@ from ulsa.agent import reset_agent_state, setup_agent
 from ulsa.downstream_task import compute_dice_score
 from ulsa.io_utils import make_save_dir
 from ulsa.metrics import Metrics
+from zea import Config, Dataset, init_device, log, set_data_paths
+from zea.config import Config
+from zea.data.augmentations import RandomCircleInclusion
 
 # Default parameter paths and values
 DEFAULT_SWEEP_VALUES = {

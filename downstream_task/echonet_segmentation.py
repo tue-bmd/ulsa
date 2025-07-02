@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 from pathlib import Path
 
 if __name__ == "__main__":
@@ -13,13 +12,13 @@ if __name__ == "__main__":
 import numpy as np
 import yaml
 from keras import ops
+
+from ulsa.downstream_task import EchoNetSegmentation
+from ulsa.io_utils import map_range
 from zea import Dataset
 from zea.config import Config
 from zea.tensor_ops import batched_map
 from zea.utils import translate
-
-from ulsa.downstream_task import EchoNetSegmentation
-from ulsa.io_utils import map_range
 
 
 def parse_args():
@@ -41,7 +40,7 @@ def parse_args():
     parser.add_argument(
         "--us_agent_config",
         type=str,
-        default="/latent-ultrasound-diffusion/active_sampling/configs/ultrasound/agent_v3_echonet_3_frames.yaml",
+        default="./configs/echonet_3_frames.yaml",
         help="Path to US agent config yaml (for io_config, etc).",
     )
     parser.add_argument(

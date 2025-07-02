@@ -5,10 +5,13 @@ from typing import Any, Callable, Tuple
 import jax
 import keras
 import numpy as np
-import zea
 from keras import ops
 from rich.console import Console
 from rich.table import Table
+
+import zea
+from ulsa.buffer import FrameBuffer, lifo_shift
+from ulsa.pfield import lines_to_pfield
 from zea.agent.selection import (
     EquispacedLines,
     GreedyEntropy,
@@ -18,12 +21,40 @@ from zea.agent.selection import (
 )
 from zea.backend import jit
 from zea.config import Config
+from zea.internal.operators import Operator, operator_registry
 from zea.internal.registry import action_selection_registry
 from zea.models.diffusion import DiffusionModel
 from zea.tensor_ops import split_seed
+from zea.utils import translate
 
-from ulsa.buffer import FrameBuffer, lifo_shift
-from ulsa.pfield import lines_to_pfield
+
+@operator_registry(name="soft_inpainting")
+class SoftInpaintingOperator(Operator):
+    """Soft inpainting operator class.
+
+    Soft inpainting uses a soft grayscale mask for a smooth transition between
+    the inpainted and generated regions of the image.
+    """
+
+    def __init__(self, image_range, mask_range=None):
+        self.image_range = tuple(image_range)
+        assert len(self.image_range) == 2
+
+        if mask_range is None:
+            mask_range = (0.0, 1.0)
+        self.mask_range = tuple(mask_range)
+        assert len(self.mask_range) == 2
+        assert self.mask_range[0] == 0.0, "mask_range[0] must be 0.0"
+
+    def forward(self, data, mask):
+        data1 = translate(data, self.image_range, self.mask_range)
+        data2 = mask * data1
+        data3 = translate(data2, self.mask_range, self.image_range)
+        return data3
+
+    def __str__(self):
+        return "SoftInpaintingOperator"
+
 
 DEBUGGING = False
 
@@ -156,6 +187,8 @@ def action_selection_wrapper(action_selector: LinesActionModel):
         # Add empty batch dim if not present
         if current_lines is not None:
             current_lines = ops.expand_dims(current_lines, axis=0)
+        if particles is not None:
+            particles = ops.expand_dims(particles, axis=0)
 
         # Run the action selection function
         selected_lines, mask_t = action_selection(particles, current_lines, seed)
@@ -328,7 +361,6 @@ def setup_agent(
                 seed=seed_i,
                 track_progress_type=None,
                 omega=omega,
-                hard_project=agent_config.diffusion_inference.hard_project,
             )
             return ops.squeeze(posterior_samples, axis=0)
 

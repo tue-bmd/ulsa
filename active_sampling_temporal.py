@@ -21,7 +21,7 @@ def parse_args():
     parser.add_argument(
         "--agent_config",
         type=str,
-        default="configs/agent_v3_cardiac_112_3_frames.yaml",
+        default="configs/cardiac_112_3_frames.yaml",
         help="Path to agent config yaml.",
     )
     parser.add_argument(
@@ -122,7 +122,7 @@ from ulsa.io_utils import (
     plot_frames_for_presentation,
 )
 from ulsa.pfield import (
-    update_scan_for_diverging_waves,
+    select_transmits,
     update_scan_for_polar_grid,
 )
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
@@ -275,8 +275,8 @@ def run_active_sampling(
         )
 
         # No pfield for target
-        scan._pfield = scan._default_pfield()
-        target_pipeline_params = base_params | dict(flat_pfield=scan.flat_pfield)
+        disabled_pfield = ops.ones_like(flat_pfield)
+        target_pipeline_params = base_params | dict(flat_pfield=disabled_pfield)
 
         def acquire(
             full_data,
@@ -296,8 +296,7 @@ def run_active_sampling(
                 azimuth_angles=base_params["azimuth_angles"][transmits],
                 focus_distances=base_params["focus_distances"][transmits],
                 initial_times=base_params["initial_times"][transmits],
-                # flat_pfield=base_params["flat_pfield"][:, transmits],
-                flat_pfield=ops.ones_like(base_params["flat_pfield"][:, transmits]),
+                flat_pfield=base_params["flat_pfield"][:, transmits],
                 time_to_next_transmit=base_params["time_to_next_transmit"][
                     :, transmits
                 ],
@@ -491,7 +490,6 @@ def preload_data(
     data_type="data/image",
     dynamic_range=(-70, -28),
     cardiac=False,
-    n_rays=None,
     type="focused",  # 'focused' or 'diverging'
 ):
     # Get scan and probe from the file
@@ -509,12 +507,10 @@ def preload_data(
         probe = None
 
     # TODO: kind of hacky way to update the scan for the cardiac dataset
-    if cardiac and type == "focused":
+    if cardiac:
         dynamic_range = (-70, -28)
-        update_scan_for_polar_grid(scan, dynamic_range=dynamic_range, n_rays=n_rays)
-    elif cardiac and type == "diverging":
-        dynamic_range = (-70, -28)
-        update_scan_for_diverging_waves(scan, dynamic_range=dynamic_range)
+        select_transmits(scan, type=type)
+        update_scan_for_polar_grid(scan, dynamic_range=dynamic_range)
 
     # slice(None) means all frames.
     if data_type in ["data/raw_data"]:
@@ -569,15 +565,10 @@ if __name__ == "__main__":
     with File(dataset_path) as file:
         n_frames = agent_config.io_config.get("frame_cutoff", "all")
         validation_sample_frames, scan, probe = preload_data(
-            file,
-            n_frames,
-            args.data_type,
-            dynamic_range,
-            cardiac=cardiac,
-            n_rays=n_rays,
+            file, n_frames, args.data_type, dynamic_range, cardiac=cardiac
         )
 
-    if scan._theta_range is not None:
+    if scan.theta_range is not None:
         theta_range_deg = np.rad2deg(scan.theta_range)
         log.warning(
             f"Overriding scan conversion angles using the scan object: {theta_range_deg}"
@@ -585,9 +576,8 @@ if __name__ == "__main__":
         agent_config.io_config.scan_conversion_angles = list(theta_range_deg)
 
     if scan.probe_geometry is not None:
-        pfield = scan.compute_pfield(
-            **agent_config.action_selection.get("pfield", {}),
-        )
+        scan.pfield_kwargs |= agent_config.action_selection.get("pfield", {})
+        pfield = scan.pfield
     else:
         pfield = None
 
@@ -670,7 +660,6 @@ if __name__ == "__main__":
             squeezed_results.masks[frame_to_plot],
             agent_config.io_config,
             next_masks=squeezed_results.masks[frame_to_plot + 1],
-            pfield=pfield,
         )
 
         plot_frames_for_presentation(

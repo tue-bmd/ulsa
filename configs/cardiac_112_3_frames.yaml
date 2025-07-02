@@ -11,13 +11,12 @@ action_selection:
 downstream_task: null
 
 diffusion_inference:
-  run_dir: "{output_dir}/ddim/2025_02_26_160545_ddim_train_echonet_112_3_frames/hub"
+  run_dir: hf://usbmd/ulsa
   num_steps: 500
   initial_step: 450 # [0, num_steps]
-  batch_size: 2 # posterior samples
-  # guidance_method: "anisotropic_dps"
-  operator: "inpainting"
-  guidance_method: "anisotropic_dps"
+  batch_size: 4 # posterior samples
+  operator: inpainting
+  guidance_method: dps
   guidance_kwargs:
     omega: 3
     initial_omega: 1
