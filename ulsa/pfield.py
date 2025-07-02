@@ -74,20 +74,12 @@ def update_scan_for_polar_grid(
     dynamic_range=(-70, -28),
     pfield_kwargs=None,
     f_number=0,
-    extension_factor_polar_limits=4,
 ):
     """Update the scan object for line scanning."""
     if pfield_kwargs is None:
         pfield_kwargs = {}
-
-    polar_delta = abs(scan.polar_angles[0] - scan.polar_angles[1])
-    polar_limits = (
-        scan.polar_angles[0] - polar_delta * extension_factor_polar_limits,
-        scan.polar_angles[-1] + polar_delta * extension_factor_polar_limits,
-    )
     scan.pfield_kwargs = {"downsample": 1, "downmix": 1} | pfield_kwargs
     scan.f_number = float(f_number)
-    scan.polar_limits = polar_limits
     scan.grid_type = "polar"
     scan.dynamic_range = dynamic_range
     scan.fill_value = float(scan.dynamic_range[0])
