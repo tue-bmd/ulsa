@@ -1,0 +1,31 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
+{
+    "name": "ulsa",
+    "build": {
+        "dockerfile": "../Dockerfile"
+    },
+    "runArgs": [
+        "--gpus",
+        "all",
+        "-m",
+        "100g",
+        "--cpus",
+        "40",
+        "--env-file",
+        "${localWorkspaceFolder}/.env"
+    ],
+    // Link the workspace folder to the container
+    "workspaceMount": "source=${localWorkspaceFolder},target=/ulsa,type=bind",
+    "workspaceFolder": "/ulsa",
+    "shutdownAction": "stopContainer",
+    // Mount the NAS drive
+    "mounts": [
+        {
+            "source": "${localEnv:HOME}/usbmd_mount",
+            "target": "/mnt/z",
+            "type": "bind"
+        }
+    ],
+    "postCreateCommand": "echo 'force_color_prompt=yes\nif [ -n \"$force_color_prompt\" ]; then\n  if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then\n    PS1=\"\\${debian_chroot:+(\\$debian_chroot)}\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ \"\n  else\n    PS1=\"\\${debian_chroot:+(\\$debian_chroot)}\\u@\\h:\\w\\$ \"\n  fi\nfi' >> /root/.bashrc"
+}
