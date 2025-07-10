@@ -1,7 +1,6 @@
 import os
 import re
 import shutil
-import warnings
 from pathlib import Path
 
 import cv2
@@ -10,34 +9,14 @@ import matplotlib.cm as cm
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
-import zea
 from keras import ops
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import ListedColormap
-from PIL import Image
+
+import zea
 from zea import log
 from zea.display import scan_convert_2d
-from zea.io_lib import matplotlib_figure_to_numpy
 from zea.visualize import plot_image_grid
-
-
-def cache_remote_file_locally(remote_file, local_dir):
-    """
-    Download a remote file to a local path if it doesn't exist.
-    """
-    remote_file = Path(remote_file)
-    local_dir = Path(local_dir)
-    local_file = local_dir / remote_file.name
-    if not local_file.exists():
-        # copy the file to local
-        local_file.parent.mkdir(parents=True, exist_ok=True)
-        log.info(f"Downloading {remote_file} to {local_file}...")
-        shutil.copyfile(str(remote_file), str(local_file))
-        log.info("Download complete.")
-    else:
-        log.info(f"File {local_file} already exists. Skipping download.")
-
-    return local_file
 
 
 def save_animation(save_dir, filename, prefix, sort_key_fn, fps=1):
@@ -281,6 +260,78 @@ def get_heatmap(
     return heatmap
 
 
+def first_frames_for_slides(
+    save_dir,
+    targets,
+    masks,
+    measurements,
+    io_config,
+    dpi=150,
+    scan_convert_order=0,  # fixed to 0 for measurements!
+    scan_convert_resolution=0.1,
+    interpolation_matplotlib="nearest",
+    context="styles/nvmu.mplstyle",
+    postfix_filename=None,
+):
+    # Save first target frame as PNG
+    plt.figure(figsize=(6, 6), dpi=dpi)
+    with plt.style.context(context):
+        plt.imshow(targets[0], cmap="gray", interpolation=interpolation_matplotlib)
+        plt.axis("off")
+        plt.tight_layout()
+        plt.savefig(
+            save_dir / f"first_target{postfix_filename}.png",
+            bbox_inches="tight",
+            pad_inches=0,
+        )
+        plt.close()
+        log.info(log.yellow(save_dir / f"first_target{postfix_filename}.png"))
+
+    plt.figure(figsize=(6, 6), dpi=dpi)
+    with plt.style.context(context):
+        plt.imshow(measurements[0], cmap="gray", interpolation=interpolation_matplotlib)
+        plt.axis("off")
+        plt.tight_layout()
+        plt.savefig(
+            save_dir / f"first_measurement{postfix_filename}.png",
+            bbox_inches="tight",
+            pad_inches=0,
+        )
+        plt.close()
+        log.info(log.yellow(save_dir / f"first_measurement{postfix_filename}.png"))
+
+    # Save first mask as black/white PNG
+    first_mask = masks[0]
+    if io_config.scan_convert:
+        first_mask_sc = _scan_convert(
+            first_mask.astype(np.float32),
+            io_config.scan_conversion_angles,
+            order=scan_convert_order,
+            fill_value=0.0,
+            resolution=scan_convert_resolution,
+        )
+    else:
+        first_mask_sc = first_mask
+
+    # Convert mask to 0 (black) and 255 (white)
+    first_mask_img = (first_mask_sc > 0.5).astype(np.uint8) * 255
+
+    plt.figure(figsize=(6, 6), dpi=dpi)
+    with plt.style.context(context):
+        plt.imshow(
+            first_mask_img, cmap="gray", interpolation="nearest", vmin=0, vmax=255
+        )
+        plt.axis("off")
+        plt.tight_layout()
+        plt.savefig(
+            save_dir / f"first_mask{postfix_filename}.png",
+            bbox_inches="tight",
+            pad_inches=0,
+        )
+        log.info(log.yellow(save_dir / f"first_mask{postfix_filename}.png"))
+        plt.close()
+
+
 def postprocess_agent_results(
     data,
     io_config,
@@ -353,7 +404,7 @@ def plot_frames_for_presentation(
     scan_convert_resolution=0.1,
     interpolation_matplotlib="nearest",
     image_range=(0, 255),
-    context="active_sampling/ultrasound_line_scanning_agent/nvmu_assets/nvmu.mplstyle",
+    context="styles/nvmu.mplstyle",
     drop_first_n_frames=2,
     window_size=7,
     postfix_filename=None,

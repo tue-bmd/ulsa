@@ -1,0 +1,8 @@
+text.color: white
+axes.facecolor: black   # axes background color
+axes.edgecolor: white   # axes edge color
+xtick.color: white   # color of the ticks
+ytick.color: white   # color of the ticks
+savefig.transparent: True
+axes.labelcolor: white
+font.serif: Arial

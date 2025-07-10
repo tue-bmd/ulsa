@@ -1,0 +1,14 @@
+font.family:  serif
+font.size:    9.0
+text.color: white
+axes.facecolor:     black   # axes background color
+axes.edgecolor:     white   # axes edge color
+axes.titlesize:     medium   # font size of the axes title
+axes.labelcolor:    "#BBBBBB"
+axes.prop_cycle: cycler('color', ['E02222', '0EA7FF', 'FFE70E', '67D627', '9467bd', '8c564b', 'e377c2', '7f7f7f', 'bcbd22', '17becf'])
+xtick.color:          white   # color of the ticks
+ytick.color:          white   # color of the ticks
+legend.fancybox:      False     # if True, use a rounded box for the
+figure.dpi:          150       # figure dots per inch
+figure.facecolor:   black     # figure face color
+image.interpolation:   none  # see help(imshow) for options
