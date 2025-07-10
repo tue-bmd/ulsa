@@ -114,7 +114,6 @@ from ulsa.downstream_task import (
 )
 from ulsa.io_utils import (
     animate_overviews,
-    cache_remote_file_locally,
     make_save_dir,
     map_range,
     plot_belief_distribution_for_presentation,
@@ -127,7 +126,6 @@ from ulsa.pfield import (
 )
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
-from zea.internal.cache import ZEA_CACHE_DIR
 from zea.tensor_ops import batched_map, func_with_one_batch_dim
 from zea.utils import translate
 
@@ -248,6 +246,19 @@ class AgentResults:
         )
 
 
+def lines_rx_apo(n_tx, Nz, Nr):
+    """
+    Create a receive apodization for line scanning.
+    This is a simple apodization that applies a uniform weight to all elements.
+    """
+    assert Nr == n_tx
+    rx_apo = np.zeros((n_tx, Nz, Nr), dtype=np.float32)
+    for tx in range(n_tx):
+        rx_apo[tx, :, tx] = 1.0
+    rx_apo = rx_apo.reshape((n_tx, -1))
+    return rx_apo[..., None, None]  # shape (n_tx, n_pix, 1, 1)
+
+
 def run_active_sampling(
     agent: Agent,
     agent_state: AgentState,
@@ -270,8 +281,9 @@ def run_active_sampling(
         # Custom pfield for measurements
         flat_pfield = pfield.reshape(scan.n_tx, -1).swapaxes(0, 1)
         flat_pfield = ops.convert_to_tensor(flat_pfield)
+        rx_apo = lines_rx_apo(scan.n_tx, scan.Nz, scan.Nr)
         base_params = pipeline.prepare_parameters(
-            scan=scan, probe=probe, flat_pfield=flat_pfield
+            scan=scan, probe=probe, flat_pfield=flat_pfield, rx_apo=rx_apo
         )
 
         # No pfield for target
@@ -301,6 +313,7 @@ def run_active_sampling(
                     :, transmits
                 ],
                 n_tx=len(transmits),
+                rx_apo=base_params["rx_apo"][transmits],
             )
             params = pipeline.prepare_parameters(**params)
 
@@ -342,19 +355,19 @@ def run_active_sampling(
             agent_state.target_pipeline_state,
         )
 
-        # 2. run perception and action selection via agent.recover
-        # _measurements = agent.operator.forward(measurements, current_mask)
+        if agent.pfield is None:
+            _measurements = measurements * current_mask
 
-        # _measurements = measurements
-        _measurements = ops.exp(measurements)
-        _measurements = translate(
-            _measurements, (ops.min(_measurements), ops.max(_measurements)), (-1, 1)
-        )
+        # 2. run perception and action selection via agent.recover
         reconstruction, new_agent_state = agent.recover(_measurements, agent_state)
 
         if hard_project and agent.pfield is None:
-            reconstruction = hard_projection(reconstruction, measurements)
+            reconstruction = hard_projection(reconstruction, _measurements)
         elif hard_project and agent.pfield is not None:
+            raise NotImplementedError(
+                "Hard projection with pfield is not implemented yet. "
+                "Please set hard_project=False or use a different agent."
+            )
             # TODO: WIP!
             weighting_map = agent.pfield[agent_state.selected_lines].sum(axis=0)
 
@@ -446,6 +459,7 @@ def make_pipeline(
             with_batch_dim=False,
             num_patches=40,
             jit_options=jit_options,
+            pfield=False,
         )
         pipeline.append(expand_dims)
         resize = zea.ops.Lambda(
@@ -545,16 +559,7 @@ if __name__ == "__main__":
         agent_config.update_recursive(args.override_config)
 
     dataset_path = args.target_sequence.format(data_root=data_root)
-
-    # TODO: cache cardiac file because it is large
     cardiac = "cardiac" in str(dataset_path)
-    if cardiac:
-        dataset_path = cache_remote_file_locally(dataset_path, ZEA_CACHE_DIR)
-
-    # if args.data_type != "data/image":
-    # assert (
-    #     not agent_config.diffusion_inference.hard_project
-    # ), "You might not want to hard project when using a non-image data type"
 
     if cardiac:
         dynamic_range = (-70, -28)

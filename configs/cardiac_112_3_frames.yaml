@@ -3,10 +3,6 @@ action_selection:
   n_actions: 7
   shape: [112, 90] # h, w
   selection_strategy: "greedy_entropy" # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
-  pfield:
-    downsample: 1
-    downmix: 1
-    norm: False
 
 downstream_task: null
 
@@ -21,7 +17,7 @@ diffusion_inference:
     omega: 3
     initial_omega: 1
   reconstruction_method: "choose_first" # "choose_first" | "mean"
-  hard_project: false
+  hard_project: true
 
 io_config:
   plot_step_overview: false

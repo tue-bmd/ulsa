@@ -83,3 +83,5 @@ def update_scan_for_polar_grid(
     scan.grid_type = "polar"
     scan.dynamic_range = dynamic_range
     scan.fill_value = float(scan.dynamic_range[0])
+    scan.Nr = scan.n_tx
+    scan.polar_limits = scan.polar_angles.min(), scan.polar_angles.max()
