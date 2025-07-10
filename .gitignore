@@ -2,3 +2,4 @@
 output
 users.yaml
 .cache
+*.png
