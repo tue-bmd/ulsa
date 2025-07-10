@@ -452,7 +452,7 @@ def setup_agent(
         assert pfield is not None, "pfield must be provided"
         # TODO: is resizing the pfield fine?
         pfield = ops.image.resize(
-            pfield,  # (n_tx, Nz, Nx)
+            pfield,  # (n_tx, n_z, n_x)
             agent_config.action_selection.shape,
             interpolation="bilinear",
             antialias=True,

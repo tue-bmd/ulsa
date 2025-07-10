@@ -120,6 +120,7 @@ from ulsa.io_utils import (
     plot_frame_overview,
     plot_frames_for_presentation,
 )
+from ulsa.ops import AntiAliasing
 from ulsa.pfield import (
     select_transmits,
     update_scan_for_polar_grid,
@@ -246,13 +247,13 @@ class AgentResults:
         )
 
 
-def lines_rx_apo(n_tx, Nz, Nr):
+def lines_rx_apo(n_tx, n_z, n_x):
     """
     Create a receive apodization for line scanning.
     This is a simple apodization that applies a uniform weight to all elements.
     """
-    assert Nr == n_tx
-    rx_apo = np.zeros((n_tx, Nz, Nr), dtype=np.float32)
+    assert n_x == n_tx
+    rx_apo = np.zeros((n_tx, n_z, n_x), dtype=np.float32)
     for tx in range(n_tx):
         rx_apo[tx, :, tx] = 1.0
     rx_apo = rx_apo.reshape((n_tx, -1))
@@ -278,16 +279,18 @@ def run_active_sampling(
 
     # Prepare acquisition function
     if scan and scan.n_tx > 1:
-        # Custom pfield for measurements
-        flat_pfield = pfield.reshape(scan.n_tx, -1).swapaxes(0, 1)
-        flat_pfield = ops.convert_to_tensor(flat_pfield)
-        rx_apo = lines_rx_apo(scan.n_tx, scan.Nz, scan.Nr)
+        disabled_pfield = ops.ones((scan.n_z * scan.n_x, scan.n_tx))
+        if pfield is not None:
+            flat_pfield = pfield.reshape(scan.n_tx, -1).swapaxes(0, 1)
+            flat_pfield = ops.convert_to_tensor(flat_pfield)
+        else:
+            flat_pfield = disabled_pfield
+        rx_apo = lines_rx_apo(scan.n_tx, scan.n_z, scan.n_x)
         base_params = pipeline.prepare_parameters(
-            scan=scan, probe=probe, flat_pfield=flat_pfield, rx_apo=rx_apo
+            scan=scan, probe=probe, flat_pfield=flat_pfield, rx_apo=rx_apo, factor=6
         )
 
         # No pfield for target
-        disabled_pfield = ops.ones_like(flat_pfield)
         target_pipeline_params = base_params | dict(flat_pfield=disabled_pfield)
 
         def acquire(
@@ -443,7 +446,7 @@ def make_pipeline(
     input_range,
     input_shape,
     action_selection_shape,
-    jit_options="pipeline",
+    jit_options="ops",
 ) -> Pipeline:
     expand_dims = zea.ops.Lambda(ops.expand_dims, {"axis": -1})
     # Not using zea.ops.Normalize because that also clips the data and we might not want
@@ -454,6 +457,7 @@ def make_pipeline(
         {"range_from": dynamic_range, "range_to": input_range},
     )
 
+    downsample_factor = 4  # TODO
     if data_type not in ["data/image", "data/image_3D"]:
         pipeline = Pipeline.from_default(
             with_batch_dim=False,
@@ -461,6 +465,8 @@ def make_pipeline(
             jit_options=jit_options,
             pfield=False,
         )
+        pipeline.insert(1, AntiAliasing())
+        pipeline.insert(2, zea.ops.Downsample(downsample_factor))
         pipeline.append(expand_dims)
         resize = zea.ops.Lambda(
             ops.image.resize,
@@ -509,12 +515,9 @@ def preload_data(
     # Get scan and probe from the file
     try:
         scan = file.scan()
-
-        # Fix for: https://github.com/tue-bmd/zea/issues/8
-        scan.xlims = [scan.probe_geometry[0, 0], scan.probe_geometry[-1, 0]]
-        scan.zlims = [0, scan.sound_speed * scan.n_ax / scan.sampling_frequency / 2]
     except:
         scan = None
+
     try:
         probe = file.probe()
     except:
@@ -580,7 +583,7 @@ if __name__ == "__main__":
         )
         agent_config.io_config.scan_conversion_angles = list(theta_range_deg)
 
-    if scan.probe_geometry is not None:
+    if scan.probe_geometry is not None and "pfield" in agent_config.action_selection:
         scan.pfield_kwargs |= agent_config.action_selection.get("pfield", {})
         pfield = scan.pfield
     else:
