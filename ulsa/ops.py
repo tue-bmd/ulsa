@@ -18,10 +18,11 @@ def apply_along_axis(func, axis, arr):
 
 
 class AntiAliasing(zea.ops.Operation):
-    def __init__(self, num_taps=64, axis=-3):
+    def __init__(self, num_taps=64, axis=-3, complex_channels=False):
         super().__init__(jittable=False)
         self.num_taps = num_taps
         self.axis = axis
+        self.complex_channels = complex_channels
 
     def call(
         self,
@@ -32,6 +33,9 @@ class AntiAliasing(zea.ops.Operation):
         **kwargs,
     ):
         signal = kwargs[self.key]
+
+        if self.complex_channels:
+            signal = zea.ops.channels_to_complex(signal)
 
         if bandwidth is None:
             bandwidth = sampling_frequency / factor
@@ -49,6 +53,9 @@ class AntiAliasing(zea.ops.Operation):
             return ops.correlate(signal, lpf[::-1], mode="same")
 
         filtered_signal = apply_along_axis(_correlate, self.axis, signal)
+
+        if self.complex_channels:
+            filtered_signal = zea.ops.complex_to_channels(filtered_signal)
 
         return {self.output_key: filtered_signal}
 
