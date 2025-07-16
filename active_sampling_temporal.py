@@ -252,6 +252,9 @@ def lines_rx_apo(n_tx, n_z, n_x):
     """
     Create a receive apodization for line scanning.
     This is a simple apodization that applies a uniform weight to all elements.
+
+    Returns:
+        rx_apo: np.ndarray of shape (n_tx, n_z, n_x)
     """
     assert n_x == n_tx
     rx_apo = np.zeros((n_tx, n_z, n_x), dtype=np.float32)
@@ -462,8 +465,8 @@ def make_pipeline(
             jit_options=jit_options,
             pfield=False,
         )
-        pipeline.insert(1, AntiAliasing(axis=-2, complex_channels=True))
-        pipeline.insert(2, zea.ops.Downsample(downsample_factor))
+        # pipeline.insert(1, AntiAliasing(axis=-2, complex_channels=True))
+        pipeline.insert(1, zea.ops.Downsample(downsample_factor))
         pipeline.append(expand_dims)
         resize = zea.ops.Lambda(
             ops.image.resize,
