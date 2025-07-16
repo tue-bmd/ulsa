@@ -40,6 +40,7 @@ def parse_args():
     parser.add_argument(
         "--target_sequence",
         type=str,
+        # 20240701_P3_PLAX_0000
         # default="/mnt/z/Ultrasound-BMd/data/oisin/carotid_img/512_128/test/10_cross_2cm_L_0000.img.hdf5",
         # default="{data_root}/USBMD_datasets/echonet/val/0X10A5FC19152B50A5.hdf5",
         default="{data_root}/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5",
@@ -586,7 +587,10 @@ if __name__ == "__main__":
         pfield = None
 
     agent, agent_state = setup_agent(
-        agent_config, seed=jax.random.PRNGKey(args.seed), pfield=pfield, jit_mode="none"
+        agent_config,
+        seed=jax.random.PRNGKey(args.seed),
+        pfield=pfield,
+        jit_mode="recover",
     )
 
     pipeline = make_pipeline(
