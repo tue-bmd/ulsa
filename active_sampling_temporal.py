@@ -257,7 +257,7 @@ def lines_rx_apo(n_tx, n_z, n_x):
     for tx in range(n_tx):
         rx_apo[tx, :, tx] = 1.0
     rx_apo = rx_apo.reshape((n_tx, -1))
-    return rx_apo[..., None, None]  # shape (n_tx, n_pix, 1, 1)
+    return rx_apo[..., None]  # shape (n_tx, n_pix, 1)
 
 
 def run_active_sampling(
