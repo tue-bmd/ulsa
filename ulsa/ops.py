@@ -84,7 +84,7 @@ def iq2doppler(
     return doppler_velocities
 
 
-class AntiAliasing(zea.ops.Operation):
+class LowPassFilter(zea.ops.Operation):
     def __init__(self, num_taps=64, axis=-3, complex_channels=False):
         super().__init__(jittable=False)
         self.num_taps = num_taps
@@ -125,20 +125,3 @@ class AntiAliasing(zea.ops.Operation):
             filtered_signal = zea.ops.complex_to_channels(filtered_signal)
 
         return {self.output_key: filtered_signal}
-
-
-if __name__ == "__main__":
-    # Example usage
-    signal = ops.zeros((100, 20, 10))
-    sampling_frequency = 1000  # Hz
-    center_frequency = 100  # Hz
-    bandwidth = 50  # Hz
-
-    anti_aliasing_op = AntiAliasing()
-    filtered_signal = anti_aliasing_op(
-        data=signal,
-        sampling_frequency=sampling_frequency,
-        center_frequency=center_frequency,
-        bandwidth=bandwidth,
-    )
-    print(filtered_signal)  # Output the filtered signal

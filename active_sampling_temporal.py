@@ -121,7 +121,7 @@ from ulsa.io_utils import (
     plot_frame_overview,
     plot_frames_for_presentation,
 )
-from ulsa.ops import AntiAliasing
+from ulsa.ops import LowPassFilter
 from ulsa.pfield import (
     select_transmits,
     update_scan_for_polar_grid,
@@ -465,7 +465,7 @@ def make_pipeline(
             jit_options=jit_options,
             pfield=False,
         )
-        # pipeline.insert(1, AntiAliasing(axis=-2, complex_channels=True))
+        # pipeline.insert(1, LowPassFilter(axis=-2, complex_channels=True))
         pipeline.insert(1, zea.ops.Downsample(downsample_factor))
         pipeline.append(expand_dims)
         resize = zea.ops.Lambda(
@@ -525,7 +525,6 @@ def preload_data(
 
     # TODO: kind of hacky way to update the scan for the cardiac dataset
     if cardiac:
-        dynamic_range = (-70, -28)
         select_transmits(scan, type=type)
         update_scan_for_polar_grid(scan, dynamic_range=dynamic_range)
 
