@@ -308,13 +308,9 @@ def run_active_sampling(
                 t0_delays=base_params["t0_delays"][transmits],
                 tx_apodizations=base_params["tx_apodizations"][transmits],
                 polar_angles=base_params["polar_angles"][transmits],
-                azimuth_angles=base_params["azimuth_angles"][transmits],
                 focus_distances=base_params["focus_distances"][transmits],
                 initial_times=base_params["initial_times"][transmits],
                 flat_pfield=base_params["flat_pfield"][:, transmits],
-                time_to_next_transmit=base_params["time_to_next_transmit"][
-                    :, transmits
-                ],
                 n_tx=len(transmits),
                 rx_apo=base_params["rx_apo"][transmits],
             )
@@ -465,7 +461,7 @@ def make_pipeline(
             jit_options=jit_options,
             pfield=False,
         )
-        pipeline.insert(1, AntiAliasing())
+        pipeline.insert(1, AntiAliasing(axis=-2, complex_channels=True))
         pipeline.insert(2, zea.ops.Downsample(downsample_factor))
         pipeline.append(expand_dims)
         resize = zea.ops.Lambda(

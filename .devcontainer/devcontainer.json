@@ -22,7 +22,7 @@
     // Mount the NAS drive
     "mounts": [
         {
-            "source": "${localEnv:HOME}/usbmd_mount",
+            "source": "${localEnv:HOME}/mounts",
             "target": "/mnt/z",
             "type": "bind"
         },
