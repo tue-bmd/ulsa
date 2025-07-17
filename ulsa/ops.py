@@ -5,6 +5,74 @@ from keras import ops
 import zea.ops
 
 
+def wavelet_denoise_rf(rf_signal, wavelet="db4", level=4, threshold_factor=0.5):
+    """
+    Denoise ultrasound RF signal using wavelet thresholding.
+
+    Parameters:
+    - rf_signal: 1D numpy array of RF data
+    - wavelet: Wavelet type (e.g., 'db4', 'sym8')
+    - level: Decomposition level
+    - threshold_factor: Scaling for universal threshold
+
+    Returns:
+    - Denoised RF signal
+    """
+    import pywt
+
+    # Decompose
+    coeffs = pywt.wavedec(rf_signal, wavelet, level=level)
+
+    # Estimate noise from the detail coefficients at the highest level
+    sigma = np.median(np.abs(coeffs[-1])) / 0.6745
+    threshold = threshold_factor * sigma * np.sqrt(2 * np.log(len(rf_signal)))
+
+    # Threshold detail coefficients
+    new_coeffs = [coeffs[0]]  # Keep approximation unaltered
+    for c in coeffs[1:]:
+        new_c = pywt.threshold(c, threshold, mode="soft")  # or 'hard'
+        new_coeffs.append(new_c)
+
+    # Reconstruct signal
+    return pywt.waverec(new_coeffs, wavelet)
+
+
+def wavelet_denoise_full(data, axis, **kwargs):
+    """
+    Apply wavelet denoising to the data along a specified axis.
+
+    Parameters:
+    - data: Input data (e.g., RF signal)
+    - axis: Axis along which to apply the denoising
+    - kwargs: Additional parameters for wavelet denoising
+
+    Returns:
+    - Denoised data
+    """
+    # Apply wavelet denoising along the specified axis
+    return np.apply_along_axis(lambda x: wavelet_denoise_rf(x, **kwargs), axis, data)
+
+
+class WaveletDenoise(zea.ops.Operation):
+    def __init__(self, wavelet="db4", level=4, threshold_factor=0.1, axis=-3):
+        super().__init__(jittable=False)
+        self.wavelet = wavelet
+        self.level = level
+        self.threshold_factor = threshold_factor
+        self.axis = axis
+
+    def call(self, **kwargs):
+        signal = kwargs[self.key]
+        denoised_signal = wavelet_denoise_full(
+            signal,
+            axis=self.axis,
+            wavelet=self.wavelet,
+            level=self.level,
+            threshold_factor=self.threshold_factor,
+        )
+        return {self.output_key: denoised_signal}
+
+
 def apply_along_axis(func, axis, arr):
     """Apply a function to 1-D slices along the given axis.
 
