@@ -18,7 +18,7 @@ def wavelet_denoise_rf(rf_signal, wavelet="db4", level=4, threshold_factor=0.5):
     Returns:
     - Denoised RF signal
     """
-    import pywt
+    import pywt  # pip install PyWavelets
 
     # Decompose
     coeffs = pywt.wavedec(rf_signal, wavelet, level=level)

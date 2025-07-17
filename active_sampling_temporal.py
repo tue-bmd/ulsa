@@ -40,23 +40,20 @@ def parse_args():
     parser.add_argument(
         "--target_sequence",
         type=str,
-        # 20240701_P3_PLAX_0000
-        # default="/mnt/z/Ultrasound-BMd/data/oisin/carotid_img/512_128/test/10_cross_2cm_L_0000.img.hdf5",
-        # default="{data_root}/USBMD_datasets/echonet/val/0X10A5FC19152B50A5.hdf5",
-        default="{data_root}/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5",
+        default=None,
         help="A hdf5 file containing an ordered sequence of frames to sample from.",
     )
     parser.add_argument(
         "--data_type",
         type=str,
-        default="data/raw_data",
-        help="The type of data to load from the hdf5 file.",
+        default=None,
+        help="The type of data to load from the hdf5 file (e.g. data/raw_data or data/image).",
     )
     parser.add_argument(
         "--image_range",
         type=int,
         nargs=2,
-        default=(-60, 0),
+        default=None,
         help=(
             "Range of pixel values in the images (e.g., --image_range 0 255), only used if "
             "data_type is 'data/image'"
@@ -121,7 +118,7 @@ from ulsa.io_utils import (
     plot_frame_overview,
     plot_frames_for_presentation,
 )
-from ulsa.ops import LowPassFilter
+from ulsa.ops import LowPassFilter, WaveletDenoise
 from ulsa.pfield import (
     select_transmits,
     update_scan_for_polar_grid,
@@ -457,35 +454,43 @@ def make_pipeline(
         {"range_from": dynamic_range, "range_to": input_range},
     )
 
-    downsample_factor = 4  # TODO
     if data_type not in ["data/image", "data/image_3D"]:
-        pipeline = Pipeline.from_default(
+        pipeline = zea.Pipeline(
+            [
+                WaveletDenoise(),  # optional
+                zea.ops.Demodulate(),
+                LowPassFilter(num_taps=128, complex_channels=True, axis=-2),  # optional
+                zea.ops.Downsample(2),  # optional
+                zea.ops.PatchedGrid(
+                    [
+                        zea.ops.TOFCorrection(),
+                        # zea.ops.PfieldWeighting(),  # optional
+                        zea.ops.DelayAndSum(),
+                    ]
+                ),
+                zea.ops.EnvelopeDetect(),
+                zea.ops.Normalize(),
+                zea.ops.LogCompress(),
+                expand_dims,
+                zea.ops.Lambda(
+                    ops.image.resize,
+                    {
+                        "size": action_selection_shape,
+                        "interpolation": "bilinear",
+                        "antialias": True,
+                    },
+                ),
+                normalize,
+                zea.ops.Clip(*input_range),
+                zea.ops.Pad(
+                    input_shape[:-1],
+                    axis=(-3, -2),
+                    pad_kwargs=dict(mode="symmetric"),
+                    # fail_on_bigger_shape=False,
+                ),
+            ],
             with_batch_dim=False,
-            num_patches=40,
             jit_options=jit_options,
-            pfield=False,
-        )
-        # pipeline.insert(1, LowPassFilter(axis=-2, complex_channels=True))
-        pipeline.insert(1, zea.ops.Downsample(downsample_factor))
-        pipeline.append(expand_dims)
-        resize = zea.ops.Lambda(
-            ops.image.resize,
-            {
-                "size": action_selection_shape,
-                "interpolation": "bilinear",
-                "antialias": True,  # TODO: different way of antialiasing?
-            },
-        )
-        pipeline.append(resize)
-        pipeline.append(normalize)
-        pipeline.append(zea.ops.Clip(*input_range))
-        pipeline.append(
-            zea.ops.Pad(
-                input_shape[:-1],
-                axis=(-3, -2),
-                pad_kwargs=dict(mode="symmetric"),
-                # fail_on_bigger_shape=False,
-            )
         )
     else:
         pipeline = Pipeline(
@@ -509,7 +514,6 @@ def preload_data(
     n_frames: int,  # if there are less than n_frames, it will load all frames
     data_type="data/image",
     dynamic_range=(-70, -28),
-    cardiac=False,
     type="focused",  # 'focused' or 'diverging'
 ):
     # Get scan and probe from the file
@@ -524,7 +528,7 @@ def preload_data(
         probe = None
 
     # TODO: kind of hacky way to update the scan for the cardiac dataset
-    if cardiac:
+    if "cardiac" in str(file.path):
         select_transmits(scan, type=type)
         update_scan_for_polar_grid(scan, dynamic_range=dynamic_range)
 
@@ -560,19 +564,38 @@ if __name__ == "__main__":
     if args.override_config is not None:
         agent_config.update_recursive(args.override_config)
 
-    dataset_path = args.target_sequence.format(data_root=data_root)
-    cardiac = "cardiac" in str(dataset_path)
+    if args.target_sequence is None:
+        try:
+            args.target_sequence = agent_config.data.target_sequence
+        except:
+            raise ValueError(
+                "No target_sequence provided and not found in agent_config.data."
+            )
 
-    if cardiac:
-        dynamic_range = (-70, -28)
-    else:
-        dynamic_range = args.image_range
+    if args.data_type is None:
+        try:
+            args.data_type = agent_config.data.data_type
+        except:
+            raise ValueError(
+                "No data_type provided and not found in agent_config.data."
+            )
+
+    if args.image_range is None:
+        try:
+            args.image_range = agent_config.data.image_range
+        except:
+            raise ValueError(
+                "No image_range provided and not found in agent_config.data."
+            )
+    dynamic_range = args.image_range
+
+    dataset_path = args.target_sequence.format(data_root=data_root)
 
     n_rays = agent_config.action_selection.shape[-1]
     with File(dataset_path) as file:
         n_frames = agent_config.io_config.get("frame_cutoff", "all")
         validation_sample_frames, scan, probe = preload_data(
-            file, n_frames, args.data_type, dynamic_range, cardiac=cardiac
+            file, n_frames, args.data_type, dynamic_range
         )
 
     if scan.theta_range is not None:

@@ -34,3 +34,9 @@ io_config:
   gif_fps: 30
   verbose: false
   reconstruction_sharpness_std: 0.025
+
+data:
+  target_sequence: "{data_root}/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"
+  data_type: data/raw_data
+  image_range: [-70, -28]
+
