@@ -595,17 +595,21 @@ if __name__ == "__main__":
             file, n_frames, args.data_type, dynamic_range
         )
 
-    if scan.theta_range is not None:
-        theta_range_deg = np.rad2deg(scan.theta_range)
-        log.warning(
-            f"Overriding scan conversion angles using the scan object: {theta_range_deg}"
-        )
-        agent_config.io_config.scan_conversion_angles = list(theta_range_deg)
+    try:
+        if scan.theta_range is not None:
+            theta_range_deg = np.rad2deg(scan.theta_range)
+            log.warning(
+                f"Overriding scan conversion angles using the scan object: {theta_range_deg}"
+            )
+            agent_config.io_config.scan_conversion_angles = list(theta_range_deg)
 
-    if scan.probe_geometry is not None and "pfield" in agent_config.action_selection:
-        scan.pfield_kwargs |= agent_config.action_selection.get("pfield", {})
-        pfield = scan.pfield
-    else:
+        if scan.probe_geometry is not None and "pfield" in agent_config.action_selection:
+            scan.pfield_kwargs |= agent_config.action_selection.get("pfield", {})
+            pfield = scan.pfield
+        else:
+            pfield = None
+    except Exception as e:
+        log.info(f"Skipped updating the scan object due to the following error(s):\n{e}")
         pfield = None
 
     agent, agent_state = setup_agent(
