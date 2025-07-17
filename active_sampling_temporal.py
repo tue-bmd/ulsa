@@ -550,7 +550,6 @@ def preload_data(
     return validation_sample_frames, scan, probe
 
 
-# Example usage
 if __name__ == "__main__":
     print(f"Using {backend.backend()} backend 🔥")
     data_paths = set_data_paths("users.yaml", local=False)
@@ -590,8 +589,6 @@ if __name__ == "__main__":
     dynamic_range = args.image_range
 
     dataset_path = args.target_sequence.format(data_root=data_root)
-
-    n_rays = agent_config.action_selection.shape[-1]
     with File(dataset_path) as file:
         n_frames = agent_config.io_config.get("frame_cutoff", "all")
         validation_sample_frames, scan, probe = preload_data(
