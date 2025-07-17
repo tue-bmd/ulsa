@@ -29,3 +29,8 @@ io_config:
   gif_fps: 30
   verbose: false
   reconstruction_sharpness_std: 0.025
+
+data:
+  target_sequence: "{data_root}/USBMD_datasets/echonet/val/0X10A5FC19152B50A5.hdf5"
+  data_type: data/image
+  image_range: [-60, 0]
