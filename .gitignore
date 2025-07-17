@@ -4,3 +4,4 @@ users.yaml
 .cache
 *.png
 *.gif
+.vscode
