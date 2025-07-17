@@ -172,19 +172,6 @@ def soft_projection(
     return translate(combined, mask_range, data_range)
 
 
-def elementwise_append_tuples(t1, t2):
-    """
-    Elementwise append tuple of tensors
-
-    t2 tensors will be appended to t1 tensors
-    """
-    assert len(t1) == len(t2)
-    combined = []
-    for e1, e2 in zip(t1, t2):
-        combined.append(ops.concatenate([e1[None, ...], e2]))
-    return tuple(combined)
-
-
 def apply_downstream_task(agent_config, reconstructions):
     downstream_task_key = agent_config.get("downstream_task", None)
     if downstream_task_key is None:
@@ -494,7 +481,20 @@ def make_pipeline(
         )
     else:
         pipeline = Pipeline(
-            [normalize, expand_dims], jit_options=jit_options, with_batch_dim=False
+            [
+                normalize,
+                expand_dims,
+                zea.ops.Lambda(
+                    ops.image.resize,
+                    {
+                        "size": action_selection_shape,
+                        "interpolation": "bilinear",
+                        "antialias": False,
+                    },
+                ),
+            ],
+            jit_options=jit_options,
+            with_batch_dim=False,
         )
 
     if data_type == "data/image_3D":
@@ -602,7 +602,10 @@ if __name__ == "__main__":
         )
         agent_config.io_config.scan_conversion_angles = list(theta_range_deg)
 
-    if scan.probe_geometry is not None and "pfield" in agent_config.action_selection:
+    if (
+        getattr(scan, "probe_geometry", None) is not None
+        and "pfield" in agent_config.action_selection
+    ):
         scan.pfield_kwargs |= agent_config.action_selection.get("pfield", {})
         pfield = scan.pfield
     else:
