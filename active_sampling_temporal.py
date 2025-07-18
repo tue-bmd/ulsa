@@ -240,10 +240,11 @@ def lines_rx_apo(n_tx, n_z, n_x):
     Returns:
         rx_apo: np.ndarray of shape (n_tx, n_z, n_x)
     """
-    assert n_x == n_tx
+    assert n_x % n_tx == 0, "n_x must be divisible by n_tx for this apodization scheme."
+    step = n_x // n_tx
     rx_apo = np.zeros((n_tx, n_z, n_x), dtype=np.float32)
-    for tx in range(n_tx):
-        rx_apo[tx, :, tx] = 1.0
+    for tx, line in zip(range(n_tx), range(0, n_x, step)):
+        rx_apo[tx, :, line : line + step] = 1.0
     rx_apo = rx_apo.reshape((n_tx, -1))
     return rx_apo[..., None]  # shape (n_tx, n_pix, 1)
 
