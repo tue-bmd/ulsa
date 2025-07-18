@@ -152,6 +152,37 @@ def iq2doppler(
     return doppler_velocities
 
 
+def tissue_doppler_strain_rate(velocity_map, axis=0, spacing=1.0, method="central"):
+    """
+    Compute tissue strain rate (velocity gradient) from a tissue Doppler velocity map.
+
+    Args:
+        velocity_map (ndarray): Tissue velocity map (e.g., from Doppler), shape (n_z, n_x).
+        axis (int): Axis along which to compute the gradient (default: 0, axial/z).
+        spacing (float): Physical distance between points along the axis (in mm or m).
+        method (str): Gradient method: "central" (default), "forward", or "backward".
+
+    Returns:
+        strain_rate (ndarray): Strain rate map (same shape as velocity_map).
+    """
+    # Central difference (default)
+    if method == "central":
+        grad = np.gradient(velocity_map, spacing, axis=axis)
+    elif method == "forward":
+        grad = (
+            np.diff(velocity_map, axis=axis, append=velocity_map.take([-1], axis=axis))
+            / spacing
+        )
+    elif method == "backward":
+        grad = (
+            np.diff(velocity_map, axis=axis, prepend=velocity_map.take([0], axis=axis))
+            / spacing
+        )
+    else:
+        raise ValueError("Unknown method: choose 'central', 'forward', or 'backward'")
+    return grad
+
+
 class LowPassFilter(zea.ops.Operation):
     def __init__(self, num_taps=64, axis=-3, complex_channels=False):
         super().__init__(jittable=False)
