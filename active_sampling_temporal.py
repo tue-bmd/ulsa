@@ -596,7 +596,7 @@ if __name__ == "__main__":
             file, n_frames, args.data_type, dynamic_range
         )
 
-    if scan.theta_range is not None:
+    if getattr(scan, "theta_range", None) is not None:
         theta_range_deg = np.rad2deg(scan.theta_range)
         log.warning(
             f"Overriding scan conversion angles using the scan object: {theta_range_deg}"
