@@ -252,10 +252,11 @@ def lines_rx_apo(n_tx, n_z, n_x):
     Returns:
         rx_apo: np.ndarray of shape (n_tx, n_z, n_x)
     """
-    assert n_x == n_tx
+    assert n_x % n_tx == 0, "n_x must be divisible by n_tx for this apodization scheme."
+    step = n_x // n_tx
     rx_apo = np.zeros((n_tx, n_z, n_x), dtype=np.float32)
-    for tx in range(n_tx):
-        rx_apo[tx, :, tx] = 1.0
+    for tx, line in zip(range(n_tx), range(0, n_x, step)):
+        rx_apo[tx, :, line : line + step] = 1.0
     rx_apo = rx_apo.reshape((n_tx, -1))
     return rx_apo[..., None]  # shape (n_tx, n_pix, 1)
 
@@ -495,7 +496,20 @@ def make_pipeline(
         )
     else:
         pipeline = Pipeline(
-            [normalize, expand_dims], jit_options=jit_options, with_batch_dim=False
+            [
+                normalize,
+                expand_dims,
+                zea.ops.Lambda(
+                    ops.image.resize,
+                    {
+                        "size": action_selection_shape,
+                        "interpolation": "bilinear",
+                        "antialias": False,
+                    },
+                ),
+            ],
+            jit_options=jit_options,
+            with_batch_dim=False,
         )
 
     if data_type == "data/image_3D":
@@ -596,21 +610,20 @@ if __name__ == "__main__":
             file, n_frames, args.data_type, dynamic_range
         )
 
-    try:
-        if scan.theta_range is not None:
-            theta_range_deg = np.rad2deg(scan.theta_range)
-            log.warning(
-                f"Overriding scan conversion angles using the scan object: {theta_range_deg}"
-            )
-            agent_config.io_config.scan_conversion_angles = list(theta_range_deg)
+    if getattr(scan, "theta_range", None) is not None:
+        theta_range_deg = np.rad2deg(scan.theta_range)
+        log.warning(
+            f"Overriding scan conversion angles using the scan object: {theta_range_deg}"
+        )
+        agent_config.io_config.scan_conversion_angles = list(theta_range_deg)
 
-        if scan.probe_geometry is not None and "pfield" in agent_config.action_selection:
-            scan.pfield_kwargs |= agent_config.action_selection.get("pfield", {})
-            pfield = scan.pfield
-        else:
-            pfield = None
-    except Exception as e:
-        log.info(f"Skipped updating the scan object due to the following error(s):\n{e}")
+    if (
+        getattr(scan, "probe_geometry", None) is not None
+        and "pfield" in agent_config.action_selection
+    ):
+        scan.pfield_kwargs |= agent_config.action_selection.get("pfield", {})
+        pfield = scan.pfield
+    else:
         pfield = None
 
     agent, agent_state = setup_agent(

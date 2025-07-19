@@ -1,0 +1,42 @@
+action_selection:
+  n_possible_actions: 128
+  n_actions: 16
+  shape: [256, 256]
+  selection_strategy: "greedy_entropy" # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
+  kwargs:
+    std_dev: 1.5
+    num_lines_to_update: 7
+
+downstream_task: null
+
+diffusion_inference:
+  run_dir: "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/pretrained/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"
+  num_steps: 500
+  initial_step: 450 # [0, num_steps]
+  batch_size: 4 # posterior samples
+  guidance_kwargs:
+    initial_omega: 10
+    omega: 10
+  reconstruction_method: "choose_first" # "choose_first" | "maximum_likelihood" | "mean"
+  hard_project: true
+
+io_config:
+  plot_step_overview: false
+  plot_frame_overview: false
+  plot_frames_for_presentation: true
+  plot_frames_for_presentation_kwargs:
+    scan_convert_order: 0
+    scan_convert_resolution: 0.5 # for speed 1.0, for quality 0.1
+  save_target_img: false
+  save_animation: true
+  scan_convert: true
+  scan_conversion_angles: [-45, 45]
+  frame_cutoff: 30
+  gif_fps: 30
+  verbose: false
+  reconstruction_sharpness_std: 0.025
+
+data:
+  target_sequence: "{data_root}/USBMD_datasets/echonetlvh_v2025/val/0X86F054EEAE4663C0.hdf5"
+  data_type: data/image
+  image_range: [-60, 0]

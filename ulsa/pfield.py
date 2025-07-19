@@ -74,6 +74,7 @@ def update_scan_for_polar_grid(
     dynamic_range=(-70, -28),
     pfield_kwargs=None,
     f_number=0,
+    ray_multiplier: int = 1,
 ):
     """Update the scan object for line scanning."""
     if pfield_kwargs is None:
@@ -83,5 +84,5 @@ def update_scan_for_polar_grid(
     scan.grid_type = "polar"
     scan.dynamic_range = dynamic_range
     scan.fill_value = float(scan.dynamic_range[0])
-    scan.n_x = scan.n_tx
+    scan.n_x = scan.n_tx * ray_multiplier
     scan.polar_limits = scan.polar_angles.min(), scan.polar_angles.max()
