@@ -8,6 +8,7 @@ from zea.backend.autograd import AutoGrad
 from zea.display import compute_scan_convert_2d_coordinates, scan_convert_2d
 from zea.internal.registry import RegisterDecorator
 from zea.models.echonet import EchoNetDynamic
+from models.deeplabv3_segmenter import DeeplabV3Plus
 
 from ulsa.io_utils import deg2rad
 
@@ -252,3 +253,77 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
 
     def output_type(self):
         return "segmentation_mask"
+
+@downstream_task_registry(name="echonetlvh_segmentation")
+class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
+    def __init__(self, batch_size=4):
+        super().__init__()
+
+         # NOTE: image shape hardcoded for one of our echonetlvh models, could change.
+        self.model = DeeplabV3Plus(
+            image_shape=(224, 224, 3),
+            num_classes=4
+        )
+        # NOTE: same with weights -- if we go with this it'd be nice to put model on HF
+        self.model.load_weights("/mnt/z/Ultrasound-BMd/pretrained/deeplabv3/2025_07_15_114541_100430_echonetlvh_224/checkpoints/segmenter_184.weights.h5")
+
+        # Scan conversion constants for echonet
+        self.rho_range = (0, 224)
+        self.theta_range = (deg2rad(-45), deg2rad(45))
+        self.fill_value = -1.0
+        self.resolution = 1.0  # mm per pixel
+
+        self.n_rho = 224
+        self.n_theta = 224
+
+        self.init_scan_conversion()
+        # TODO: can we infer output shape from model?
+        self.output_shape = (224, 224, 4)
+
+    def init_scan_conversion(self):
+        # Precompute interpolation coordinates using the new display.py functions
+        image_shape = (self.n_rho, self.n_theta)
+        self.coords, _ = compute_scan_convert_2d_coordinates(
+            image_shape,
+            self.rho_range,
+            self.theta_range,
+            self.resolution,
+        )
+        # Output shape is determined by the coordinates shape (2, n_z, n_x)
+        self.output_shape = self.coords.shape[1:]  # (n_z, n_x)
+
+        def _scan_convert_2d(image, fill_value=self.fill_value, order=0):
+            image = ops.convert_to_tensor(image, dtype="float32")
+            image_sc, _ = scan_convert_2d(
+                image, coordinates=self.coords, fill_value=fill_value, order=order
+            )
+            return image_sc
+
+        self.scan_convert_2d = _scan_convert_2d
+
+    def scan_convert_batch(self, x):
+        # x: (batch, n_rho, n_theta, 1)
+        x_cartesian = ops.vectorized_map(self.scan_convert_2d, x[..., 0])
+        # x_cartesian_cropped = x_cartesian[:, :, 23 : 159 - 24, None]
+        return x_cartesian
+    
+    def call_generic(self, x):
+        x_sc = self.scan_convert_batch(x)
+        masks = self(x_sc)
+        return masks
+    
+    def __call__(self, x_sc):
+        # echonet expects 3-channel input
+        logits = self.model(x_sc)
+        # return ops.sigmoid(logits)
+        return ops.cast(logits > 0.0, dtype="uint8")
+    
+    def call_differentiable(self, x):
+        # TODO: do we need a resize in here first?
+        x_resized = ops.image.resize(x[0, ..., None], size=(224, 224))
+        x_sc = self.scan_convert_batch(x_resized)
+        x_resized = ops.image.resize(x_sc, size=(224, 224))
+        x_clipped = ops.clip(x_resized, -1, 1)
+        x_normalized = zea.utils.translate(x_clipped, range_from=(-1, 1), range_to=(0, 255))
+        logits = self.model(x_normalized)
+        return logits
