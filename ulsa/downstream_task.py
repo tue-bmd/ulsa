@@ -32,6 +32,32 @@ def compute_dice_score(pred_mask, gt_mask, eps=1e-8):
 
     return dice_scores
 
+def overlay_segmentation_on_image_batch(images, segmentation_masks, alpha=0.3):
+    """
+    Overlay segmentation masks in red on a batch of grayscale images.
+    Only blend in the mask regions, leave the rest of the image unchanged.
+    images: (N, H, W) uint8
+    segmentation_masks: (N, H, W) uint8, values 0 or 255
+    Returns: (N, H, W, 3) uint8
+    """
+    assert images.shape == segmentation_masks.shape, "Images and masks must have same shape"
+    images_rgb = np.stack([images, images, images], axis=-1)  # (N, H, W, 3)
+    red_overlay = np.zeros_like(images_rgb)
+    red_overlay[..., 0] = segmentation_masks  # Red channel
+
+    mask_bool = segmentation_masks > 127  # (N, H, W)
+    mask_bool = np.repeat(mask_bool[..., np.newaxis], 3, axis=-1)  # (N, H, W, 3)
+
+    blended = images_rgb.copy().astype(np.float32)
+    blended[mask_bool] = (
+        (1 - alpha) * images_rgb[mask_bool] + alpha * red_overlay[mask_bool]
+    )
+    return blended.astype(np.uint8)
+
+def map_range(img, from_range=(-1, 1), to_range=(0, 255)):
+    img = ops.convert_to_numpy(img)
+    img = zea.utils.translate(img, from_range, to_range)
+    return np.clip(img, to_range[0], to_range[1])
 
 class DownstreamTask(ABC):
     def __init__(self):
@@ -44,6 +70,10 @@ class DownstreamTask(ABC):
         pass
 
     def output_type(self):
+        pass
+
+class DifferentiableDownstreamTask(DownstreamTask):
+    def call_differentiable(self):
         pass
 
 
@@ -59,7 +89,7 @@ class NoDownstreamTask(DownstreamTask):
 
 
 @downstream_task_registry(name="echonet_segmentation")
-class EchoNetSegmentation(DownstreamTask):
+class EchoNetSegmentation(DifferentiableDownstreamTask):
     def __init__(self, batch_size=4):
         super().__init__()
 
@@ -76,6 +106,8 @@ class EchoNetSegmentation(DownstreamTask):
         self.n_theta = 112
 
         self.init_scan_conversion()
+        # TODO: can we infer output shape from model?
+        self.output_shape = (112, 112, 1)
 
     def init_scan_conversion(self):
         # Precompute interpolation coordinates using the new display.py functions
@@ -89,7 +121,7 @@ class EchoNetSegmentation(DownstreamTask):
         # Output shape is determined by the coordinates shape (2, n_z, n_x)
         self.output_shape = self.coords.shape[1:]  # (n_z, n_x)
 
-        def _scan_convert_2d(image, fill_value=self.fill_value, order=1):
+        def _scan_convert_2d(image, fill_value=self.fill_value, order=0):
             image = ops.convert_to_tensor(image, dtype="float32")
             image_sc, _ = scan_convert_2d(
                 image, coordinates=self.coords, fill_value=fill_value, order=order
@@ -97,6 +129,22 @@ class EchoNetSegmentation(DownstreamTask):
             return image_sc
 
         self.scan_convert_2d = _scan_convert_2d
+
+    def postprocess_for_visualization(self, targets, reconstructions, target_masks, reconstruction_masks):
+        targets = self.scan_convert_batch(targets[..., None])[..., 0]
+        reconstructions = self.scan_convert_batch(reconstructions[..., None])[..., 0]
+
+        targets = map_range(targets, from_range=(-1, 1), to_range=(0, 255)).astype(np.uint8)
+        target_masks = map_range(target_masks, from_range=(0, 1), to_range=(0, 255)).astype(np.uint8)
+        reconstructions = map_range(reconstructions, from_range=(-1, 1), to_range=(0, 255)).astype(np.uint8)
+        reconstruction_masks = map_range(reconstruction_masks, from_range=(0, 1), to_range=(0, 255)).astype(np.uint8)
+
+        targets_with_mask = overlay_segmentation_on_image_batch(targets, target_masks)
+        reconstructions_with_mask = overlay_segmentation_on_image_batch(reconstructions, reconstruction_masks)
+
+        targets_with_mask = np.pad(targets_with_mask, pad_width=((0, 0), (0, 0), (23, 24), (0, 0)), mode='constant')
+        reconstructions_with_mask = np.pad(reconstructions_with_mask, pad_width=((0, 0), (0, 0), (23, 24), (0, 0)), mode='constant')
+        return targets_with_mask, reconstructions_with_mask
 
     def scan_convert_batch(self, x):
         # x: (batch, n_rho, n_theta, 1)
@@ -116,7 +164,8 @@ class EchoNetSegmentation(DownstreamTask):
         # return ops.sigmoid(logits)
         return ops.cast(logits > 0.0, dtype="uint8")
 
-    def call_differentiable(self, x_sc):
+    def call_differentiable(self, x):
+        x_sc = self.scan_convert_batch(x)
         # echonet expects 3-channel input
         x_sc = ops.tile(x_sc, [1, 1, 1, 3])
         logits = self.model.network(x_sc)

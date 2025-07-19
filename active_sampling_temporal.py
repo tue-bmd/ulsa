@@ -115,6 +115,7 @@ from ulsa.io_utils import (
     make_save_dir,
     map_range,
     plot_belief_distribution_for_presentation,
+    plot_downstream_task_output_for_presentation,
     plot_frame_overview,
     plot_frames_for_presentation,
 )
@@ -123,6 +124,7 @@ from ulsa.pfield import (
     select_transmits,
     update_scan_for_polar_grid,
 )
+from ulsa import selection # need to import this to update action selection registry
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
 from zea.tensor_ops import batched_map, func_with_one_batch_dim
@@ -185,6 +187,7 @@ def elementwise_append_tuples(t1, t2):
     return tuple(combined)
 
 
+
 def apply_downstream_task(agent_config, reconstructions):
     downstream_task_key = agent_config.get("downstream_task", None)
     if downstream_task_key is None:
@@ -218,6 +221,7 @@ class AgentResults:
     reconstructions: np.ndarray
     belief_distributions: np.ndarray  # shape: (n_frames, particles, h, w, 1)
     measurements: np.ndarray
+    saliency_map: np.ndarray
 
     def squeeze(self, axis=-1):
         return AgentResults(
@@ -226,6 +230,7 @@ class AgentResults:
             np.squeeze(self.reconstructions, axis=axis),
             np.squeeze(self.belief_distributions, axis=axis),
             np.squeeze(self.measurements, axis=axis),
+            np.squeeze(self.saliency_map, axis=axis),
         )
 
     def to_uint8(self, input_range=None):
@@ -242,6 +247,7 @@ class AgentResults:
             map_to_uint8(self.reconstructions),
             map_to_uint8(self.belief_distributions),
             map_to_uint8(self.measurements),
+            map_to_uint8(self.saliency_map),
         )
 
 
@@ -385,6 +391,7 @@ def run_active_sampling(
                 target_img,
                 new_agent_state.belief_distribution,
                 measurements,
+                new_agent_state.saliency_map
             ),
         )
 
@@ -404,7 +411,7 @@ def run_active_sampling(
     if verbose:
         print("Done! FPS: ", fps)
 
-    reconstructions, masks, target_imgs, belief_distributions, measurements = outputs
+    reconstructions, masks, target_imgs, belief_distributions, measurements, saliency_map = outputs
 
     if post_pipeline:
         reconstructions = post_pipeline(data=reconstructions)["data"]
@@ -424,6 +431,7 @@ def run_active_sampling(
         reconstructions,
         belief_distributions,
         measurements,
+        saliency_map
     )
 
 
@@ -617,6 +625,7 @@ if __name__ == "__main__":
         seed=jax.random.PRNGKey(args.seed),
         pfield=pfield,
         jit_mode="recover",
+        # jit_mode=None,
     )
 
     pipeline = make_pipeline(
@@ -647,12 +656,21 @@ if __name__ == "__main__":
         pfield=pfield,
     )
 
-    dst_output_type, downstream_task_outputs = apply_downstream_task(
-        agent_config, results.reconstructions
-    )
+    downstream_task: DownstreamTask = (
+        None
+        if agent_config.downstream_task is None
+        else downstream_task_registry[agent_config.downstream_task]
+    )(batch_size=agent_config.diffusion_inference.batch_size)
 
-    if not downstream_task_outputs:
-        downstream_task_outputs = [None] * len(results.reconstructions)
+    if downstream_task is None:
+        reconstructions_dst = [None] * len(results.reconstructions)
+    else:
+        reconstructions_dst = batched_map(
+            downstream_task.call_generic, results.reconstructions, jit=True, batch_size=agent_config.diffusion_inference.batch_size
+        )
+        targets_dst = batched_map(
+            downstream_task.call_generic, results.target_imgs, jit=True, batch_size=agent_config.diffusion_inference.batch_size
+        )
 
     # TODO: maybe more io_config to script args? Since this isn't relevant to benchmarking
     if agent_config.io_config.plot_frame_overview:
@@ -666,7 +684,7 @@ if __name__ == "__main__":
                 results.reconstructions,
                 results.belief_distributions,
                 results.masks,
-                downstream_task_outputs,
+                reconstructions_dst,
             )
         ):
             plot_frame_overview(
@@ -678,7 +696,7 @@ if __name__ == "__main__":
                 agent_config.io_config,
                 images_from_posterior=postprocess_fn(beliefs),
                 mask=mask,
-                **({dst_output_type: dst_out} if dst_out is not None else {}),
+                **({downstream_task.output_type(): dst_out} if dst_out is not None else {}),
             )
         if agent_config.io_config.save_animation:
             animate_overviews(run_dir, agent_config.io_config)
@@ -688,25 +706,40 @@ if __name__ == "__main__":
         squeezed_results = results.squeeze(-1)
 
         frame_to_plot = 0
-        plot_belief_distribution_for_presentation(
-            save_dir / run_id,
-            squeezed_results.belief_distributions[frame_to_plot],
-            squeezed_results.masks[frame_to_plot],
-            agent_config.io_config,
-            next_masks=squeezed_results.masks[frame_to_plot + 1],
-        )
+        # plot_belief_distribution_for_presentation(
+        #     save_dir / run_id,
+        #     squeezed_results.belief_distributions[frame_to_plot],
+        #     squeezed_results.masks[frame_to_plot],
+        #     agent_config.io_config,
+        #     next_masks=squeezed_results.masks[frame_to_plot + 1],
+        # )
 
-        plot_frames_for_presentation(
-            save_dir / run_id,
-            squeezed_results.target_imgs,
-            squeezed_results.reconstructions,
-            squeezed_results.masks,
-            squeezed_results.measurements,
-            io_config=agent_config.io_config,
-            image_range=agent.input_range,
-            postfix_filename=postfix_filename,
-            **agent_config.io_config.get("plot_frames_for_presentation_kwargs", {}),
-        )
+        # plot_frames_for_presentation(
+        #     save_dir / run_id,
+        #     squeezed_results.target_imgs,
+        #     squeezed_results.reconstructions,
+        #     squeezed_results.masks,
+        #     squeezed_results.measurements,
+        #     io_config=agent_config.io_config,
+        #     image_range=agent.input_range,
+        #     postfix_filename=postfix_filename,
+        #     **agent_config.io_config.get("plot_frames_for_presentation_kwargs", {}),
+        # )
+
+        if downstream_task is not None:
+            plot_downstream_task_output_for_presentation(
+                save_dir / run_id,
+                squeezed_results.target_imgs,
+                squeezed_results.measurements,
+                squeezed_results.reconstructions,
+                np.std(squeezed_results.belief_distributions, axis=1),  # posterior std per frame
+                downstream_task,
+                np.squeeze(reconstructions_dst),  # segmentation masks
+                np.squeeze(targets_dst),  # segmentation masks
+                np.squeeze(np.log(results.saliency_map+1e-2)), # NOTE: tweak the +1e-2 for visualization
+                agent_config.io_config,
+                image_range=agent.input_range,
+            )
 
     with open(save_dir / run_id / "config.json", "w") as json_file:
         json.dump(agent_config, json_file, indent=4)

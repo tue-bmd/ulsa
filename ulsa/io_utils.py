@@ -391,6 +391,28 @@ def postprocess_agent_results(
 
     return data
 
+def postprocess_heatmap(
+    heatmap,
+    io_config,
+    scan_convert_order=0,
+    scan_convert_resolution=0.1,
+    cmap="viridis"
+):
+    heatmap = _scan_convert(
+        heatmap,
+        io_config.scan_conversion_angles,
+        order=scan_convert_order,
+        fill_value=np.nan,
+        resolution=scan_convert_resolution,
+    )
+    heatmap_min = np.nanmin(heatmap)
+    heatmap_max = np.nanmax(heatmap)
+    heatmap = (heatmap - heatmap_min) / (heatmap_max - heatmap_min)
+    cmap = plt.colormaps.get_cmap(cmap)
+    heatmap = cmap(heatmap).astype(np.float32)
+    heatmap = map_range(heatmap, from_range=(0, 1)).astype(np.uint8)
+    return heatmap
+
 
 def plot_frames_for_presentation(
     save_dir,
@@ -503,6 +525,59 @@ def plot_frames_for_presentation(
         fps=io_config.gif_fps,
         context=context,
         labels=[f"Density over {window_size} frames", "Reconstruction"],
+    )
+
+
+def plot_downstream_task_output_for_presentation(
+    save_dir,
+    targets,  # shape (num_frames, H, W)
+    measurements,  # shape (num_frames, H, W)
+    reconstructions,  # shape (num_frames, H, W)
+    posterior_std,  # shape (num_frames, H, W)
+    downstream_task,
+    reconstructions_dst,
+    targets_dst,
+    saliency_maps,  # shape (num_frames, H, W) or (num_frames, H, W, 1)
+    io_config,
+    dpi=150,
+    scan_convert_order=0,
+    scan_convert_resolution=0.1,
+    interpolation_matplotlib="nearest",
+    image_range=(-1, 1),
+    context="styles/darkmode.mplstyle",
+    gif_name="downstream_task_output.gif",
+    drop_first_n_frames=0,
+):
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    num_frames = targets.shape[0]
+    # expects RGB image output
+    targets_with_mask, reconstructions_with_mask = downstream_task.postprocess_for_visualization(targets, reconstructions, targets_dst, reconstructions_dst)
+
+    measurements = postprocess_agent_results(
+        measurements,
+        io_config,
+        scan_convert_order=0,  # always 0 for masks!
+        drop_first_n_frames=drop_first_n_frames,
+        image_range=image_range,
+        scan_convert_resolution=scan_convert_resolution,
+    )
+    # apply log for visualization
+    saliency_maps = postprocess_heatmap(saliency_maps, io_config, cmap="magma_r")
+    posterior_std = postprocess_heatmap(posterior_std, io_config, cmap="magma_r")
+
+    arrays = [targets_with_mask, measurements, reconstructions_with_mask, posterior_std, saliency_maps]
+    labels = ["Targets", "Measurements", "Reconstructions", "STD[X | Y]", "DST Saliency"]
+
+    # Make gif
+    side_by_side_gif(
+        save_dir / gif_name,
+        *arrays,
+        dpi=dpi,
+        interpolation=interpolation_matplotlib,
+        fps=io_config.gif_fps if hasattr(io_config, "gif_fps") else 10,
+        context=context,
+        labels=labels,
     )
 
 
