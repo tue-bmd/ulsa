@@ -186,33 +186,24 @@ def elementwise_append_tuples(t1, t2):
         combined.append(ops.concatenate([e1[None, ...], e2]))
     return tuple(combined)
 
+def apply_downstream_task(agent_config, targets, reconstructions):
+    downstream_task: DownstreamTask = (
+        None
+        if agent_config.downstream_task is None
+        else downstream_task_registry[agent_config.downstream_task]
+    )(batch_size=agent_config.diffusion_inference.batch_size)
 
-
-def apply_downstream_task(agent_config, reconstructions):
-    downstream_task_key = agent_config.get("downstream_task", None)
-    if downstream_task_key is None:
-        return None, None
-
-    try:
-        downstream_task: DownstreamTask = (
-            None
-            if downstream_task_key is None
-            else downstream_task_registry[downstream_task_key]
-        )(batch_size=4)
-        log.info(
-            log.blue(f"Running downstream task: {log.green(downstream_task.name())}")
+    if downstream_task is None:
+        reconstructions_dst = [None] * len(reconstructions)
+        targets_dst = [None] * len(targets)
+    else:
+        reconstructions_dst = batched_map(
+            downstream_task.call_generic, reconstructions, jit=True, batch_size=agent_config.diffusion_inference.batch_size
         )
-        downstream_task_outputs = batched_map(
-            downstream_task.call_generic, reconstructions, jit=True, batch_size=4
+        targets_dst = batched_map(
+            downstream_task.call_generic, targets, jit=True, batch_size=agent_config.diffusion_inference.batch_size
         )
-        return downstream_task.output_type(), downstream_task_outputs
-    except Exception as e:
-        log.error(
-            f"Downstream task {downstream_task_key} not found or failed. "
-            f"Skipping downstream task. Original error: {e}"
-        )
-        return None, None
-
+    return downstream_task, targets_dst, reconstructions_dst
 
 @dataclass
 class AgentResults:
@@ -239,6 +230,8 @@ class AgentResults:
         """
 
         def map_to_uint8(data):
+            if data is None:
+                return None
             return map_range(data, input_range, (0, 255)).astype(np.uint8)
 
         return AgentResults(
@@ -247,7 +240,7 @@ class AgentResults:
             map_to_uint8(self.reconstructions),
             map_to_uint8(self.belief_distributions),
             map_to_uint8(self.measurements),
-            map_to_uint8(self.saliency_map),
+            self.saliency_map, # keep saliency map as is
         )
 
 
@@ -656,21 +649,8 @@ if __name__ == "__main__":
         pfield=pfield,
     )
 
-    downstream_task: DownstreamTask = (
-        None
-        if agent_config.downstream_task is None
-        else downstream_task_registry[agent_config.downstream_task]
-    )(batch_size=agent_config.diffusion_inference.batch_size)
-
-    if downstream_task is None:
-        reconstructions_dst = [None] * len(results.reconstructions)
-    else:
-        reconstructions_dst = batched_map(
-            downstream_task.call_generic, results.reconstructions, jit=True, batch_size=agent_config.diffusion_inference.batch_size
-        )
-        targets_dst = batched_map(
-            downstream_task.call_generic, results.target_imgs, jit=True, batch_size=agent_config.diffusion_inference.batch_size
-        )
+    # Load downstream task model and apply to targets and reconstructions for comparison
+    downstream_task, targets_dst, reconstructions_dst = apply_downstream_task(agent_config, validation_sample_frames[..., None], results.reconstructions)
 
     # TODO: maybe more io_config to script args? Since this isn't relevant to benchmarking
     if agent_config.io_config.plot_frame_overview:

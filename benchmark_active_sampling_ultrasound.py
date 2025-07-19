@@ -309,13 +309,11 @@ def benchmark(
     all_metrics_results = []
     for i, file_index in enumerate(file_indices):
         file = dataset[file_index]
-        cardiac = "cardiac" in str(file.path)
         target_sequence, scan, probe = preload_data(
             file,
             n_frames,
             dataset.key,
-            dynamic_range,
-            cardiac=cardiac,
+            dynamic_range
         )
 
         if circle_augmentation is not None:
@@ -342,9 +340,8 @@ def benchmark(
             post_pipeline=post_pipeline,
         )
 
-        dst_output_type, downstream_task_outputs = apply_downstream_task(
-            agent_config, results.reconstructions
-        )
+        target_sequence_preprocessed = zea.utils.translate(target_sequence[..., None], dynamic_range, (-1, 1))
+        downstream_task, targets_dst, reconstructions_dst = apply_downstream_task(agent_config, target_sequence_preprocessed, results.reconstructions)
 
         denormalized = results.to_uint8(agent.input_range)
         metrics_results = metrics.eval_metrics(
@@ -391,8 +388,11 @@ def benchmark(
                 **metrics_results,
                 **recovered_circle_kwargs,
                 **(
-                    {dst_output_type: downstream_task_outputs}
-                    if downstream_task_outputs is not None
+                    {
+                        f"{downstream_task.output_type()}_targets": targets_dst,
+                        f"{downstream_task.output_type()}_reconstructions": reconstructions_dst,
+                    }
+                    if downstream_task is not None
                     else {}
                 ),
             )
@@ -403,8 +403,11 @@ def benchmark(
 
     return (
         all_metrics_results,
-        dst_output_type,
-        downstream_task_outputs,
+        downstream_task.output_type(),
+        {
+            f"{downstream_task.output_type()}_targets": targets_dst,
+            f"{downstream_task.output_type()}_reconstructions": reconstructions_dst,
+        },
         recovered_circle_kwargs,
         results,  # last result of loop
         agent,
@@ -550,109 +553,79 @@ def run_benchmark(
 
 def extract_sweep_data(
     sweep_dir: str,
-    keys_to_extract=["mse", "psnr"],
+    keys_to_extract=["mse", "psnr", "dice"],
     x_axis_key="action_selection.n_actions",
     strategies_to_plot=None,
-    gt_masks=None,
     include_only_these_files=None,
 ):
-    """Can be used to load all the metrics from the run_benchmark function."""
+    """Load all metrics from a sweep directory. Now uses segmentation_mask_targets and segmentation_mask_reconstructions from metrics.npz."""
     sweep_details_path = os.path.join(sweep_dir, "sweep_details.yaml")
     if not os.path.exists(sweep_details_path):
         raise FileNotFoundError(f"Missing sweep_details.yaml in {sweep_dir}")
 
     sweep_details = Config.from_yaml(sweep_details_path)
-
     results = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
-    # Loop over runs in the sweep directory
     for run_dir in sorted(os.listdir(sweep_dir)):
-        # Check if run_dir is a directory
         run_path = os.path.join(sweep_dir, run_dir)
         if not os.path.isdir(run_path):
             continue
 
-        # Print run directory being processed in place
         print(f"Processing run: {run_dir}", end="\r")
 
-        # Check for required files
         config_path = os.path.join(run_path, "config.yaml")
         metrics_path = os.path.join(run_path, "metrics.npz")
         filepath_yaml = os.path.join(run_path, "target_filepath.yaml")
-        if not all(
-            os.path.exists(p) for p in [config_path, metrics_path, filepath_yaml]
-        ):
+        if not all(os.path.exists(p) for p in [config_path, metrics_path, filepath_yaml]):
             continue
 
-        # Load the config, metrics, and target file path
         config = Config.from_yaml(config_path)
         metrics = np.load(metrics_path, allow_pickle=True)
         target_file = Config.from_yaml(filepath_yaml)["target_filepath"]
 
-        # Hack to get snellius results to work locally
-        target_file = str(target_file).replace(
-            "/projects/0/prjs0966/data", "/mnt/z/Ultrasound-BMd/data"
-        )
-
-        # Filter by include_only_these_files if specified
-        if (
-            include_only_these_files is not None
-            and target_file not in include_only_these_files
-        ):
+        # Optional file filter
+        if include_only_these_files is not None and target_file not in include_only_these_files:
             continue
 
-        # Check if the x-axis key exists in the config
         x_value = get_config_value(config, x_axis_key)
         if x_value is None:
             log.warning(f"Skipping {run_path} due to missing x_axis_key: {x_axis_key}.")
             continue
 
-        # Check if the selection strategy is in the config
-        selection_strategy = config.get("action_selection", {}).get(
-            "selection_strategy"
-        )
+        selection_strategy = config.get("action_selection", {}).get("selection_strategy")
         if selection_strategy is None:
-            log.warning(
-                f"Skipping {run_path} due to missing selection_strategy: {selection_strategy}."
-            )
+            log.warning(f"Skipping {run_path} due to missing selection_strategy.")
             continue
 
-        # Skip if the selection strategy is not in the specified strategies
-        # This saves time by not processing runs that are not needed
+        if strategies_to_plot is not None and selection_strategy not in strategies_to_plot:
+            continue
+
+        # Extract masks and images for comparison and plotting
         if (
-            strategies_to_plot is not None
-            and selection_strategy not in strategies_to_plot
+            "segmentation_mask_targets" in metrics
+            and "segmentation_mask_reconstructions" in metrics
         ):
-            continue
-
-        # Extract prediction masks and images (and skip if not available)
-        if "reconstructions" not in metrics or "masks" not in metrics:
-            continue
-        pred_images = metrics["reconstructions"]
-
-        # Store masks and images in results
-        # TODO: what is this used for @OisinNolan?
-        # results["masks"][selection_strategy][x_value].append(
-        #     {"masks": pred_masks, "x_scan_converted": pred_images, "run_dir": run_path}
-        # )
-
-        # Compute DICE if ground truths available
-        if gt_masks is not None and target_file in gt_masks:
-            pred_masks = metrics["segmentation_mask"]
-            gt_sequence = gt_masks[target_file]
-            pred_masks = np.array(pred_masks)
-            gt_masks_array = np.array(gt_sequence["masks"])
-            gt_masks_array = np.squeeze(gt_masks_array, axis=1)
-            dice_score = compute_dice_score(pred_masks, gt_masks_array)
-
-            # Store mean DICE over patient frames
+            pred_masks = np.array(metrics["segmentation_mask_reconstructions"])
+            gt_masks = np.array(metrics["segmentation_mask_targets"])
+            dice_score = compute_dice_score(pred_masks, gt_masks)
             results["dice"][selection_strategy][x_value].append(np.mean(dice_score))
+
+            # Store masks and images for plotting
+            results["masks"][selection_strategy][x_value].append(
+                {
+                    "masks": pred_masks,
+                    "x_scan_converted": metrics["reconstructions"],
+                    "run_dir": run_path,
+                    "gt_masks": gt_masks,
+                }
+            )
 
         # Add other metrics
         for metric_name in keys_to_extract:
+            if metric_name == "dice":
+                continue  # Already handled above
             if metric_name not in metrics:
-                continue  # Skip if metric not found
-
+                continue
             metric_values = metrics[metric_name]
             if isinstance(metric_values, np.ndarray) and metric_values.size > 0:
                 sequence_means = np.mean(metric_values, axis=-1)

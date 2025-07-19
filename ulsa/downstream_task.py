@@ -3,6 +3,7 @@ from abc import ABC
 import jax
 import numpy as np
 from keras import ops
+import zea
 from zea.backend.autograd import AutoGrad
 from zea.display import compute_scan_convert_2d_coordinates, scan_convert_2d
 from zea.internal.registry import RegisterDecorator
