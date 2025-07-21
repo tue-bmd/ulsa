@@ -187,21 +187,24 @@ def elementwise_append_tuples(t1, t2):
     return tuple(combined)
 
 def apply_downstream_task(agent_config, targets, reconstructions):
-    downstream_task: DownstreamTask = (
+    downstream_task_class: DownstreamTask = (
         None
         if agent_config.downstream_task is None
         else downstream_task_registry[agent_config.downstream_task]
-    )(batch_size=agent_config.diffusion_inference.batch_size)
+    )
 
-    if downstream_task is None:
+    if downstream_task_class is None:
+        downstream_task = None
         reconstructions_dst = [None] * len(reconstructions)
         targets_dst = [None] * len(targets)
     else:
+        downstream_task = downstream_task_class(batch_size=agent_config.diffusion_inference.batch_size)
         reconstructions_dst = batched_map(
             downstream_task.call_generic, reconstructions, jit=True, batch_size=agent_config.diffusion_inference.batch_size
         )
+        targets_normalized = zea.utils.translate(targets, range_from=(0, 255), range_to=(-1, 1))
         targets_dst = batched_map(
-            downstream_task.call_generic, targets, jit=True, batch_size=agent_config.diffusion_inference.batch_size
+            downstream_task.call_generic, targets_normalized, jit=True, batch_size=agent_config.diffusion_inference.batch_size
         )
     return downstream_task, targets_dst, reconstructions_dst
 
@@ -215,6 +218,8 @@ class AgentResults:
     saliency_map: np.ndarray
 
     def squeeze(self, axis=-1):
+        if ops.all(self.saliency_map == None):
+            self.saliency_map = ops.zeros_like(self.target_imgs)
         return AgentResults(
             np.squeeze(self.masks, axis=axis),
             np.squeeze(self.target_imgs, axis=axis),
@@ -699,25 +704,25 @@ if __name__ == "__main__":
         squeezed_results = results.squeeze(-1)
 
         frame_to_plot = 0
-        # plot_belief_distribution_for_presentation(
-        #     save_dir / run_id,
-        #     squeezed_results.belief_distributions[frame_to_plot],
-        #     squeezed_results.masks[frame_to_plot],
-        #     agent_config.io_config,
-        #     next_masks=squeezed_results.masks[frame_to_plot + 1],
-        # )
+        plot_belief_distribution_for_presentation(
+            save_dir / run_id,
+            squeezed_results.belief_distributions[frame_to_plot],
+            squeezed_results.masks[frame_to_plot],
+            agent_config.io_config,
+            next_masks=squeezed_results.masks[frame_to_plot + 1],
+        )
 
-        # plot_frames_for_presentation(
-        #     save_dir / run_id,
-        #     squeezed_results.target_imgs,
-        #     squeezed_results.reconstructions,
-        #     squeezed_results.masks,
-        #     squeezed_results.measurements,
-        #     io_config=agent_config.io_config,
-        #     image_range=agent.input_range,
-        #     postfix_filename=postfix_filename,
-        #     **agent_config.io_config.get("plot_frames_for_presentation_kwargs", {}),
-        # )
+        plot_frames_for_presentation(
+            save_dir / run_id,
+            squeezed_results.target_imgs,
+            squeezed_results.reconstructions,
+            squeezed_results.masks,
+            squeezed_results.measurements,
+            io_config=agent_config.io_config,
+            image_range=agent.input_range,
+            postfix_filename=postfix_filename,
+            **agent_config.io_config.get("plot_frames_for_presentation_kwargs", {}),
+        )
 
         if downstream_task is not None:
             plot_downstream_task_output_for_presentation(

@@ -554,6 +554,8 @@ def plot_downstream_task_output_for_presentation(
     # expects RGB image output
     targets_with_mask, reconstructions_with_mask = downstream_task.postprocess_for_visualization(targets, reconstructions, targets_dst, reconstructions_dst)
 
+    # TODO: maybe check if DST output is same size as measurements etc and if not then resize?
+
     measurements = postprocess_agent_results(
         measurements,
         io_config,
@@ -562,6 +564,13 @@ def plot_downstream_task_output_for_presentation(
         image_range=image_range,
         scan_convert_resolution=scan_convert_resolution,
     )
+
+    # rescale DST outputs to get correct aspect ratio
+    aspect_ratio = ops.shape(measurements)[2] / ops.shape(measurements)[1]
+    new_shape = (ops.shape(targets_with_mask)[1], int(ops.shape(targets_with_mask)[1]*aspect_ratio))
+    targets_with_mask = ops.image.resize(targets_with_mask, new_shape, interpolation="nearest")
+    reconstructions_with_mask = ops.image.resize(reconstructions_with_mask, new_shape, interpolation="nearest")
+
     # apply log for visualization
     saliency_maps = postprocess_heatmap(saliency_maps, io_config, cmap="magma_r")
     posterior_std = postprocess_heatmap(posterior_std, io_config, cmap="magma_r")

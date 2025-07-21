@@ -1,12 +1,12 @@
 action_selection:
   n_possible_actions: 128
-  n_actions: 16
+  n_actions: 7
   shape: [256, 256]
   selection_strategy: "downstream_task_selection" # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
   kwargs:
     downstream_task_key: "echonetlvh_segmentation"
 
-downstream_task: null
+downstream_task: "echonetlvh_segmentation"
 
 diffusion_inference:
   run_dir: "/mnt/z/Ultrasound-BMd/pretrained/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"

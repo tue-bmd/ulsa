@@ -1,5 +1,6 @@
 import re
 from contextlib import nullcontext
+from collections.abc import Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -147,12 +148,17 @@ class ViolinPlotter:
                     values = data_dict[group][x_val]
                     if isinstance(values, (list, np.ndarray)):
                         try:
-                            # in case values array is inhomogenous
-                            flat_values = [item for sublist in values for item in sublist]
+                            # check for list of lists
+                            if isinstance(values[0], Iterable) and not isinstance(values[0], (str, bytes)):
+                                # in case values array is inhomogenous
+                                flat_values = [item for sublist in values for item in sublist]
+                            else:
+                                flat_values = values
                             # flat_values = [np.mean(l) for l in values]
                             metric_values = np.array(flat_values, dtype=np.float64)
                             all_values.extend(metric_values)
                         except (ValueError, TypeError):
+                            print("ViolinPlotter: Error parsing list valued results")
                             continue
             if all_values:
                 group_order[group] = np.mean(all_values)
@@ -170,7 +176,11 @@ class ViolinPlotter:
                 try:
                     values = data_dict.get(group, {}).get(x_val, [])
                     if isinstance(values, (list, np.ndarray)):
-                        flat_values = [item for sublist in values for item in sublist]
+                        if isinstance(values[0], Iterable) and not isinstance(values[0], (str, bytes)):
+                            # in case values array is inhomogenous
+                            flat_values = [item for sublist in values for item in sublist]
+                        else:
+                            flat_values = values
                         # flat_values = [np.mean(l) for l in values]
                         metric_values = np.array(flat_values, dtype=np.float64)
                         if metric_values.size > 0:

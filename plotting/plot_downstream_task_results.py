@@ -29,8 +29,8 @@ STRATEGY_COLORS = {
 
 STRATEGY_NAMES = {
     "downstream_task_selection": "Measurement Information Gain",
-    # "greedy_entropy": "Tissue Information Gain",
-    "greedy_entropy": "Active Perception",
+    "greedy_entropy": "Tissue Information Gain",
+    # "greedy_entropy": "Active Perception",
     "uniform_random": "Uniform Random",
     "equispaced": "Equispaced",
 }
@@ -836,8 +836,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     SWEEP_PATHS = [
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_103220_231576",
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_141313_876900"
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_161012_159911",
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_165029_487065"
     ]
 
     # Aggregate results from all sweep paths

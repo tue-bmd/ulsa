@@ -2,6 +2,7 @@ from abc import ABC
 
 import jax
 import numpy as np
+import cv2
 from keras import ops
 import zea
 from zea.backend.autograd import AutoGrad
@@ -254,6 +255,8 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
     def output_type(self):
         return "segmentation_mask"
 
+# TODO: this class and EchoNetSegmentation have a lot in common,
+#       maybe could make a shared 'SegmentationModel' parent
 @downstream_task_registry(name="echonetlvh_segmentation")
 class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
     def __init__(self, batch_size=4):
@@ -308,22 +311,145 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         return x_cartesian
     
     def call_generic(self, x):
-        x_sc = self.scan_convert_batch(x)
-        masks = self(x_sc)
-        return masks
+        return self(x)
     
-    def __call__(self, x_sc):
-        # echonet expects 3-channel input
-        logits = self.model(x_sc)
-        # return ops.sigmoid(logits)
-        return ops.cast(logits > 0.0, dtype="uint8")
-    
-    def call_differentiable(self, x):
-        # TODO: do we need a resize in here first?
-        x_resized = ops.image.resize(x[0, ..., None], size=(224, 224))
+    def __call__(self, x):
+        x_resized = ops.image.resize(x, size=(224, 224))
         x_sc = self.scan_convert_batch(x_resized)
-        x_resized = ops.image.resize(x_sc, size=(224, 224))
+        x_resized = ops.image.resize(x_sc[..., None], size=(224, 224))
         x_clipped = ops.clip(x_resized, -1, 1)
         x_normalized = zea.utils.translate(x_clipped, range_from=(-1, 1), range_to=(0, 255))
         logits = self.model(x_normalized)
         return logits
+    
+    def call_differentiable(self, x):
+        logits = self(x)
+        # NOTE: hardcoded to take the channels for LVPW measurements
+        # TODO: include config kwargs to select which measurements to optimize for
+        logits_lvpw = ops.expand_dims(ops.sum(logits[..., :2], axis=-1), axis=-1)
+        return logits_lvpw
+    
+    def postprocess_for_visualization(self, targets, reconstructions, target_masks, reconstruction_masks):
+        overlay_colors = np.array([
+            [255, 255, 0],    # Yellow (LVPWd_X1)
+            [255, 0, 255],    # Magenta (LVPWd_X2)
+            [0, 255, 255],    # Cyan (IVSd_X1)
+            [0, 255, 0],      # Green (IVSd_X2)
+        ], dtype=np.uint8)
+
+        def make_ultrasound_cone_mask(image_shape, apex_y=0, cone_angle_deg=70):
+            H, W = image_shape[:2]
+            Y, X = np.ogrid[:H, :W]
+            center_x = W // 2
+            apex_y = int(apex_y)
+            dx = X - center_x
+            dy = Y - apex_y
+            angle = np.arctan2(dx, dy + 1e-6) * 180 / np.pi
+            mask = np.abs(angle) < (cone_angle_deg / 2)
+            mask &= (dy >= 0)
+            return mask.astype(np.float32)
+
+        def normalize_img(img):
+            img = np.asarray(img)
+            img = img.astype(np.float32)
+            minv, maxv = np.min(img), np.max(img)
+            if maxv > minv:
+                img = (img - minv) / (maxv - minv)
+            else:
+                img = img * 0
+            img = (img * 255).clip(0, 255).astype(np.uint8)
+            return img
+
+        def find_gaussian_center(mask_channel, threshold=0.0):
+            mask = mask_channel.copy()
+            idx = np.unravel_index(np.argmax(mask), mask.shape)
+            if mask[idx] < threshold:
+                return None
+            return idx[::-1]  # (x, y)
+
+        def overlay_labels_on_image(image, label, alpha=0.5):
+            image = ops.convert_to_numpy(image)
+            label = ops.convert_to_numpy(label)
+            if image.ndim == 2:
+                image = np.stack([image]*3, axis=-1)
+            elif image.shape[-1] == 1:
+                image = np.repeat(image, 3, axis=-1)
+            else:
+                image = image.copy()
+
+            cone_mask = make_ultrasound_cone_mask(image.shape, apex_y=0, cone_angle_deg=70)
+            if label.ndim == 3 and label.shape[-1] > 1:
+                cone_mask = cone_mask[..., None]
+
+            label = np.clip(label, 0, None)
+            for ch in range(label.shape[-1]):
+                label[..., ch] *= cone_mask[..., 0] if cone_mask.ndim == 3 else cone_mask
+                max_val = np.max(label[..., ch])
+                if max_val > 0:
+                    label[..., ch] = label[..., ch] / max_val
+                else:
+                    label[..., ch] = 0
+
+            overlay = np.zeros_like(image, dtype=np.float32)
+            mask_any = np.zeros(image.shape[:2], dtype=bool)
+
+            centers = []
+            for ch in range(4):
+                mask = label[..., ch] ** 2
+                color = overlay_colors[ch]
+                center = find_gaussian_center(mask, threshold=0.0)
+                if center is not None:
+                    mask_alpha = mask * alpha
+                    for c in range(3):
+                        overlay[..., c] += mask_alpha * color[c]
+                    mask_any |= mask > 0
+                centers.append(center)
+
+            for i in range(3):
+                pt1, pt2 = centers[i], centers[i+1]
+                if pt1 is not None and pt2 is not None:
+                    color = tuple(int(x) for x in overlay_colors[i])
+                    line_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+                    cv2.line(line_mask, pt1, pt2, color=1, thickness=2)
+                    for c in range(3):
+                        overlay[..., c][line_mask.astype(bool)] = color[c] * alpha
+                    mask_any |= line_mask.astype(bool)
+
+            overlay = np.clip(overlay, 0, 255)
+            out = image.astype(np.float32)
+            blend_mask = np.any(overlay > 5, axis=-1)
+            out[blend_mask] = (
+                (1 - alpha) * out[blend_mask] + overlay[blend_mask]
+            )
+            out = np.clip(out, 0, 255).astype(np.uint8)
+            return out
+
+        # Scan convert images
+        targets_resized = ops.image.resize(targets[..., None], size=(224, 224))
+        targets_sc = self.scan_convert_batch(targets_resized)
+
+        reconstructions_resized = ops.image.resize(reconstructions[..., None], size=(224, 224))
+        reconstructions_sc = self.scan_convert_batch(reconstructions_resized)
+
+        targets_resized = ops.image.resize(targets_sc[..., None], size=(224, 224))
+        targets_clipped = ops.clip(targets_resized, -1, 1)
+        targets = zea.utils.translate(targets_clipped, range_from=(-1, 1), range_to=(0, 255))
+
+        reconstructions_resized = ops.image.resize(reconstructions_sc[..., None], size=(224, 224))
+        reconstructions_clipped = ops.clip(reconstructions_resized, -1, 1)
+        reconstructions = zea.utils.translate(reconstructions_clipped, range_from=(-1, 1), range_to=(0, 255))
+
+        # Overlay masks on images
+        targets_with_overlay = []
+        reconstructions_with_overlay = []
+        for img, mask in zip(targets, target_masks):
+            overlay = overlay_labels_on_image(img, mask)
+            targets_with_overlay.append(overlay)
+        for img, mask in zip(reconstructions, reconstruction_masks):
+            overlay = overlay_labels_on_image(img, mask)
+            reconstructions_with_overlay.append(overlay)
+
+        targets_with_overlay = np.stack(targets_with_overlay, axis=0)
+        reconstructions_with_overlay = np.stack(reconstructions_with_overlay, axis=0)
+
+        return targets_with_overlay, reconstructions_with_overlay
