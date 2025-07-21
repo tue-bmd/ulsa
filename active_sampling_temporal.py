@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import scipy
 from tqdm import tqdm
 
 
@@ -120,7 +121,7 @@ from ulsa.io_utils import (
     plot_frame_overview,
     plot_frames_for_presentation,
 )
-from ulsa.ops import LowPassFilter, WaveletDenoise
+from ulsa.ops import FirFilter, LowPassFilter, WaveletDenoise, lines_rx_apo
 from ulsa.pfield import (
     select_transmits,
     update_scan_for_polar_grid,
@@ -262,23 +263,6 @@ class AgentResults:
         )
 
 
-def lines_rx_apo(n_tx, n_z, n_x):
-    """
-    Create a receive apodization for line scanning.
-    This is a simple apodization that applies a uniform weight to all elements.
-
-    Returns:
-        rx_apo: np.ndarray of shape (n_tx, n_z, n_x)
-    """
-    assert n_x % n_tx == 0, "n_x must be divisible by n_tx for this apodization scheme."
-    step = n_x // n_tx
-    rx_apo = np.zeros((n_tx, n_z, n_x), dtype=np.float32)
-    for tx, line in zip(range(n_tx), range(0, n_x, step)):
-        rx_apo[tx, :, line : line + step] = 1.0
-    rx_apo = rx_apo.reshape((n_tx, -1))
-    return rx_apo[..., None]  # shape (n_tx, n_pix, 1)
-
-
 def run_active_sampling(
     agent: Agent,
     agent_state: AgentState,
@@ -305,8 +289,19 @@ def run_active_sampling(
         else:
             flat_pfield = disabled_pfield
         rx_apo = lines_rx_apo(scan.n_tx, scan.n_z, scan.n_x)
+        bandpass_rf = scipy.signal.firwin(
+            numtaps=128,
+            cutoff=np.array([0.5, 1.5]) * scan.center_frequency,
+            pass_zero="bandpass",
+            fs=scan.sampling_frequency,
+        )
         base_params = pipeline.prepare_parameters(
-            scan=scan, probe=probe, flat_pfield=flat_pfield, rx_apo=rx_apo, factor=6
+            scan=scan,
+            probe=probe,
+            flat_pfield=flat_pfield,
+            rx_apo=rx_apo,
+            bandwidth=2e6,
+            bandpass_rf=bandpass_rf,
         )
 
         # No pfield for target
@@ -484,9 +479,10 @@ def make_pipeline(
     if data_type not in ["data/image", "data/image_3D"]:
         pipeline = zea.Pipeline(
             [
+                FirFilter(axis=-3, filter_key="bandpass_rf"),
                 WaveletDenoise(),  # optional
                 zea.ops.Demodulate(),
-                LowPassFilter(num_taps=128, complex_channels=True, axis=-2),  # optional
+                LowPassFilter(complex_channels=True, axis=-2),  # optional
                 zea.ops.Downsample(2),  # optional
                 zea.ops.PatchedGrid(
                     [
