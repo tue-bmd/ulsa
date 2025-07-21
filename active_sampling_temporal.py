@@ -192,7 +192,7 @@ def apply_downstream_task(agent_config, targets, reconstructions):
     if agent_config.downstream_task is not None:
         downstream_task_class: DownstreamTask = downstream_task_registry[
             agent_config.downstream_task
-        ](batch_size=agent_config.diffusion_inference.batch_size)
+        ]
     else:
         return None, None, None
 
