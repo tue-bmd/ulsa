@@ -730,25 +730,25 @@ if __name__ == "__main__":
         squeezed_results = results.squeeze(-1)
 
         frame_to_plot = 0
-        # plot_belief_distribution_for_presentation(
-        #     save_dir / run_id,
-        #     squeezed_results.belief_distributions[frame_to_plot],
-        #     squeezed_results.masks[frame_to_plot],
-        #     agent_config.io_config,
-        #     next_masks=squeezed_results.masks[frame_to_plot + 1],
-        # )
+        plot_belief_distribution_for_presentation(
+            save_dir / run_id,
+            squeezed_results.belief_distributions[frame_to_plot],
+            squeezed_results.masks[frame_to_plot],
+            agent_config.io_config,
+            next_masks=squeezed_results.masks[frame_to_plot + 1],
+        )
 
-        # plot_frames_for_presentation(
-        #     save_dir / run_id,
-        #     squeezed_results.target_imgs,
-        #     squeezed_results.reconstructions,
-        #     squeezed_results.masks,
-        #     squeezed_results.measurements,
-        #     io_config=agent_config.io_config,
-        #     image_range=agent.input_range,
-        #     postfix_filename=postfix_filename,
-        #     **agent_config.io_config.get("plot_frames_for_presentation_kwargs", {}),
-        # )
+        plot_frames_for_presentation(
+            save_dir / run_id,
+            squeezed_results.target_imgs,
+            squeezed_results.reconstructions,
+            squeezed_results.masks,
+            squeezed_results.measurements,
+            io_config=agent_config.io_config,
+            image_range=agent.input_range,
+            postfix_filename=postfix_filename,
+            **agent_config.io_config.get("plot_frames_for_presentation_kwargs", {}),
+        )
 
         if downstream_task is not None:
             plot_downstream_task_output_for_presentation(
