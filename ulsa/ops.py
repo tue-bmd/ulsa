@@ -183,44 +183,81 @@ def tissue_doppler_strain_rate(velocity_map, axis=0, spacing=1.0, method="centra
     return grad
 
 
-class LowPassFilter(zea.ops.Operation):
-    def __init__(self, num_taps=64, axis=-3, complex_channels=False):
-        super().__init__(jittable=False)
-        self.num_taps = num_taps
+class FirFilter(zea.ops.Operation):
+    def __init__(
+        self, axis=-3, complex_channels=False, filter_key="fir_filter_taps", **kwargs
+    ):
+        super().__init__(**kwargs)
         self.axis = axis
         self.complex_channels = complex_channels
+        self.filter_key = filter_key
+
+    @property
+    def valid_keys(self):
+        """Get the valid keys for the `call` method."""
+        return self._valid_keys.union({self.filter_key})
+
+    def call(self, **kwargs):
+        signal = kwargs[self.key]
+        fir_filter_taps = kwargs.get(self.filter_key)
+
+        if self.complex_channels:
+            signal = zea.ops.channels_to_complex(signal)
+
+        def _convolve(signal):
+            """Apply the filter to the signal using correlation."""
+            return ops.correlate(signal, fir_filter_taps[::-1], mode="same")
+
+        filtered_signal = apply_along_axis(_convolve, self.axis, signal)
+
+        if self.complex_channels:
+            filtered_signal = zea.ops.complex_to_channels(filtered_signal)
+
+        return {self.output_key: filtered_signal}
+
+
+class LowPassFilter(FirFilter):
+    def __init__(self, num_taps=128, axis=-3, complex_channels=False):
+        super().__init__(
+            axis=axis,
+            complex_channels=complex_channels,
+            jittable=False,
+        )
+        self.num_taps = num_taps
 
     def call(
         self,
         sampling_frequency=None,
         center_frequency=None,
         bandwidth=None,
-        factor=2,
+        factor=None,
         **kwargs,
     ):
-        signal = kwargs[self.key]
-
-        if self.complex_channels:
-            signal = zea.ops.channels_to_complex(signal)
-
         if bandwidth is None:
             bandwidth = sampling_frequency / factor
 
-        # Step 1: Design the low-pass filter
         lpf = zea.ops.get_low_pass_iq_filter(
             self.num_taps,
             ops.convert_to_numpy(sampling_frequency).item(),
             center_frequency,
             bandwidth,
         )
+        kwargs.pop("fir_filter_taps", None)  # Remove any existing fir_filter_taps
+        return super().call(fir_filter_taps=lpf, **kwargs)
 
-        def _correlate(signal):
-            """Apply the filter to the signal using correlation."""
-            return ops.correlate(signal, lpf[::-1], mode="same")
 
-        filtered_signal = apply_along_axis(_correlate, self.axis, signal)
+def lines_rx_apo(n_tx, n_z, n_x):
+    """
+    Create a receive apodization for line scanning.
+    This is a simple apodization that applies a uniform weight to all elements.
 
-        if self.complex_channels:
-            filtered_signal = zea.ops.complex_to_channels(filtered_signal)
-
-        return {self.output_key: filtered_signal}
+    Returns:
+        rx_apo: np.ndarray of shape (n_tx, n_z, n_x)
+    """
+    assert n_x % n_tx == 0, "n_x must be divisible by n_tx for this apodization scheme."
+    step = n_x // n_tx
+    rx_apo = np.zeros((n_tx, n_z, n_x), dtype=np.float32)
+    for tx, line in zip(range(n_tx), range(0, n_x, step)):
+        rx_apo[tx, :, line : line + step] = 1.0
+    rx_apo = rx_apo.reshape((n_tx, -1))
+    return rx_apo[..., None]  # shape (n_tx, n_pix, 1)
