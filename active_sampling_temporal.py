@@ -105,6 +105,7 @@ import jax
 from keras.src import backend
 
 import zea.ops
+from ulsa import selection  # need to import this to update action selection registry
 from ulsa.agent import Agent, AgentState, setup_agent
 from ulsa.downstream_task import (
     DownstreamTask,
@@ -124,7 +125,6 @@ from ulsa.pfield import (
     select_transmits,
     update_scan_for_polar_grid,
 )
-from ulsa import selection # need to import this to update action selection registry
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
 from zea.tensor_ops import batched_map, func_with_one_batch_dim
@@ -186,24 +186,33 @@ def elementwise_append_tuples(t1, t2):
         combined.append(ops.concatenate([e1[None, ...], e2]))
     return tuple(combined)
 
+
 def apply_downstream_task(agent_config, targets, reconstructions):
-    downstream_task: DownstreamTask = (
-        None
-        if agent_config.downstream_task is None
-        else downstream_task_registry[agent_config.downstream_task]
-    )(batch_size=agent_config.diffusion_inference.batch_size)
+    if agent_config.downstream_task is not None:
+        downstream_task: DownstreamTask = downstream_task_registry[
+            agent_config.downstream_task
+        ](batch_size=agent_config.diffusion_inference.batch_size)
+    else:
+        downstream_task = None
 
     if downstream_task is None:
         reconstructions_dst = [None] * len(reconstructions)
         targets_dst = [None] * len(targets)
     else:
         reconstructions_dst = batched_map(
-            downstream_task.call_generic, reconstructions, jit=True, batch_size=agent_config.diffusion_inference.batch_size
+            downstream_task.call_generic,
+            reconstructions,
+            jit=True,
+            batch_size=agent_config.diffusion_inference.batch_size,
         )
         targets_dst = batched_map(
-            downstream_task.call_generic, targets, jit=True, batch_size=agent_config.diffusion_inference.batch_size
+            downstream_task.call_generic,
+            targets,
+            jit=True,
+            batch_size=agent_config.diffusion_inference.batch_size,
         )
     return downstream_task, targets_dst, reconstructions_dst
+
 
 @dataclass
 class AgentResults:
@@ -221,8 +230,17 @@ class AgentResults:
             np.squeeze(self.reconstructions, axis=axis),
             np.squeeze(self.belief_distributions, axis=axis),
             np.squeeze(self.measurements, axis=axis),
-            np.squeeze(self.saliency_map, axis=axis),
+            self.squeeze_if_not_none(self.saliency_map, axis=axis),
         )
+
+    @staticmethod
+    def squeeze_if_not_none(data, axis=-1):
+        """
+        Squeeze the data if it is not None.
+        """
+        if np.any(data == None):
+            return None
+        return np.squeeze(data, axis=axis)
 
     def to_uint8(self, input_range=None):
         """
@@ -240,7 +258,7 @@ class AgentResults:
             map_to_uint8(self.reconstructions),
             map_to_uint8(self.belief_distributions),
             map_to_uint8(self.measurements),
-            self.saliency_map, # keep saliency map as is
+            self.saliency_map,  # keep saliency map as is
         )
 
 
@@ -385,7 +403,7 @@ def run_active_sampling(
                 target_img,
                 new_agent_state.belief_distribution,
                 measurements,
-                new_agent_state.saliency_map
+                new_agent_state.saliency_map,
             ),
         )
 
@@ -405,7 +423,14 @@ def run_active_sampling(
     if verbose:
         print("Done! FPS: ", fps)
 
-    reconstructions, masks, target_imgs, belief_distributions, measurements, saliency_map = outputs
+    (
+        reconstructions,
+        masks,
+        target_imgs,
+        belief_distributions,
+        measurements,
+        saliency_map,
+    ) = outputs
 
     if post_pipeline:
         reconstructions = post_pipeline(data=reconstructions)["data"]
@@ -425,7 +450,7 @@ def run_active_sampling(
         reconstructions,
         belief_distributions,
         measurements,
-        saliency_map
+        saliency_map,
     )
 
 
@@ -663,7 +688,9 @@ if __name__ == "__main__":
     )
 
     # Load downstream task model and apply to targets and reconstructions for comparison
-    downstream_task, targets_dst, reconstructions_dst = apply_downstream_task(agent_config, validation_sample_frames[..., None], results.reconstructions)
+    downstream_task, targets_dst, reconstructions_dst = apply_downstream_task(
+        agent_config, validation_sample_frames[..., None], results.reconstructions
+    )
 
     # TODO: maybe more io_config to script args? Since this isn't relevant to benchmarking
     if agent_config.io_config.plot_frame_overview:
@@ -689,7 +716,11 @@ if __name__ == "__main__":
                 agent_config.io_config,
                 images_from_posterior=postprocess_fn(beliefs),
                 mask=mask,
-                **({downstream_task.output_type(): dst_out} if dst_out is not None else {}),
+                **(
+                    {downstream_task.output_type(): dst_out}
+                    if dst_out is not None
+                    else {}
+                ),
             )
         if agent_config.io_config.save_animation:
             animate_overviews(run_dir, agent_config.io_config)
@@ -725,11 +756,15 @@ if __name__ == "__main__":
                 squeezed_results.target_imgs,
                 squeezed_results.measurements,
                 squeezed_results.reconstructions,
-                np.std(squeezed_results.belief_distributions, axis=1),  # posterior std per frame
+                np.std(
+                    squeezed_results.belief_distributions, axis=1
+                ),  # posterior std per frame
                 downstream_task,
                 np.squeeze(reconstructions_dst),  # segmentation masks
                 np.squeeze(targets_dst),  # segmentation masks
-                np.squeeze(np.log(results.saliency_map+1e-2)), # NOTE: tweak the +1e-2 for visualization
+                np.squeeze(
+                    np.log(results.saliency_map + 1e-2)
+                ),  # NOTE: tweak the +1e-2 for visualization
                 agent_config.io_config,
                 image_range=agent.input_range,
             )
