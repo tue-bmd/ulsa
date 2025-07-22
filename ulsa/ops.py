@@ -53,6 +53,47 @@ def wavelet_denoise_full(data, axis, **kwargs):
     return np.apply_along_axis(lambda x: wavelet_denoise_rf(x, **kwargs), axis, data)
 
 
+class BM3DDenoiser(zea.ops.Operation):
+    """Block matching 3D denoiser."""
+
+    def __init__(self, sigma, stage="all_stages", **kwargs):
+        super().__init__(**kwargs, jittable=False)
+        import bm3d  # pip install bm3d
+
+        self.sigma = sigma
+        str_to_stage = {
+            "hard_thresholding": bm3d.BM3DStages.HARD_THRESHOLDING,
+            "all_stages": bm3d.BM3DStages.ALL_STAGES,
+        }
+
+        self.stage = str_to_stage[stage]
+
+    def call(self, **kwargs):
+        import bm3d  # pip install bm3d
+
+        image = kwargs[self.key]
+        denoised_image = bm3d.bm3d(image, self.sigma, stage_arg=self.stage)
+
+        return {self.output_key: denoised_image}
+
+
+class Sharpen(zea.ops.Operation):
+    """Sharpen an image using unsharp masking."""
+
+    def __init__(self, sigma=1.0, amount=1.0, **kwargs):
+        super().__init__(**kwargs, jittable=False)
+        self.sigma = sigma
+        self.amount = amount
+
+    def call(self, **kwargs):
+        from skimage.filters import unsharp_mask  # pip install scikit-image
+
+        image = kwargs[self.key]
+        sharpened_image = unsharp_mask(image, sigma=self.sigma, amount=self.amount)
+
+        return {self.output_key: sharpened_image}
+
+
 class WaveletDenoise(zea.ops.Operation):
     def __init__(self, wavelet="db4", level=4, threshold_factor=0.1, axis=-3):
         super().__init__(jittable=False)
