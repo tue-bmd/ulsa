@@ -201,7 +201,9 @@ def apply_downstream_task(agent_config, targets, reconstructions):
         reconstructions_dst = [None] * len(reconstructions)
         targets_dst = [None] * len(targets)
     else:
-        downstream_task = downstream_task_class(batch_size=agent_config.diffusion_inference.batch_size)
+        downstream_task = downstream_task_class(
+            batch_size=agent_config.diffusion_inference.batch_size
+        )
         reconstructions_dst = batched_map(
             downstream_task.call_generic,
             reconstructions,
@@ -209,7 +211,9 @@ def apply_downstream_task(agent_config, targets, reconstructions):
             batch_size=agent_config.diffusion_inference.batch_size,
         )
         # TODO: update range_from to match dataset
-        targets_normalized = zea.utils.translate(targets, range_from=(0, 255), range_to=(-1, 1))
+        targets_normalized = zea.utils.translate(
+            targets, range_from=(0, 255), range_to=(-1, 1)
+        )
         targets_dst = batched_map(
             downstream_task.call_generic,
             targets_normalized,
@@ -339,14 +343,19 @@ def run_active_sampling(
             # Run pipeline with selected lines
             output = pipeline(data=selected_data, **(base_params | params))
             measurements = output["data"]
-            pipeline_state = {"maxval": output["maxval"]}
 
             # Run pipeline with full data
             output = pipeline(
                 data=full_data, **(target_pipeline_params | target_pipeline_state)
             )
             target = output["data"]
-            target_pipeline_state = {"maxval": output["maxval"]}
+
+            # We use the same maxval for target and measurements. This is based on the first frame
+            # of the target sequence and should not change afterwards. You could predetermine it,
+            # so it is fine to use the target sequence for it here.
+            maxval = output["maxval"]
+            pipeline_state = {"maxval": maxval}
+            target_pipeline_state = {"maxval": maxval}
 
             return measurements, target, pipeline_state, target_pipeline_state
 
@@ -375,6 +384,8 @@ def run_active_sampling(
         )
 
         if agent.pfield is None:
+            # This is done to ensure that the measurements are 0 where the mask is 0.
+            # Otherwise, the measurements would contain -1 values there.
             _measurements = measurements * current_mask
 
         # 2. run perception and action selection via agent.recover
