@@ -38,5 +38,5 @@ io_config:
 data:
   target_sequence: "{data_root}/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"
   data_type: data/raw_data
-  image_range: [-70, -28]
+  image_range: [-65, -20]
 
