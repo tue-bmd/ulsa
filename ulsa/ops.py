@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import jax
 import numpy as np
 from keras import ops
@@ -285,6 +287,49 @@ class LowPassFilter(FirFilter):
         )
         kwargs.pop("fir_filter_taps", None)  # Remove any existing fir_filter_taps
         return super().call(fir_filter_taps=lpf, **kwargs)
+
+
+class HistogramMatching(zea.ops.Operation):
+    """Histogram matching operation."""
+
+    def __init__(self, reference_image, dynamic_range, **kwargs):
+        super().__init__(**kwargs, jittable=False)
+        self.reference_image = reference_image
+        self.dynamic_range = dynamic_range
+
+    def call(self, **kwargs):
+        from skimage import exposure  # pip install scikit-image
+
+        image = kwargs[self.key]
+
+        matched_image = exposure.match_histograms(image, self.reference_image)
+
+        return {self.output_key: matched_image, "dynamic_range": self.dynamic_range}
+
+
+class HistogramMatchingForModel(HistogramMatching):
+    def __init__(self, config_path: str, frame_idx: int = 0, **kwargs):
+        config = zea.Config.from_yaml(config_path)
+        data_paths = zea.set_data_paths("/ulsa/users.yaml")  # TODO hardcoded
+        dataset_folder = data_paths.data_root / config.data.train_folder
+        files = Path(dataset_folder).glob("*.hdf5")
+        reference_path = next(iter(files))
+        with zea.File(reference_path) as file:
+            reference_image = file.load_data(config.data.hdf5_key, indices=frame_idx)
+        super().__init__(reference_image, **kwargs)
+
+
+class LogCompressNoClip(zea.ops.Operation):
+    """Logarithmic compression of data."""
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+
+        small_number = ops.convert_to_tensor(1e-16, dtype=data.dtype)
+        data = ops.where(data == 0, small_number, data)
+        compressed_data = 20 * ops.log10(data)
+
+        return {self.output_key: compressed_data}
 
 
 def lines_rx_apo(n_tx, n_z, n_x):
