@@ -17,7 +17,8 @@ action_selection:
 downstream_task: null
 
 diffusion_inference:
-  run_dir: "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/pretrained/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"
+  # run_dir: "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/pretrained/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"
+  run_dir: "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/pretrained/ddim/2025_05_17_120937_ddim_train_echonetlvh_256_96_3_frames/zeahub"
   num_steps: 500
   initial_step: 450 # [0, num_steps]
   batch_size: 4 # posterior samples
@@ -27,7 +28,7 @@ diffusion_inference:
     omega: 9
     initial_omega: 3
   reconstruction_method: "choose_first" # "choose_first" | "mean"
-  hard_project: false
+  hard_project: true
 
 io_config:
   plot_step_overview: false
@@ -48,4 +49,4 @@ io_config:
 data:
   target_sequence: "{data_root}/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P3_PLAX_0000.hdf5"
   data_type: data/raw_data
-  image_range: [-70, -18]
+  image_range: [-60, -10]
