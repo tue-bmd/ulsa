@@ -33,7 +33,7 @@ io_config:
   frame_cutoff: 30
   gif_fps: 30
   verbose: false
-  reconstruction_sharpness_std: 0.025
+  reconstruction_sharpness_std: 0.04
 
 data:
   target_sequence: "{data_root}/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"

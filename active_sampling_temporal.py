@@ -33,12 +33,6 @@ def parse_args():
         choices=["tensorflow", "torch", "jax"],
     )
     parser.add_argument(
-        "--random_circle_inclusion",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Include a random circle in the target image.",
-    )
-    parser.add_argument(
         "--target_sequence",
         type=str,
         default=None,
@@ -162,30 +156,6 @@ def hard_projection(image, masked_measurements):
         Tensor: The projected image with measurements inserted where they exist
     """
     return ops.where(masked_measurements != 0, masked_measurements, image)
-
-
-def soft_projection(
-    image, measurements, weighting_map, data_range=(-1, 1), mask_range=(0, 1)
-):
-    _measurements = translate(measurements, data_range, mask_range)
-    _measurements *= weighting_map
-    _image = translate(image, data_range, mask_range)
-    _image *= 1 - weighting_map
-    combined = _measurements + _image
-    return translate(combined, mask_range, data_range)
-
-
-def elementwise_append_tuples(t1, t2):
-    """
-    Elementwise append tuple of tensors
-
-    t2 tensors will be appended to t1 tensors
-    """
-    assert len(t1) == len(t2)
-    combined = []
-    for e1, e2 in zip(t1, t2):
-        combined.append(ops.concatenate([e1[None, ...], e2]))
-    return tuple(combined)
 
 
 def apply_downstream_task(agent_config, targets, reconstructions):
@@ -398,12 +368,6 @@ def run_active_sampling(
                 "Hard projection with pfield is not implemented yet. "
                 "Please set hard_project=False or use a different agent."
             )
-            # TODO: WIP!
-            weighting_map = agent.pfield[agent_state.selected_lines].sum(axis=0)
-
-            reconstruction = soft_projection(
-                reconstruction, measurements, current_mask, data_range=agent.input_range
-            )
 
         new_agent_state.pipeline_state = pipeline_state
         new_agent_state.target_pipeline_state = target_pipeline_state
@@ -603,49 +567,52 @@ def preload_data(
     return validation_sample_frames, scan, probe
 
 
-if __name__ == "__main__":
-    print(f"Using {backend.backend()} backend 🔥")
+def active_sampling_single_file(
+    agent_config: Config,
+    target_sequence: str | Path = None,
+    data_type: str = None,
+    image_range: tuple = None,
+    seed: int = 42,
+    override_config=None,
+):
     data_paths = set_data_paths("users.yaml", local=False)
     data_root = data_paths["data_root"]
-    output_dir = data_paths["output"]
-    save_dir = args.save_dir.format(output_dir=output_dir)
-    save_dir = Path(save_dir)
 
-    agent_config = Config.from_yaml(args.agent_config)
+    agent_config = Config.from_yaml(agent_config)
     agent_config = fix_paths(agent_config, data_paths)
-    if args.override_config is not None:
-        agent_config.update_recursive(args.override_config)
+    if override_config is not None:
+        agent_config.update_recursive(override_config)
 
-    if args.target_sequence is None:
+    if target_sequence is None:
         try:
-            args.target_sequence = agent_config.data.target_sequence
+            target_sequence = agent_config.data.target_sequence
         except:
             raise ValueError(
                 "No target_sequence provided and not found in agent_config.data."
             )
 
-    if args.data_type is None:
+    if data_type is None:
         try:
-            args.data_type = agent_config.data.data_type
+            data_type = agent_config.data.data_type
         except:
             raise ValueError(
                 "No data_type provided and not found in agent_config.data."
             )
 
-    if args.image_range is None:
+    if image_range is None:
         try:
-            args.image_range = agent_config.data.image_range
+            image_range = agent_config.data.image_range
         except:
             raise ValueError(
                 "No image_range provided and not found in agent_config.data."
             )
-    dynamic_range = args.image_range
+    dynamic_range = image_range
 
-    dataset_path = args.target_sequence.format(data_root=data_root)
+    dataset_path = target_sequence.format(data_root=data_root)
     with File(dataset_path) as file:
         n_frames = agent_config.io_config.get("frame_cutoff", "all")
         validation_sample_frames, scan, probe = preload_data(
-            file, n_frames, args.data_type, dynamic_range
+            file, n_frames, data_type, dynamic_range
         )
 
     if getattr(scan, "theta_range", None) is not None:
@@ -666,14 +633,14 @@ if __name__ == "__main__":
 
     agent, agent_state = setup_agent(
         agent_config,
-        seed=jax.random.PRNGKey(args.seed),
+        seed=jax.random.PRNGKey(seed),
         pfield=pfield,
         jit_mode="recover",
         # jit_mode=None,
     )
 
     pipeline = make_pipeline(
-        data_type=args.data_type,
+        data_type=data_type,
         dynamic_range=dynamic_range,
         input_range=agent.input_range,
         input_shape=agent.input_shape,
@@ -685,8 +652,6 @@ if __name__ == "__main__":
         with_batch_dim=True,
     )
 
-    run_dir, run_id = make_save_dir(save_dir)
-    log.info(f"Run dir created at {log.yellow(run_dir)}")
     results = run_active_sampling(
         agent,
         agent_state,
@@ -704,6 +669,32 @@ if __name__ == "__main__":
     downstream_task, targets_dst, reconstructions_dst = apply_downstream_task(
         agent_config, validation_sample_frames[..., None], results.reconstructions
     )
+    return (
+        results,
+        downstream_task,
+        targets_dst,
+        reconstructions_dst,
+        agent,
+        agent_config,
+        dataset_path,
+    )
+
+
+def save_results(
+    results,
+    downstream_task,
+    targets_dst,
+    reconstructions_dst,
+    agent,
+    agent_config,
+    dataset_path,
+):
+    data_paths = set_data_paths("users.yaml", local=False)
+    output_dir = data_paths["output"]
+    save_dir = save_dir.format(output_dir=output_dir)
+    save_dir = Path(save_dir)
+    run_dir, run_id = make_save_dir(save_dir)
+    log.info(f"Run dir created at {log.yellow(run_dir)}")
 
     # TODO: maybe more io_config to script args? Since this isn't relevant to benchmarking
     if agent_config.io_config.plot_frame_overview:
@@ -784,3 +775,33 @@ if __name__ == "__main__":
 
     with open(save_dir / run_id / "config.json", "w") as json_file:
         json.dump(agent_config, json_file, indent=4)
+
+    return run_dir, run_id
+
+
+if __name__ == "__main__":
+    print(f"Using {backend.backend()} backend 🔥")
+    (
+        results,
+        downstream_task,
+        targets_dst,
+        reconstructions_dst,
+        agent,
+        agent_config,
+        dataset_path,
+    ) = active_sampling_single_file(
+        args.agent_config,
+        args.target_sequence,
+        args.data_type,
+        args.image_range,
+        args.seed,
+        args.override_config,
+    )
+    run_dir, run_id = save_results(
+        results,
+        downstream_task,
+        targets_dst,
+        reconstructions_dst,
+        agent,
+        agent_config,
+    )
