@@ -692,6 +692,7 @@ def save_results(
     agent,
     agent_config,
     dataset_path,
+    save_dir,
 ):
     data_paths = set_data_paths("users.yaml", local=False)
     output_dir = data_paths["output"]
@@ -809,4 +810,5 @@ if __name__ == "__main__":
         agent,
         agent_config,
         dataset_path,
+        args.save_dir,
     )
