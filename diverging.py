@@ -7,6 +7,7 @@ import zea
 zea.init_device()
 sys.path.append("/ulsa")
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal
 from keras import ops
@@ -21,7 +22,7 @@ agent_config = zea.Config.from_yaml("configs/cardiac_112_3_frames.yaml")
 agent_config = fix_paths(agent_config)
 target_sequence = agent_config.data.target_sequence
 data_type = agent_config.data.data_type
-dynamic_range = agent_config.data.image_range
+width = 90  # number of rays in the polar grid
 
 pipeline = zea.Pipeline(
     [
@@ -44,7 +45,7 @@ pipeline = zea.Pipeline(
         zea.ops.Lambda(
             ops.image.resize,
             {
-                "size": (112, 90),
+                "size": (112, width),
                 "interpolation": "bilinear",
                 "antialias": True,
             },
@@ -73,8 +74,9 @@ bandpass_rf = scipy.signal.firwin(
     fs=scan.sampling_frequency,
 )
 scan.polar_limits = list(np.deg2rad([-45, 45]))
-scan.grid_size_x = 90
-scan.dynamic_range = [-70, -30]
+scan.grid_size_x = width
+dynamic_range = [-70, -30]
+scan.dynamic_range = dynamic_range
 scan.fill_value = float(scan.dynamic_range[0])
 params = pipeline.prepare_parameters(
     scan=scan,
@@ -93,9 +95,15 @@ for raw_data in tqdm(raw_data_sequence):
         fill_value=np.nan,
         order=0,
     )
-    image = translate(image, scan.dynamic_range, (0, 255))
-    image = ops.clip(image, 0, 255)
-    image = ops.cast(image, dtype="uint8")
     images.append(ops.convert_to_numpy(image))
+_images = np.stack(images, axis=0)
+_images = translate(_images, scan.dynamic_range, (0, 255))
+_images = np.clip(_images, 0, 255).astype(np.uint8)
 
-save_to_gif(images, "diverging.gif", fps=agent_config.io_config.gif_fps)
+save_to_gif(_images, "output/diverging.gif", fps=agent_config.io_config.gif_fps)
+plt.imshow(
+    images[24], cmap="gray", vmin=scan.dynamic_range[0], vmax=scan.dynamic_range[1]
+)
+plt.axis("off")
+plt.savefig("output/diverging.png", dpi=300, bbox_inches="tight")
+zea.log.info("Saved diverging frame to output/diverging.png")

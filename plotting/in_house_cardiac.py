@@ -18,8 +18,12 @@ import numpy as np
 from mpl_toolkits.axes_grid1 import ImageGrid
 
 from active_sampling_temporal import active_sampling_single_file
-from plotting.plot_utils import get_inset
 from ulsa.io_utils import postprocess_agent_results
+
+# TODO: this is a bit hacky
+print("First running diverging.py...")
+from diverging import dynamic_range as diverging_dynamic_range
+from diverging import images
 
 frame_idx = 24
 results, _, _, _, agent, agent_config, _ = active_sampling_single_file(
@@ -82,25 +86,33 @@ measurements = postprocess_agent_results(
 
 exts = ["png", "pdf"]
 with plt.style.context("styles/ieee-tmi.mplstyle"):
-    mpl.rcParams["figure.constrained_layout.use"] = False
     kwargs = {
         "vmin": image_range[0],
         "vmax": image_range[1],
         "cmap": "gray",
         "interpolation": "nearest",
     }
-    fig = plt.figure()
-    axs = ImageGrid(fig, 111, nrows_ncols=(1, 2), axes_pad=0.1)
+    fig, axs = plt.subplots(2, 2)
+    axs = axs.flatten()
     axs[0].imshow(targets, **kwargs)
-    axs[0].set_title("Target")
-    axs[1].imshow(reconstructions, **kwargs)
-    axs[1].set_title("Reconstruction")
-    inset_ax = get_inset(
-        fig, axs[0], axs[1], measurements.shape, height=0.2, y_offset=0.05
-    )
-    inset_ax.imshow(measurements, **kwargs)
+    axs[0].set_title("Focused (90)")
 
-    for ax in [*axs, inset_ax]:
+    axs[1].imshow(measurements, **kwargs)
+    axs[1].set_title("Acquisition (11/90)")
+
+    axs[3].imshow(reconstructions, **kwargs)
+    axs[3].set_title("Reconstruction (11/90)")
+
+    axs[2].imshow(
+        images[frame_idx],
+        cmap="gray",
+        vmin=diverging_dynamic_range[0],
+        vmax=diverging_dynamic_range[1],
+        interpolation="nearest",
+    )
+    axs[2].set_title("Diverging (11)")
+
+    for ax in axs:
         ax.axis("off")
 
     for ext in exts:
