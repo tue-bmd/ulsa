@@ -1,10 +1,11 @@
 import re
-from contextlib import nullcontext
 from collections.abc import Iterable
+from contextlib import nullcontext
 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import gaussian_kde
+
 from zea import log
 
 
@@ -149,9 +150,13 @@ class ViolinPlotter:
                     if isinstance(values, (list, np.ndarray)):
                         try:
                             # check for list of lists
-                            if isinstance(values[0], Iterable) and not isinstance(values[0], (str, bytes)):
+                            if isinstance(values[0], Iterable) and not isinstance(
+                                values[0], (str, bytes)
+                            ):
                                 # in case values array is inhomogenous
-                                flat_values = [item for sublist in values for item in sublist]
+                                flat_values = [
+                                    item for sublist in values for item in sublist
+                                ]
                             else:
                                 flat_values = values
                             # flat_values = [np.mean(l) for l in values]
@@ -176,9 +181,13 @@ class ViolinPlotter:
                 try:
                     values = data_dict.get(group, {}).get(x_val, [])
                     if isinstance(values, (list, np.ndarray)):
-                        if isinstance(values[0], Iterable) and not isinstance(values[0], (str, bytes)):
+                        if isinstance(values[0], Iterable) and not isinstance(
+                            values[0], (str, bytes)
+                        ):
                             # in case values array is inhomogenous
-                            flat_values = [item for sublist in values for item in sublist]
+                            flat_values = [
+                                item for sublist in values for item in sublist
+                            ]
                         else:
                             flat_values = values
                         # flat_values = [np.mean(l) for l in values]
@@ -312,7 +321,11 @@ class OverlappingHistogramPlotter:
         alpha = alpha if alpha is not None else self.alpha
         kde = kde if kde is not None else self.kde
         density = self.density if density is None else density
-        figsize = figsize if figsize is not None else self.figsize or (8, 2.5 * len(x_label_values or []))
+        figsize = (
+            figsize
+            if figsize is not None
+            else self.figsize or (8, 2.5 * len(x_label_values or []))
+        )
 
         # Collect all x values
         if x_label_values is None:
@@ -359,13 +372,19 @@ class OverlappingHistogramPlotter:
                         flat_values = [item for sublist in values for item in sublist]
                         metric_values = np.array(flat_values, dtype=np.float64)
                         if metric_values.size > 0:
-                            hist_vals, _ = np.histogram(metric_values, bins=bin_edges, density=density)
-                            hist_densities.append(hist_vals.max() if len(hist_vals) else 0)
+                            hist_vals, _ = np.histogram(
+                                metric_values, bins=bin_edges, density=density
+                            )
+                            hist_densities.append(
+                                hist_vals.max() if len(hist_vals) else 0
+                            )
                             if kde and metric_values.size > 1:
                                 kde_est = gaussian_kde(metric_values)
                                 x_grid = np.linspace(bin_edges[0], bin_edges[-1], 200)
                                 kde_vals = kde_est(x_grid)
-                                kde_densities.append(kde_vals.max() if len(kde_vals) else 0)
+                                kde_densities.append(
+                                    kde_vals.max() if len(kde_vals) else 0
+                                )
                     except Exception:
                         continue
         if hist_densities or kde_densities:
@@ -379,9 +398,7 @@ class OverlappingHistogramPlotter:
             if plot_context is not None
             else nullcontext()
         ):
-            fig, axes = plt.subplots(
-                K, 1, figsize=figsize, sharex=True
-            )
+            fig, axes = plt.subplots(K, 1, figsize=figsize, sharex=True)
             if K == 1:
                 axes = [axes]
             for i, x_val in enumerate(all_x_values):
@@ -390,7 +407,9 @@ class OverlappingHistogramPlotter:
                     values = data_dict.get(group, {}).get(x_val, [])
                     if isinstance(values, (list, np.ndarray)):
                         try:
-                            flat_values = [item for sublist in values for item in sublist]
+                            flat_values = [
+                                item for sublist in values for item in sublist
+                            ]
                             metric_values = np.array(flat_values, dtype=np.float64)
                             if metric_values.size > 0:
                                 ax.hist(
@@ -404,7 +423,9 @@ class OverlappingHistogramPlotter:
                                 )
                                 if kde and metric_values.size > 1:
                                     kde_est = gaussian_kde(metric_values)
-                                    x_grid = np.linspace(bin_edges[0], bin_edges[-1], 200)
+                                    x_grid = np.linspace(
+                                        bin_edges[0], bin_edges[-1], 200
+                                    )
                                     ax.plot(
                                         x_grid,
                                         kde_est(x_grid),
@@ -417,7 +438,11 @@ class OverlappingHistogramPlotter:
                 ax.set_xlim(bin_edges[0], bin_edges[-1])
                 ax.set_ylim(0, global_max_density * 1.05)
                 # Set small repeated y-label (inner)
-                ax.set_ylabel(inner_y_label or ("Density" if density else "Count"), fontsize=10, labelpad=8)
+                ax.set_ylabel(
+                    inner_y_label or ("Density" if density else "Count"),
+                    fontsize=10,
+                    labelpad=8,
+                )
                 # Annotate the x_value to the left of the subplot, vertically centered
                 ax.annotate(
                     f"{x_val}",
@@ -433,7 +458,9 @@ class OverlappingHistogramPlotter:
                 if i == 0:
                     ax.legend()
                 if i == K - 1:
-                    ax.set_xlabel(self.xlabel if metric_name is None else metric_name, fontsize=14)
+                    ax.set_xlabel(
+                        self.xlabel if metric_name is None else metric_name, fontsize=14
+                    )
                     tick_step = max(1, len(bin_edges) // 10)
                     ax.set_xticks(bin_edges[::tick_step])
                     ax.set_xticklabels([f"{v:.1f}" for v in bin_edges[::tick_step]])
@@ -444,8 +471,40 @@ class OverlappingHistogramPlotter:
             if hasattr(fig, "supylabel"):
                 fig.supylabel(outer_y_label or self.ylabel, fontsize=18)
             else:
-                fig.text(0.01, 0.5, outer_y_label or self.ylabel, va='center', rotation='vertical', fontsize=18)
+                fig.text(
+                    0.01,
+                    0.5,
+                    outer_y_label or self.ylabel,
+                    va="center",
+                    rotation="vertical",
+                    fontsize=18,
+                )
             plt.tight_layout(rect=(0.02, 0, 1, 1))
             plt.savefig(save_path)
             plt.close()
             log.info(f"Saved overlapping histogram stack to {log.yellow(save_path)}")
+
+
+def get_inset(
+    fig: plt.Figure,
+    ax0: plt.Axes,
+    ax1: plt.Axes,
+    shape: tuple,
+    height: float = 0.2,
+    y_offset: float = 0.05,
+) -> plt.Axes:
+    """
+    Add an inset image to a matplotlib ImageGrid plot.
+    """
+    aspect_ratio = shape[1] / shape[0]
+    w = height * aspect_ratio
+
+    axpos0 = ax0.get_position()
+    axpos1 = ax1.get_position()
+
+    x_center = (axpos0.xmin + axpos0.xmax + axpos1.xmin + axpos1.xmax) / 4
+    x = x_center - w / 2
+    y = axpos0.ymax - 2 * height + y_offset
+
+    inset_ax = fig.add_axes([x, y, w, height])
+    return inset_ax

@@ -18,6 +18,7 @@ import numpy as np
 from mpl_toolkits.axes_grid1 import ImageGrid
 
 from active_sampling_temporal import active_sampling_single_file
+from plotting.plot_utils import get_inset
 from ulsa.io_utils import postprocess_agent_results
 
 frame_idx = 24
@@ -94,21 +95,9 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
     axs[0].set_title("Target")
     axs[1].imshow(reconstructions, **kwargs)
     axs[1].set_title("Reconstruction")
-
-    h = 0.2  # inset image height
-    y_offset = 0.05  # offset from the top of axs[0]
-
-    aspect_ratio = measurements.shape[1] / measurements.shape[0]
-    w = h * aspect_ratio
-
-    axpos0 = axs[0].get_position()
-    axpos1 = axs[1].get_position()
-
-    x_center = (axpos0.xmin + axpos0.xmax + axpos1.xmin + axpos1.xmax) / 4
-    x = x_center - w / 2
-    y = axpos0.ymax - 2 * h + y_offset
-
-    inset_ax = fig.add_axes([x, y, w, h])
+    inset_ax = get_inset(
+        fig, axs[0], axs[1], measurements.shape, height=0.2, y_offset=0.05
+    )
     inset_ax.imshow(measurements, **kwargs)
 
     for ax in [*axs, inset_ax]:
