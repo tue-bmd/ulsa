@@ -495,6 +495,18 @@ def get_inset(
 ) -> plt.Axes:
     """
     Add an inset image to a matplotlib ImageGrid plot.
+
+    Example:
+    ```python
+    fig = plt.figure()
+    axs = ImageGrid(fig, 111, nrows_ncols=(1, 2), axes_pad=0.1)
+    axs[0].imshow(targets, **kwargs)
+    axs[1].imshow(reconstructions, **kwargs)
+    inset_ax = get_inset(
+        fig, axs[0], axs[1], measurements.shape, height=0.2, y_offset=0.05
+    )
+    inset_ax.imshow(measurements, **kwargs)
+    ```
     """
     aspect_ratio = shape[1] / shape[0]
     w = height * aspect_ratio
