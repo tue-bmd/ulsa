@@ -808,4 +808,5 @@ if __name__ == "__main__":
         reconstructions_dst,
         agent,
         agent_config,
+        dataset_path,
     )
