@@ -140,7 +140,7 @@ def iq2doppler(
     """Compute Doppler from packet of I/Q Data.
 
     Args:
-        data (ndarray): I/Q complex data of shape (n_z, n_x, n_frames).
+        data (ndarray): I/Q complex data of shape (grid_size_z, grid_size_x, n_frames).
             n_frames corresponds to the ensemble length used to compute
             the Doppler signal.
         center_frequency (float): Center frequency of the ultrasound probe in Hz.
@@ -155,7 +155,7 @@ def iq2doppler(
             and the next frame.
 
     Returns:
-        doppler_velocities (ndarray): Doppler velocity map of shape (n_z, n_x).
+        doppler_velocities (ndarray): Doppler velocity map of shape (grid_size_z, grid_size_x).
 
     """
     assert data.ndim == 3, "Data must be a 3-D array"
@@ -200,7 +200,7 @@ def tissue_doppler_strain_rate(velocity_map, axis=0, spacing=1.0, method="centra
     Compute tissue strain rate (velocity gradient) from a tissue Doppler velocity map.
 
     Args:
-        velocity_map (ndarray): Tissue velocity map (e.g., from Doppler), shape (n_z, n_x).
+        velocity_map (ndarray): Tissue velocity map (e.g., from Doppler), shape (grid_size_z, grid_size_x).
         axis (int): Axis along which to compute the gradient (default: 0, axial/z).
         spacing (float): Physical distance between points along the axis (in mm or m).
         method (str): Gradient method: "central" (default), "forward", or "backward".
@@ -332,18 +332,20 @@ class LogCompressNoClip(zea.ops.Operation):
         return {self.output_key: compressed_data}
 
 
-def lines_rx_apo(n_tx, n_z, n_x):
+def lines_rx_apo(n_tx, grid_size_z, grid_size_x):
     """
     Create a receive apodization for line scanning.
     This is a simple apodization that applies a uniform weight to all elements.
 
     Returns:
-        rx_apo: np.ndarray of shape (n_tx, n_z, n_x)
+        rx_apo: np.ndarray of shape (n_tx, grid_size_z, grid_size_x)
     """
-    assert n_x % n_tx == 0, "n_x must be divisible by n_tx for this apodization scheme."
-    step = n_x // n_tx
-    rx_apo = np.zeros((n_tx, n_z, n_x), dtype=np.float32)
-    for tx, line in zip(range(n_tx), range(0, n_x, step)):
+    assert grid_size_x % n_tx == 0, (
+        "grid_size_x must be divisible by n_tx for this apodization scheme."
+    )
+    step = grid_size_x // n_tx
+    rx_apo = np.zeros((n_tx, grid_size_z, grid_size_x), dtype=np.float32)
+    for tx, line in zip(range(n_tx), range(0, grid_size_x, step)):
         rx_apo[tx, :, line : line + step] = 1.0
     rx_apo = rx_apo.reshape((n_tx, -1))
     return rx_apo[..., None]  # shape (n_tx, n_pix, 1)

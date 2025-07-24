@@ -10,20 +10,20 @@ DIVERGING_TRANSMITS = (90, 101)
 
 
 def select_transmits_from_pfield(pfield, transmits):
-    # pfield: (n_tx, n_z, n_x)
+    # pfield: (n_tx, grid_size_z, grid_size_x)
     # transmits: (n_indices, c) -- indices into n_tx
-    # Output: (n_z, n_x, c)
+    # Output: (grid_size_z, grid_size_x, c)
 
     # Gather for each column in transmits
     def gather_column(transmits):
         # transmits: (n_indices,)
-        return pfield[transmits, :, :]  # (n_indices, n_z, n_x)
+        return pfield[transmits, :, :]  # (n_indices, grid_size_z, grid_size_x)
 
     # Apply over columns of transmits
     gathered = jax.vmap(gather_column, out_axes=-1)(transmits.T)
-    # gathered: (n_indices, n_z, n_x, c)
+    # gathered: (n_indices, grid_size_z, grid_size_x, c)
 
-    output = ops.sum(gathered, axis=0)  # (n_z, n_x, c)
+    output = ops.sum(gathered, axis=0)  # (grid_size_z, grid_size_x, c)
     return output
 
 
@@ -37,10 +37,10 @@ def lines_to_pfield(
     transmits = k_hot_to_indices(selected_lines, n_actions).T  # (nonzero_w, c)
     summed_pfield = select_transmits_from_pfield(
         pfield**alpha, transmits
-    )  # (n_z, n_x, c)
+    )  # (grid_size_z, grid_size_x, c)
 
     # Normalize depth wise
-    # Each row of pixels must sum to n_x (width of the image)
+    # Each row of pixels must sum to grid_size_x (width of the image)
     summed_pfield = summed_pfield / ops.sum(summed_pfield, axis=1, keepdims=True)
 
     # Normalize to [0, 1]
@@ -84,5 +84,5 @@ def update_scan_for_polar_grid(
     scan.grid_type = "polar"
     scan.dynamic_range = dynamic_range
     scan.fill_value = float(scan.dynamic_range[0])
-    scan.n_x = scan.n_tx * ray_multiplier
+    scan.grid_size_x = scan.n_tx * ray_multiplier
     scan.polar_limits = scan.polar_angles.min(), scan.polar_angles.max()

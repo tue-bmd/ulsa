@@ -73,7 +73,7 @@ bandpass_rf = scipy.signal.firwin(
     fs=scan.sampling_frequency,
 )
 scan.polar_limits = list(np.deg2rad([-45, 45]))
-scan.n_x = 90
+scan.grid_size_x = 90
 scan.dynamic_range = [-70, -30]
 scan.fill_value = float(scan.dynamic_range[0])
 params = pipeline.prepare_parameters(

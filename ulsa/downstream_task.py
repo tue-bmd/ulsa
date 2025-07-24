@@ -1,17 +1,17 @@
 from abc import ABC
 
+import cv2
 import jax
 import numpy as np
-import cv2
 from keras import ops
+
 import zea
+from models.deeplabv3_segmenter import DeeplabV3Plus
+from ulsa.io_utils import deg2rad
 from zea.backend.autograd import AutoGrad
 from zea.display import compute_scan_convert_2d_coordinates, scan_convert_2d
 from zea.internal.registry import RegisterDecorator
 from zea.models.echonet import EchoNetDynamic
-from models.deeplabv3_segmenter import DeeplabV3Plus
-
-from ulsa.io_utils import deg2rad
 
 downstream_task_registry = RegisterDecorator(items_to_register=["name"])
 
@@ -35,6 +35,7 @@ def compute_dice_score(pred_mask, gt_mask, eps=1e-8):
 
     return dice_scores
 
+
 def overlay_segmentation_on_image_batch(images, segmentation_masks, alpha=0.3):
     """
     Overlay segmentation masks in red on a batch of grayscale images.
@@ -43,7 +44,9 @@ def overlay_segmentation_on_image_batch(images, segmentation_masks, alpha=0.3):
     segmentation_masks: (N, H, W) uint8, values 0 or 255
     Returns: (N, H, W, 3) uint8
     """
-    assert images.shape == segmentation_masks.shape, "Images and masks must have same shape"
+    assert images.shape == segmentation_masks.shape, (
+        "Images and masks must have same shape"
+    )
     images_rgb = np.stack([images, images, images], axis=-1)  # (N, H, W, 3)
     red_overlay = np.zeros_like(images_rgb)
     red_overlay[..., 0] = segmentation_masks  # Red channel
@@ -52,15 +55,17 @@ def overlay_segmentation_on_image_batch(images, segmentation_masks, alpha=0.3):
     mask_bool = np.repeat(mask_bool[..., np.newaxis], 3, axis=-1)  # (N, H, W, 3)
 
     blended = images_rgb.copy().astype(np.float32)
-    blended[mask_bool] = (
-        (1 - alpha) * images_rgb[mask_bool] + alpha * red_overlay[mask_bool]
-    )
+    blended[mask_bool] = (1 - alpha) * images_rgb[mask_bool] + alpha * red_overlay[
+        mask_bool
+    ]
     return blended.astype(np.uint8)
+
 
 def map_range(img, from_range=(-1, 1), to_range=(0, 255)):
     img = ops.convert_to_numpy(img)
     img = zea.utils.translate(img, from_range, to_range)
     return np.clip(img, to_range[0], to_range[1])
+
 
 class DownstreamTask(ABC):
     def __init__(self):
@@ -74,6 +79,7 @@ class DownstreamTask(ABC):
 
     def output_type(self):
         pass
+
 
 class DifferentiableDownstreamTask(DownstreamTask):
     def call_differentiable(self):
@@ -121,8 +127,8 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
             self.theta_range,
             self.resolution,
         )
-        # Output shape is determined by the coordinates shape (2, n_z, n_x)
-        self.output_shape = self.coords.shape[1:]  # (n_z, n_x)
+        # Output shape is determined by the coordinates shape (2, grid_size_z, grid_size_x)
+        self.output_shape = self.coords.shape[1:]  # (grid_size_z, grid_size_x)
 
         def _scan_convert_2d(image, fill_value=self.fill_value, order=0):
             image = ops.convert_to_tensor(image, dtype="float32")
@@ -133,20 +139,40 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
 
         self.scan_convert_2d = _scan_convert_2d
 
-    def postprocess_for_visualization(self, targets, reconstructions, target_masks, reconstruction_masks):
+    def postprocess_for_visualization(
+        self, targets, reconstructions, target_masks, reconstruction_masks
+    ):
         targets = self.scan_convert_batch(targets[..., None])[..., 0]
         reconstructions = self.scan_convert_batch(reconstructions[..., None])[..., 0]
 
-        targets = map_range(targets, from_range=(-1, 1), to_range=(0, 255)).astype(np.uint8)
-        target_masks = map_range(target_masks, from_range=(0, 1), to_range=(0, 255)).astype(np.uint8)
-        reconstructions = map_range(reconstructions, from_range=(-1, 1), to_range=(0, 255)).astype(np.uint8)
-        reconstruction_masks = map_range(reconstruction_masks, from_range=(0, 1), to_range=(0, 255)).astype(np.uint8)
+        targets = map_range(targets, from_range=(-1, 1), to_range=(0, 255)).astype(
+            np.uint8
+        )
+        target_masks = map_range(
+            target_masks, from_range=(0, 1), to_range=(0, 255)
+        ).astype(np.uint8)
+        reconstructions = map_range(
+            reconstructions, from_range=(-1, 1), to_range=(0, 255)
+        ).astype(np.uint8)
+        reconstruction_masks = map_range(
+            reconstruction_masks, from_range=(0, 1), to_range=(0, 255)
+        ).astype(np.uint8)
 
         targets_with_mask = overlay_segmentation_on_image_batch(targets, target_masks)
-        reconstructions_with_mask = overlay_segmentation_on_image_batch(reconstructions, reconstruction_masks)
+        reconstructions_with_mask = overlay_segmentation_on_image_batch(
+            reconstructions, reconstruction_masks
+        )
 
-        targets_with_mask = np.pad(targets_with_mask, pad_width=((0, 0), (0, 0), (23, 24), (0, 0)), mode='constant')
-        reconstructions_with_mask = np.pad(reconstructions_with_mask, pad_width=((0, 0), (0, 0), (23, 24), (0, 0)), mode='constant')
+        targets_with_mask = np.pad(
+            targets_with_mask,
+            pad_width=((0, 0), (0, 0), (23, 24), (0, 0)),
+            mode="constant",
+        )
+        reconstructions_with_mask = np.pad(
+            reconstructions_with_mask,
+            pad_width=((0, 0), (0, 0), (23, 24), (0, 0)),
+            mode="constant",
+        )
         return targets_with_mask, reconstructions_with_mask
 
     def scan_convert_batch(self, x):
@@ -255,6 +281,7 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
     def output_type(self):
         return "segmentation_mask"
 
+
 # TODO: this class and EchoNetSegmentation have a lot in common,
 #       maybe could make a shared 'SegmentationModel' parent
 @downstream_task_registry(name="echonetlvh_segmentation")
@@ -262,13 +289,12 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
     def __init__(self, batch_size=4):
         super().__init__()
 
-         # NOTE: image shape hardcoded for one of our echonetlvh models, could change.
-        self.model = DeeplabV3Plus(
-            image_shape=(224, 224, 3),
-            num_classes=4
-        )
+        # NOTE: image shape hardcoded for one of our echonetlvh models, could change.
+        self.model = DeeplabV3Plus(image_shape=(224, 224, 3), num_classes=4)
         # NOTE: same with weights -- if we go with this it'd be nice to put model on HF
-        self.model.load_weights("/mnt/z/Ultrasound-BMd/pretrained/deeplabv3/2025_07_15_114541_100430_echonetlvh_224/checkpoints/segmenter_184.weights.h5")
+        self.model.load_weights(
+            "/mnt/z/Ultrasound-BMd/pretrained/deeplabv3/2025_07_15_114541_100430_echonetlvh_224/checkpoints/segmenter_184.weights.h5"
+        )
 
         # Scan conversion constants for echonet
         self.rho_range = (0, 224)
@@ -292,8 +318,8 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             self.theta_range,
             self.resolution,
         )
-        # Output shape is determined by the coordinates shape (2, n_z, n_x)
-        self.output_shape = self.coords.shape[1:]  # (n_z, n_x)
+        # Output shape is determined by the coordinates shape (2, grid_size_z, grid_size_x)
+        self.output_shape = self.coords.shape[1:]  # (grid_size_z, grid_size_x)
 
         def _scan_convert_2d(image, fill_value=self.fill_value, order=0):
             image = ops.convert_to_tensor(image, dtype="float32")
@@ -309,33 +335,40 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         x_cartesian = ops.vectorized_map(self.scan_convert_2d, x[..., 0])
         # x_cartesian_cropped = x_cartesian[:, :, 23 : 159 - 24, None]
         return x_cartesian
-    
+
     def call_generic(self, x):
         return self(x)
-    
+
     def __call__(self, x):
         x_resized = ops.image.resize(x, size=(224, 224))
         x_sc = self.scan_convert_batch(x_resized)
         x_resized = ops.image.resize(x_sc[..., None], size=(224, 224))
         x_clipped = ops.clip(x_resized, -1, 1)
-        x_normalized = zea.utils.translate(x_clipped, range_from=(-1, 1), range_to=(0, 255))
+        x_normalized = zea.utils.translate(
+            x_clipped, range_from=(-1, 1), range_to=(0, 255)
+        )
         logits = self.model(x_normalized)
         return logits
-    
+
     def call_differentiable(self, x):
         logits = self(x)
         # NOTE: hardcoded to take the channels for LVPW measurements
         # TODO: include config kwargs to select which measurements to optimize for
         logits_lvpw = ops.expand_dims(ops.sum(logits[..., :2], axis=-1), axis=-1)
         return logits_lvpw
-    
-    def postprocess_for_visualization(self, targets, reconstructions, target_masks, reconstruction_masks):
-        overlay_colors = np.array([
-            [255, 255, 0],    # Yellow (LVPWd_X1)
-            [255, 0, 255],    # Magenta (LVPWd_X2)
-            [0, 255, 255],    # Cyan (IVSd_X1)
-            [0, 255, 0],      # Green (IVSd_X2)
-        ], dtype=np.uint8)
+
+    def postprocess_for_visualization(
+        self, targets, reconstructions, target_masks, reconstruction_masks
+    ):
+        overlay_colors = np.array(
+            [
+                [255, 255, 0],  # Yellow (LVPWd_X1)
+                [255, 0, 255],  # Magenta (LVPWd_X2)
+                [0, 255, 255],  # Cyan (IVSd_X1)
+                [0, 255, 0],  # Green (IVSd_X2)
+            ],
+            dtype=np.uint8,
+        )
 
         def make_ultrasound_cone_mask(image_shape, apex_y=0, cone_angle_deg=70):
             H, W = image_shape[:2]
@@ -346,7 +379,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             dy = Y - apex_y
             angle = np.arctan2(dx, dy + 1e-6) * 180 / np.pi
             mask = np.abs(angle) < (cone_angle_deg / 2)
-            mask &= (dy >= 0)
+            mask &= dy >= 0
             return mask.astype(np.float32)
 
         def normalize_img(img):
@@ -371,19 +404,23 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             image = ops.convert_to_numpy(image)
             label = ops.convert_to_numpy(label)
             if image.ndim == 2:
-                image = np.stack([image]*3, axis=-1)
+                image = np.stack([image] * 3, axis=-1)
             elif image.shape[-1] == 1:
                 image = np.repeat(image, 3, axis=-1)
             else:
                 image = image.copy()
 
-            cone_mask = make_ultrasound_cone_mask(image.shape, apex_y=0, cone_angle_deg=70)
+            cone_mask = make_ultrasound_cone_mask(
+                image.shape, apex_y=0, cone_angle_deg=70
+            )
             if label.ndim == 3 and label.shape[-1] > 1:
                 cone_mask = cone_mask[..., None]
 
             label = np.clip(label, 0, None)
             for ch in range(label.shape[-1]):
-                label[..., ch] *= cone_mask[..., 0] if cone_mask.ndim == 3 else cone_mask
+                label[..., ch] *= (
+                    cone_mask[..., 0] if cone_mask.ndim == 3 else cone_mask
+                )
                 max_val = np.max(label[..., ch])
                 if max_val > 0:
                     label[..., ch] = label[..., ch] / max_val
@@ -406,7 +443,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
                 centers.append(center)
 
             for i in range(3):
-                pt1, pt2 = centers[i], centers[i+1]
+                pt1, pt2 = centers[i], centers[i + 1]
                 if pt1 is not None and pt2 is not None:
                     color = tuple(int(x) for x in overlay_colors[i])
                     line_mask = np.zeros(image.shape[:2], dtype=np.uint8)
@@ -418,9 +455,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             overlay = np.clip(overlay, 0, 255)
             out = image.astype(np.float32)
             blend_mask = np.any(overlay > 5, axis=-1)
-            out[blend_mask] = (
-                (1 - alpha) * out[blend_mask] + overlay[blend_mask]
-            )
+            out[blend_mask] = (1 - alpha) * out[blend_mask] + overlay[blend_mask]
             out = np.clip(out, 0, 255).astype(np.uint8)
             return out
 
@@ -428,16 +463,24 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         targets_resized = ops.image.resize(targets[..., None], size=(224, 224))
         targets_sc = self.scan_convert_batch(targets_resized)
 
-        reconstructions_resized = ops.image.resize(reconstructions[..., None], size=(224, 224))
+        reconstructions_resized = ops.image.resize(
+            reconstructions[..., None], size=(224, 224)
+        )
         reconstructions_sc = self.scan_convert_batch(reconstructions_resized)
 
         targets_resized = ops.image.resize(targets_sc[..., None], size=(224, 224))
         targets_clipped = ops.clip(targets_resized, -1, 1)
-        targets = zea.utils.translate(targets_clipped, range_from=(-1, 1), range_to=(0, 255))
+        targets = zea.utils.translate(
+            targets_clipped, range_from=(-1, 1), range_to=(0, 255)
+        )
 
-        reconstructions_resized = ops.image.resize(reconstructions_sc[..., None], size=(224, 224))
+        reconstructions_resized = ops.image.resize(
+            reconstructions_sc[..., None], size=(224, 224)
+        )
         reconstructions_clipped = ops.clip(reconstructions_resized, -1, 1)
-        reconstructions = zea.utils.translate(reconstructions_clipped, range_from=(-1, 1), range_to=(0, 255))
+        reconstructions = zea.utils.translate(
+            reconstructions_clipped, range_from=(-1, 1), range_to=(0, 255)
+        )
 
         # Overlay masks on images
         targets_with_overlay = []

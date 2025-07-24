@@ -262,13 +262,13 @@ def run_active_sampling(
 
     # Prepare acquisition function
     if scan and scan.n_tx > 1:
-        disabled_pfield = ops.ones((scan.n_z * scan.n_x, scan.n_tx))
+        disabled_pfield = ops.ones((scan.grid_size_z * scan.grid_size_x, scan.n_tx))
         if pfield is not None:
             flat_pfield = pfield.reshape(scan.n_tx, -1).swapaxes(0, 1)
             flat_pfield = ops.convert_to_tensor(flat_pfield)
         else:
             flat_pfield = disabled_pfield
-        rx_apo = lines_rx_apo(scan.n_tx, scan.n_z, scan.n_x)
+        rx_apo = lines_rx_apo(scan.n_tx, scan.grid_size_z, scan.grid_size_x)
         bandpass_rf = scipy.signal.firwin(
             numtaps=128,
             cutoff=np.array([0.5, 1.5]) * scan.center_frequency,
