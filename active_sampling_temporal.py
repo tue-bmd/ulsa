@@ -437,6 +437,10 @@ def fix_paths(agent_config, data_paths=None):
     agent_config.diffusion_inference.run_dir = (
         agent_config.diffusion_inference.run_dir.format(output_dir=output_dir)
     )
+    if "data" in agent_config and "target_sequence" in agent_config.data:
+        agent_config.data.target_sequence = agent_config.data.target_sequence.format(
+            data_root=data_paths["data_root"]
+        )
     return agent_config
 
 
