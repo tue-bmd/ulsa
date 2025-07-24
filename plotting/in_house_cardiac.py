@@ -5,15 +5,17 @@ for the in-house cardiac dataset.
 
 import sys
 
-import keras
-
 import zea
 
 sys.path.append("/ulsa")  # for relative imports
 
 zea.init_device(allow_preallocate=False)
 
+import keras
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
+from mpl_toolkits.axes_grid1 import ImageGrid
 
 from active_sampling_temporal import active_sampling_single_file
 from ulsa.io_utils import postprocess_agent_results
@@ -32,6 +34,8 @@ elif no_measurement_color == "black":
     no_measurement_color = image_range[0]
 elif no_measurement_color == "gray":
     no_measurement_color = (image_range[0] + image_range[1]) / 2
+elif no_measurement_color == "transparent":
+    no_measurement_color = np.nan
 else:
     raise ValueError(f"Unknown no_measurement_color: {no_measurement_color}")
 
@@ -55,7 +59,7 @@ targets = postprocess_agent_results(
     scan_convert_order,
     image_range,
     scan_convert_resolution=scan_convert_resolution,
-    fill_value="white",
+    fill_value="transparent",
 )[0]
 reconstructions = postprocess_agent_results(
     reconstructions[None],
@@ -64,7 +68,7 @@ reconstructions = postprocess_agent_results(
     image_range,
     scan_convert_resolution=scan_convert_resolution,
     reconstruction_sharpness_std=io_config.get("reconstruction_sharpness_std", 0.0),
-    fill_value="white",
+    fill_value="transparent",
 )[0]
 measurements = postprocess_agent_results(
     measurements[None],
@@ -72,22 +76,45 @@ measurements = postprocess_agent_results(
     scan_convert_order=0,  # always 0 for masks!
     image_range=image_range,
     scan_convert_resolution=scan_convert_resolution,
-    fill_value="white",
+    fill_value="transparent",
 )[0]
 
+exts = ["png", "pdf"]
 with plt.style.context("styles/ieee-tmi.mplstyle"):
-    kwargs = {"vmin": 0, "vmax": 255, "cmap": "gray", "interpolation": "nearest"}
-    fig, axs = plt.subplots(1, 3)
-    axs[0].imshow(measurements, **kwargs)
-    axs[0].set_title("Acquisitions")
-    axs[1].imshow(targets, **kwargs)
-    axs[1].set_title("Target")
-    axs[2].imshow(reconstructions, **kwargs)
-    axs[2].set_title("Reconstruction")
-    for ax in axs:
+    mpl.rcParams["figure.constrained_layout.use"] = False
+    kwargs = {
+        "vmin": image_range[0],
+        "vmax": image_range[1],
+        "cmap": "gray",
+        "interpolation": "nearest",
+    }
+    fig = plt.figure()
+    axs = ImageGrid(fig, 111, nrows_ncols=(1, 2), axes_pad=0.1)
+    axs[0].imshow(targets, **kwargs)
+    axs[0].set_title("Target")
+    axs[1].imshow(reconstructions, **kwargs)
+    axs[1].set_title("Reconstruction")
+
+    h = 0.2  # inset image height
+    y_offset = 0.05  # offset from the top of axs[0]
+
+    aspect_ratio = measurements.shape[1] / measurements.shape[0]
+    w = h * aspect_ratio
+
+    axpos0 = axs[0].get_position()
+    axpos1 = axs[1].get_position()
+
+    x_center = (axpos0.xmin + axpos0.xmax + axpos1.xmin + axpos1.xmax) / 4
+    x = x_center - w / 2
+    y = axpos0.ymax - 2 * h + y_offset
+
+    inset_ax = fig.add_axes([x, y, w, h])
+    inset_ax.imshow(measurements, **kwargs)
+
+    for ax in [*axs, inset_ax]:
         ax.axis("off")
 
-    plt.savefig("output/cardiac_reconstruction.png")
-zea.log.info(
-    f"Saved cardiac reconstruction plot to {zea.log.yellow('output/cardiac_reconstruction.png')}"
-)
+    for ext in exts:
+        path = f"output/in_house_cardiac.{ext}"
+        plt.savefig(path)
+        zea.log.info(f"Saved cardiac reconstruction plot to {zea.log.yellow(path)}")
