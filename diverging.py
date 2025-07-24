@@ -12,7 +12,8 @@ import scipy.signal
 from keras import ops
 from tqdm import tqdm
 
-from active_sampling_temporal import fix_paths, make_pipeline, preload_data
+from active_sampling_temporal import fix_paths, preload_data
+from ulsa.ops import FirFilter, LowPassFilter, WaveletDenoise
 from zea.display import scan_convert_2d
 from zea.utils import save_to_gif, translate
 
@@ -22,14 +23,37 @@ target_sequence = agent_config.data.target_sequence
 data_type = agent_config.data.data_type
 dynamic_range = agent_config.data.image_range
 
-pipeline = make_pipeline(
-    data_type,
-    dynamic_range,
-    (-1, 1),
-    (112, 112, 3),
-    action_selection_shape=agent_config.action_selection.shape,
+pipeline = zea.Pipeline(
+    [
+        FirFilter(axis=-3, filter_key="bandpass_rf"),
+        WaveletDenoise(),  # optional
+        zea.ops.Demodulate(),
+        LowPassFilter(complex_channels=True, axis=-2),  # optional
+        zea.ops.Downsample(2),  # optional
+        zea.ops.PatchedGrid(
+            [
+                zea.ops.TOFCorrection(),
+                # zea.ops.PfieldWeighting(),  # optional
+                zea.ops.DelayAndSum(),
+            ]
+        ),
+        zea.ops.EnvelopeDetect(),
+        zea.ops.Normalize(),
+        zea.ops.LogCompress(),
+        zea.ops.Lambda(lambda x: ops.expand_dims(x, axis=-1)),
+        zea.ops.Lambda(
+            ops.image.resize,
+            {
+                "size": (112, 90),
+                "interpolation": "bilinear",
+                "antialias": True,
+            },
+        ),
+        zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)),
+    ],
+    with_batch_dim=False,
+    jit_options="ops",
 )
-pipeline.append(zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)))
 
 
 with zea.File(target_sequence) as file:
@@ -38,7 +62,6 @@ with zea.File(target_sequence) as file:
         file,
         n_frames,
         data_type,
-        dynamic_range,
         type="diverging",
     )
 
@@ -51,6 +74,8 @@ bandpass_rf = scipy.signal.firwin(
 )
 scan.polar_limits = list(np.deg2rad([-45, 45]))
 scan.n_x = 90
+scan.dynamic_range = [-70, -30]
+scan.fill_value = float(scan.dynamic_range[0])
 params = pipeline.prepare_parameters(
     scan=scan,
     bandwidth=2e6,
@@ -68,9 +93,9 @@ for raw_data in tqdm(raw_data_sequence):
         fill_value=np.nan,
         order=0,
     )
-    image = translate(image, (-1, 1), (0, 255))
+    image = translate(image, scan.dynamic_range, (0, 255))
     image = ops.clip(image, 0, 255)
     image = ops.cast(image, dtype="uint8")
     images.append(ops.convert_to_numpy(image))
 
-save_to_gif(images, "diverging.gif", fps=30)
+save_to_gif(images, "diverging.gif", fps=agent_config.io_config.gif_fps)
