@@ -19,7 +19,7 @@ from zea import Config
 DATA_ROOT = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data"
 DATA_FOLDER = Path(DATA_ROOT) / "Wessel/output/lud/ULSA_benchmarks"
 N_PATIENTS = 3
-FIGSIZE = (3.5, 2.5 * N_PATIENTS / 3)  # single column
+FIGSIZE = (3.5, 2.0 * N_PATIENTS / 3)  # single column
 # FIGSIZE = (7.16, 2.5 * N_PATIENTS / 2)  # two columns
 FRAME_IDX = 20
 
@@ -124,6 +124,6 @@ for ax in axs.flat:
 
 exts = [".png", ".pdf"]
 for ext in exts:
-    save_path = f"./qualitative_results{ext}"
+    save_path = f"./qualitative_results_echonet{ext}"
     fig.savefig(save_path, dpi=300)
     print(f"Saved qualitative results to {save_path}")

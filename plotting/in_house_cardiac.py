@@ -92,7 +92,7 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
         "cmap": "gray",
         "interpolation": "nearest",
     }
-    fig, axs = plt.subplots(2, 2)
+    fig, axs = plt.subplots(2, 2, figsize=(3.5, 2.8))
     axs = axs.flatten()
     axs[0].imshow(targets, **kwargs)
     axs[0].set_title("Focused (90)")
