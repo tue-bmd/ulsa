@@ -25,6 +25,16 @@ random.seed(SEED)
 np.random.seed(SEED)
 
 plt.style.use("styles/ieee-tmi.mplstyle")
+## Padding (in inches) around axes
+plt.rcParams["figure.constrained_layout.h_pad"] = -0.04167
+plt.rcParams["figure.constrained_layout.w_pad"] = -0.04167
+## Spacing between subplots, relative to the subplot sizes.  Much smaller than for
+## tight_layout (figure.subplot.hspace, figure.subplot.wspace) as constrained_layout
+## already takes surrounding texts (titles, labels, # ticklabels) into account.
+plt.rcParams["figure.constrained_layout.hspace"] = -0.02
+plt.rcParams["figure.constrained_layout.wspace"] = -0.02
+plt.rcParams["axes.titlepad"] = 10.0  # default is 6.0
+
 
 # --- CONFIG ---
 data_root = Path(
@@ -83,17 +93,17 @@ for p, run_dir in enumerate(patients):
     theta_range = (float(np.min(theta)), float(np.max(theta)))
     phi_range = (float(np.min(phi)), float(np.max(phi)))
 
+    scan_convert_kwargs = {
+        "rho_range": rho_range,
+        "theta_range": theta_range,
+        "phi_range": phi_range,
+        "fill_value": np.nan,
+    }
     postprocess_fn = partial(
         postprocess_3d_data,
         normalization_range=normalization_range,
         scan_convert_mode="cartesian",
         swap_axes=True,
-        scan_convert_kwargs={
-            "rho_range": rho_range,
-            "theta_range": theta_range,
-            "phi_range": phi_range,
-            "fill_value": np.nan,
-        },
     )
 
     # Get 3D arrays for the selected frame
@@ -112,13 +122,25 @@ for p, run_dir in enumerate(patients):
     global_var_range = (np.min(variance), np.max(variance))
     variance = translate(variance, global_var_range, (0, 255))
     # Optionally clip for better visualization
-    variance = np.clip(variance, None, np.percentile(variance, 99.5))
+    variance = np.clip(variance, None, np.percentile(variance, 98.0))
 
     # az, ax, el
-    acquisitions = postprocess_fn(acquisitions.astype(np.float32))[0]
-    reconstruction = postprocess_fn(reconstruction.astype(np.float32))[0]
-    variance = postprocess_fn(variance.astype(np.float32))[0]
-    target = postprocess_fn(target.astype(np.float32))[0]
+    acquisitions = postprocess_fn(
+        acquisitions.astype(np.float32),
+        scan_convert_kwargs={**scan_convert_kwargs, "order": 0},
+    )[0]
+    reconstruction = postprocess_fn(
+        reconstruction.astype(np.float32),
+        scan_convert_kwargs={**scan_convert_kwargs, "order": 3},
+    )[0]
+    variance = postprocess_fn(
+        variance.astype(np.float32),
+        scan_convert_kwargs={**scan_convert_kwargs, "order": 1},
+    )[0]
+    target = postprocess_fn(
+        target.astype(np.float32),
+        scan_convert_kwargs={**scan_convert_kwargs, "order": 3},
+    )[0]
 
     n_ax, n_az, n_elev = ops.shape(acquisitions)
     # --> az, el, ax
@@ -147,7 +169,7 @@ for p, run_dir in enumerate(patients):
             rasterized=True,
         )
         if p == 0:
-            ax.set_title(title)
+            ax.set_title(title, y=0.87)
         ax.axis("off")
         crop_fraction = 0.8
         crop_start = lambda shape: shape - (shape * crop_fraction)
