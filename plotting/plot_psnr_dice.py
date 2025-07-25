@@ -28,10 +28,10 @@ DATA_ROOT = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data"
 DATA_FOLDER = Path(DATA_ROOT) / "Wessel/output/lud/ULSA_benchmarks"
 
 STRATEGY_COLORS = {
-    "downstream_propagation_summed": "#d62728",  # Blue
-    "greedy_entropy": "#ff7f0e",  # Orange
+    "downstream_propagation_summed": "#d62728",  # Red
+    "greedy_entropy": "#1f77b4",  # Blue
     "equispaced": "#2ca02c",  # Green
-    "uniform_random": "#1f77b4",
+    "uniform_random": "#ff7f0e",  # Orange
 }
 
 STRATEGY_NAMES = {
@@ -261,6 +261,11 @@ def get_axis_label(key):
     """Get friendly label for axis keys."""
     base_key = key.split(".")[-1]
     return AXIS_LABEL_MAP.get(base_key, base_key.replace("_", " ").title())
+
+
+def sort_by_names(combined_results, names):
+    """Sort combined results by strategy names."""
+    return {k: combined_results[k] for k in names if k in combined_results}
 
 
 def recursive_map_to_dict(dictionary):

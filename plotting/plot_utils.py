@@ -106,6 +106,38 @@ class ViolinPlotter:
                 **kwargs,
             )
 
+    def _order_groups_by_means(self, data_dict, groups_to_plot, all_x_values):
+        group_order = {}
+        for group in groups_to_plot:
+            all_values = []
+            for x_val in all_x_values:
+                if x_val in data_dict.get(group, {}):
+                    values = data_dict[group][x_val]
+                    if isinstance(values, (list, np.ndarray)):
+                        try:
+                            # check for list of lists
+                            if isinstance(values[0], Iterable) and not isinstance(
+                                values[0], (str, bytes)
+                            ):
+                                # in case values array is inhomogenous
+                                flat_values = [
+                                    item for sublist in values for item in sublist
+                                ]
+                            else:
+                                flat_values = values
+                            metric_values = np.array(flat_values, dtype=np.float64)
+                            all_values.extend(metric_values)
+                        except (ValueError, TypeError):
+                            print("ViolinPlotter: Error parsing list valued results")
+                            continue
+            if all_values:
+                group_order[group] = np.mean(all_values)
+
+        sorted_groups = sorted(
+            group_order.keys(), key=lambda x: group_order[x], reverse=True
+        )
+        return sorted_groups
+
     def _plot_core(
         self,
         data_dict,
@@ -115,6 +147,7 @@ class ViolinPlotter:
         groups_to_plot=None,
         legend_position="top",
         ylim=None,
+        order_by_means=True,
     ):
         fig = plt.figure(figsize=self.figsize)
 
@@ -140,37 +173,13 @@ class ViolinPlotter:
         else:
             group_offset = np.linspace(-width / 2, width / 2, len(groups_to_plot))
 
-        # Calculate group means and order them
-        group_order = {}
-        for group in groups_to_plot:
-            all_values = []
-            for x_val in all_x_values:
-                if x_val in data_dict.get(group, {}):
-                    values = data_dict[group][x_val]
-                    if isinstance(values, (list, np.ndarray)):
-                        try:
-                            # check for list of lists
-                            if isinstance(values[0], Iterable) and not isinstance(
-                                values[0], (str, bytes)
-                            ):
-                                # in case values array is inhomogenous
-                                flat_values = [
-                                    item for sublist in values for item in sublist
-                                ]
-                            else:
-                                flat_values = values
-                            # flat_values = [np.mean(l) for l in values]
-                            metric_values = np.array(flat_values, dtype=np.float64)
-                            all_values.extend(metric_values)
-                        except (ValueError, TypeError):
-                            print("ViolinPlotter: Error parsing list valued results")
-                            continue
-            if all_values:
-                group_order[group] = np.mean(all_values)
-
-        sorted_groups = sorted(
-            group_order.keys(), key=lambda x: group_order[x], reverse=True
-        )
+        # Calculate group means and order them (optional)
+        if order_by_means:
+            sorted_groups = self._order_groups_by_means(
+                data_dict, groups_to_plot, all_x_values
+            )
+        else:
+            sorted_groups = groups_to_plot
 
         # Plot violins in order
         for group_idx, group in enumerate(sorted_groups):
@@ -190,7 +199,6 @@ class ViolinPlotter:
                             ]
                         else:
                             flat_values = values
-                        # flat_values = [np.mean(l) for l in values]
                         metric_values = np.array(flat_values, dtype=np.float64)
                         if metric_values.size > 0:
                             pos = x_value_to_pos[x_val] + group_offset[group_idx]
