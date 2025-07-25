@@ -30,7 +30,7 @@ io_config:
   save_animation: true
   scan_convert: true
   scan_conversion_angles: [-45, 45]
-  frame_cutoff: 30
+  frame_cutoff: 39
   gif_fps: 30
   verbose: false
   reconstruction_sharpness_std: 0.04

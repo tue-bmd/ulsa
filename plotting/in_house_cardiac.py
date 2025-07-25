@@ -12,23 +12,27 @@ sys.path.append("/ulsa")  # for relative imports
 zea.init_device(allow_preallocate=False)
 
 import keras
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from mpl_toolkits.axes_grid1 import ImageGrid
 
 from active_sampling_temporal import active_sampling_single_file
-from ulsa.io_utils import postprocess_agent_results
+from ulsa.io_utils import postprocess_agent_results, side_by_side_gif
 
 # TODO: this is a bit hacky
 print("First running diverging.py...")
 from diverging import dynamic_range as diverging_dynamic_range
-from diverging import images
+from diverging import images as diverging_images
 
-frame_idx = 24
+MAKE_GIF = True
+FRAME_IDX = 24
+DROP_FIRST_N_FRAMES = 2  # drop first 2 frames to avoid artifacts (from gif only!)
+
+frame_cutoff = FRAME_IDX + 1 if not MAKE_GIF else None
+override_config = (
+    dict(io_config=dict(frame_cutoff=frame_cutoff)) if frame_cutoff else None
+)
 results, _, _, _, agent, agent_config, _ = active_sampling_single_file(
-    "configs/cardiac_112_3_frames.yaml",
-    override_config=dict(io_config=dict(frame_cutoff=frame_idx + 1)),
+    "configs/cardiac_112_3_frames.yaml", override_config=override_config
 )
 image_range = agent.input_range
 
@@ -45,11 +49,11 @@ else:
     raise ValueError(f"Unknown no_measurement_color: {no_measurement_color}")
 
 squeezed_results = results.squeeze(-1)
-targets = squeezed_results.target_imgs[frame_idx]
-reconstructions = squeezed_results.reconstructions[frame_idx]
+targets = squeezed_results.target_imgs
+reconstructions = squeezed_results.reconstructions
 measurements = keras.ops.where(
-    squeezed_results.masks[frame_idx] > 0,
-    squeezed_results.measurements[frame_idx],
+    squeezed_results.masks > 0,
+    squeezed_results.measurements,
     no_measurement_color,
 )
 io_config = agent_config.io_config
@@ -59,30 +63,30 @@ scan_convert_order = io_config.get("plot_frames_for_presentation_kwargs", {}).ge
 scan_convert_resolution = 0.1
 
 targets = postprocess_agent_results(
-    targets[None],
+    targets,
     io_config,
     scan_convert_order,
     image_range,
     scan_convert_resolution=scan_convert_resolution,
     fill_value="transparent",
-)[0]
+)
 reconstructions = postprocess_agent_results(
-    reconstructions[None],
+    reconstructions,
     io_config,
     scan_convert_order,
     image_range,
     scan_convert_resolution=scan_convert_resolution,
     reconstruction_sharpness_std=io_config.get("reconstruction_sharpness_std", 0.0),
     fill_value="transparent",
-)[0]
+)
 measurements = postprocess_agent_results(
-    measurements[None],
+    measurements,
     io_config,
     scan_convert_order=0,  # always 0 for masks!
     image_range=image_range,
     scan_convert_resolution=scan_convert_resolution,
     fill_value="transparent",
-)[0]
+)
 
 exts = ["png", "pdf"]
 with plt.style.context("styles/ieee-tmi.mplstyle"):
@@ -94,17 +98,17 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
     }
     fig, axs = plt.subplots(2, 2, figsize=(3.5, 2.8))
     axs = axs.flatten()
-    axs[0].imshow(targets, **kwargs)
+    axs[0].imshow(targets[FRAME_IDX], **kwargs)
     axs[0].set_title("Focused (90)")
 
-    axs[1].imshow(measurements, **kwargs)
-    axs[1].set_title("Acquisition (11/90)")
+    axs[1].imshow(measurements[FRAME_IDX], **kwargs)
+    axs[1].set_title("Acquisitions (11/90)")
 
-    axs[3].imshow(reconstructions, **kwargs)
+    axs[3].imshow(reconstructions[FRAME_IDX], **kwargs)
     axs[3].set_title("Reconstruction (11/90)")
 
     axs[2].imshow(
-        images[frame_idx],
+        diverging_images[FRAME_IDX],
         cmap="gray",
         vmin=diverging_dynamic_range[0],
         vmax=diverging_dynamic_range[1],
@@ -119,3 +123,24 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
         path = f"output/in_house_cardiac.{ext}"
         plt.savefig(path)
         zea.log.info(f"Saved cardiac reconstruction plot to {zea.log.yellow(path)}")
+
+_diverging_images = zea.utils.translate(
+    np.stack(diverging_images), diverging_dynamic_range, image_range
+)
+for fps in [5, 30]:
+    side_by_side_gif(
+        f"output/in_house_cardiac_{fps}.gif",
+        targets[DROP_FIRST_N_FRAMES:],
+        reconstructions[DROP_FIRST_N_FRAMES:],
+        _diverging_images[DROP_FIRST_N_FRAMES:],
+        vmin=image_range[0],
+        vmax=image_range[1],
+        labels=[
+            "Focused (90)",
+            "Reconstruction (11/90)",
+            "Diverging (11)",
+        ],
+        fps=fps,
+        context="styles/darkmode.mplstyle",
+    )
+print("Done.")

@@ -528,3 +528,24 @@ def get_inset(
 
     inset_ax = fig.add_axes([x, y, w, height])
     return inset_ax
+
+
+def add_progress_bar(arr, bar_height=5, bar_value=255):
+    """
+    Adds a horizontal progress bar at the bottom of a (frames, h, w) array.
+    The bar fills from left to right as frames progress.
+
+    Parameters:
+        arr (np.ndarray): Input array of shape (frames, h, w).
+        bar_height (int): Height of the bar in pixels.
+        bar_value (int or float): Value to fill the bar (e.g., 255 for uint8).
+
+    Returns:
+        np.ndarray: Array with the progress bar added.
+    """
+    frames, h, w = arr.shape
+    out = arr.copy()
+    for i in range(frames):
+        fill_width = int((i + 1) / frames * w)
+        out[i, h - bar_height : h, :fill_width] = bar_value
+    return out
