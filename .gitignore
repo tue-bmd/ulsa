@@ -6,3 +6,4 @@ users.yaml
 *.gif
 .vscode
 *.pdf
+*.npy
