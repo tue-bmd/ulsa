@@ -28,7 +28,7 @@ lines.linewidth: 1.0
 lines.markersize: 4
 
 # Figure settings
-figure.figsize: 3.5, 2.5  # in inches
+figure.figsize: 3.5, 2.5  # in inches (two columns: 7.16)
 figure.dpi: 300
 figure.constrained_layout.use  : True
 

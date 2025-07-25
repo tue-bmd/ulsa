@@ -5,3 +5,4 @@ users.yaml
 *.png
 *.gif
 .vscode
+*.pdf
