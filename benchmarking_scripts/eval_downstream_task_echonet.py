@@ -22,7 +22,7 @@ if __name__ == "__main__":
     )
     TARGET_DIR = Path("/mnt/z/Ultrasound-BMd/data/USBMD_datasets/echonet/val")
     SAVE_DIR = Path(
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/"
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25"
     )
 
     ulsa_agent_config = Config.from_yaml(BASE_ULSA_CONFIG)
@@ -35,7 +35,7 @@ if __name__ == "__main__":
             "action_selection.n_actions": [1, 3, 7, 14],
 
         },
-        limit_n_samples=50,
+        limit_n_samples=25,
     )
 
     run_benchmark(
@@ -48,5 +48,5 @@ if __name__ == "__main__":
             "action_selection.kwargs": [{}]
 
         },
-        limit_n_samples=50,
+        limit_n_samples=25,
     )

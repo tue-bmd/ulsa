@@ -527,6 +527,76 @@ def plot_frames_for_presentation(
         labels=[f"Density over {window_size} frames", "Reconstruction"],
     )
 
+def plot_downstream_task_beliefs(
+    save_dir,
+    belief_distribution,
+    beliefs_dst,
+    downstream_task,
+    target,
+    target_dst,
+    io_config,
+    frame_idx=0,
+    dpi=150,
+    interpolation_matplotlib="nearest",
+    context="styles/darkmode.mplstyle",
+):
+    """
+    Plots a row with:
+      - Left: target_with_mask
+      - Middle: grid of beliefs_with_mask (e.g. 2x2)
+      - Right: mask agreement (sum of beliefs_dst masks)
+    """
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    target_with_mask = downstream_task.postprocess_for_visualization(target[None, ...], target_dst[None, ...])
+    beliefs_with_mask = downstream_task.postprocess_for_visualization(belief_distribution, beliefs_dst)
+
+    # Prepare mask agreement: sum of beliefs_dst masks
+    mask_agreement = ops.sum(beliefs_dst, axis=[0, -1])
+
+    # Prepare grid of beliefs_with_mask (e.g. 2x2)
+    n_beliefs = len(beliefs_with_mask)
+    grid_ncols = int(np.ceil(np.sqrt(n_beliefs)))
+    grid_nrows = int(np.ceil(n_beliefs / grid_ncols))
+
+    with plt.style.context(context):
+        fig = plt.figure(figsize=(4 + 6 + 2, 6), dpi=dpi)  # wider grid, smaller mask agreement
+        gs = gridspec.GridSpec(
+            1, 3, width_ratios=[1, 2, 0.7], wspace=0.0
+        )
+        # Left: target_with_mask
+        ax0 = fig.add_subplot(gs[0, 0])
+        ax0.imshow(np.squeeze(target_with_mask), cmap="gray", interpolation=interpolation_matplotlib)
+        ax0.set_title("Target", fontsize=12)
+        ax0.axis("off")
+
+        # Middle: grid of beliefs_with_mask
+        grid_gs = gridspec.GridSpecFromSubplotSpec(
+            grid_nrows, grid_ncols, subplot_spec=gs[0, 1], wspace=0.0, hspace=0.0
+        )
+        for idx, belief_img in enumerate(beliefs_with_mask):
+            row = idx // grid_ncols
+            col = idx % grid_ncols
+            ax = fig.add_subplot(grid_gs[row, col])
+            ax.imshow(np.squeeze(belief_img), cmap="gray", interpolation=interpolation_matplotlib)
+            ax.axis("off")
+        # Add a title above the grid
+        fig.text(
+            0.525, 0.9, "Beliefs", ha="center", va="top", fontsize=12,
+        )
+
+        # Right: mask agreement (smaller)
+        ax2 = fig.add_subplot(gs[0, 2])
+        im = ax2.imshow(mask_agreement, cmap="viridis", interpolation=interpolation_matplotlib)
+        ax2.set_title("Mask Agreement", fontsize=12)
+        ax2.axis("off")
+        plt.colorbar(im, ax=ax2, fraction=0.046, pad=0.04, shrink=0.7)
+
+        save_path = save_dir / f"downstream_task_beliefs_{frame_idx}.png"
+        plt.savefig(save_path, bbox_inches="tight", dpi=dpi)
+        plt.close(fig)
+        log.info(log.yellow(f"Saved downstream task beliefs plot to {save_path}"))
+
 
 def plot_downstream_task_output_for_presentation(
     save_dir,
@@ -552,7 +622,8 @@ def plot_downstream_task_output_for_presentation(
     save_dir.mkdir(parents=True, exist_ok=True)
     num_frames = targets.shape[0]
     # expects RGB image output
-    targets_with_mask, reconstructions_with_mask = downstream_task.postprocess_for_visualization(targets, reconstructions, targets_dst, reconstructions_dst)
+    targets_with_mask = downstream_task.postprocess_for_visualization(targets, targets_dst)
+    reconstructions_with_mask = downstream_task.postprocess_for_visualization(reconstructions, reconstructions_dst)
 
     # TODO: maybe check if DST output is same size as measurements etc and if not then resize?
 
@@ -595,6 +666,7 @@ def plot_belief_distribution_for_presentation(
     belief_distribution,  # shape (num_beliefs, H, W, 1)
     masks,  # shape (num_beliefs, H, W) or (num_beliefs, H, W, 1)
     io_config,
+    frame_idx=0,
     dpi=150,
     scan_convert_order=0,
     interpolation_matplotlib="nearest",
@@ -657,10 +729,10 @@ def plot_belief_distribution_for_presentation(
         fig_grid.suptitle("Belief Distribution (Scan Converted)", fontsize=18)
         plt.tight_layout()
         fig_grid.savefig(
-            save_dir / "belief_distribution_grid.png", dpi=dpi, transparent=True
+            save_dir / f"belief_distribution_grid_{frame_idx}.png", dpi=dpi, transparent=True
         )
         plt.close(fig_grid)
-        log.info(log.yellow(save_dir / "belief_distribution_grid.png"))
+        log.info(log.yellow(save_dir / f"belief_distribution_grid_{frame_idx}.png"))
 
     pixelwise_variance = np.var(beliefs, axis=0)
     sc_variance = _scan_convert(
@@ -684,10 +756,10 @@ def plot_belief_distribution_for_presentation(
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, shrink=0.6)
         plt.tight_layout()
         fig_var.savefig(
-            save_dir / "belief_distribution_variance.png", dpi=dpi, transparent=True
+            save_dir / f"belief_distribution_variance_{frame_idx}.png", dpi=dpi, transparent=True
         )
         plt.close(fig_var)
-        log.info(log.yellow(save_dir / "belief_distribution_variance.png"))
+        log.info(log.yellow(save_dir / f"belief_distribution_variance_{frame_idx}.png"))
 
     sc_measurements = _scan_convert(
         measurements,
@@ -704,9 +776,9 @@ def plot_belief_distribution_for_presentation(
         ax.set_title("Measurements", fontsize=18)
         ax.axis("off")
         plt.tight_layout()
-        fig_meas.savefig(save_dir / "measurements.png", dpi=dpi)
+        fig_meas.savefig(save_dir / f"measurements_{frame_idx}.png", dpi=dpi)
         plt.close(fig_meas)
-        log.info(log.yellow(save_dir / "measurements.png"))
+        log.info(log.yellow(save_dir / f"measurements_{frame_idx}.png"))
 
     # Plot measurements (masked image, data space, no scan conversion)
     measurements_uint8 = map_range(measurements, image_range, (0, 255)).astype(np.uint8)
@@ -718,9 +790,9 @@ def plot_belief_distribution_for_presentation(
         ax.set_title("Measurements (Data Space)", fontsize=18)
         ax.axis("off")
         plt.tight_layout()
-        fig_meas.savefig(save_dir / "measurements_data_space.png", dpi=dpi)
+        fig_meas.savefig(save_dir / f"measurements_data_space_{frame_idx}.png", dpi=dpi)
         plt.close(fig_meas)
-        log.info(log.yellow(save_dir / "measurements_data_space.png"))
+        log.info(log.yellow(save_dir / f"measurements_data_space_{frame_idx}.png"))
 
     sc_selected = _scan_convert(
         ops.cast(next_masks, "float32") * ops.max(pixelwise_variance)
@@ -738,9 +810,9 @@ def plot_belief_distribution_for_presentation(
         ax.set_title("Mask t", fontsize=18)
         ax.axis("off")
         plt.tight_layout()
-        fig_meas.savefig(save_dir / "selected_next_t.png", dpi=dpi, transparent=True)
+        fig_meas.savefig(save_dir / f"selected_next_t_{frame_idx}.png", dpi=dpi, transparent=True)
         plt.close(fig_meas)
-        log.info(log.yellow(save_dir / "selected_next_t.png"))
+        log.info(log.yellow(save_dir / f"selected_next_t_{frame_idx}.png"))
 
 
 def plot_frame_overview(

@@ -824,6 +824,71 @@ def compute_volume_mae(sweep_results, gt_masks, save_root):
     return volume_mae
 
 
+def plot_strategy_comparison_scatter(
+    combined_results,
+    metric,
+    strategy_x,
+    strategy_y,
+    save_root=".",
+    x_axis_label=None,
+    y_axis_label=None,
+    plot_title=None,
+):
+    """
+    Scatter plot comparing metric values for two strategies across all samples.
+    X-axis: metric for strategy_x
+    Y-axis: metric for strategy_y
+    """
+    import matplotlib.pyplot as plt
+
+    # Get metric values for both strategies
+    x_dict = combined_results[metric].get(strategy_x, {})
+    y_dict = combined_results[metric].get(strategy_y, {})
+
+    # Find all x_values present in both strategies
+    x_values = sorted(set(x_dict.keys()) & set(y_dict.keys()))
+    if not x_values:
+        print(f"No overlapping x_values for {strategy_x} and {strategy_y} in metric '{metric}'")
+        return
+
+    # For each x_value, plot all samples
+    for x_val in x_values:
+        x_samples = x_dict[x_val]
+        y_samples = y_dict[x_val]
+        # Only plot pairs where both strategies have a value for the same sample index
+        n = min(len(x_samples), len(y_samples))
+        if n == 0:
+            continue
+
+        plt.figure(figsize=(5, 5))
+        plt.scatter(
+            x_samples[:n],
+            y_samples[:n],
+            alpha=0.6,
+            color="#1f77b4",
+            label=f"{STRATEGY_NAMES[strategy_x]} vs {STRATEGY_NAMES[strategy_y]}",
+        )
+        # Plot y=x reference line
+        min_val = min(min(x_samples[:n]), min(y_samples[:n]))
+        max_val = max(max(x_samples[:n]), max(y_samples[:n]))
+        plt.plot([min_val, max_val], [min_val, max_val], "k--", label="y = x")
+
+        plt.xlabel(x_axis_label or f"{STRATEGY_NAMES.get(strategy_x, strategy_x)} {METRIC_NAMES.get(metric, metric)}")
+        plt.ylabel(y_axis_label or f"{STRATEGY_NAMES.get(strategy_y, strategy_y)} {METRIC_NAMES.get(metric, metric)}")
+        plt.title(plot_title or f"{METRIC_NAMES.get(metric, metric)}: {STRATEGY_NAMES.get(strategy_x, strategy_x)} vs {STRATEGY_NAMES.get(strategy_y, strategy_y)}\n(x_value={x_val})")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+
+        save_path = os.path.join(
+            save_root,
+            f"{metric}_scatter_{strategy_x}_vs_{strategy_y}_x{x_val}.{FILE_EXT}",
+        )
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        print(f"Saved scatter plot to {save_path}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -836,9 +901,22 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     SWEEP_PATHS = [
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_161012_159911",
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_165029_487065"
+        # echonet
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_161012_159911",
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_165029_487065"
+        #
+        # echonetlvh
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/sweep_2025_07_22_105039_845597",
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/sweep_2025_07_22_113842_262566"
+
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25/sweep_2025_07_22_191803_274338",
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25/sweep_2025_07_22_200031_873116"
+
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_23_120035_223599",
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_24_110801_857975/"
     ]
+    # METRICS = ["mse", "psnr", "dice"]
+    METRICS = ["psnr", "heatmap_center_mse"]
 
     # Aggregate results from all sweep paths
     combined_results = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
@@ -846,7 +924,7 @@ if __name__ == "__main__":
         try:
             results = extract_sweep_data(
                 sweep_path,
-                keys_to_extract=["mse", "psnr", "dice"],
+                keys_to_extract=METRICS,
                 x_axis_key=args.x_axis,
             )
             for metric in results:
@@ -871,6 +949,15 @@ if __name__ == "__main__":
         print(f"\nLaTeX table saved to {table_path}")
         print("\nTable preview:")
         print(latex_table)
+
+        # Example usage after combined_results is populated
+        # plot_strategy_comparison_scatter(
+        #     combined_results,
+        #     metric="heatmap_center_mse",
+        #     strategy_x="downstream_task_selection",
+        #     strategy_y="greedy_entropy",
+        #     save_root=args.save_root,
+        # )
 
         # Plot violin sweeps
         plot_violin_sweeps(

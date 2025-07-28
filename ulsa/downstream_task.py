@@ -133,21 +133,13 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
 
         self.scan_convert_2d = _scan_convert_2d
 
-    def postprocess_for_visualization(self, targets, reconstructions, target_masks, reconstruction_masks):
-        targets = self.scan_convert_batch(targets[..., None])[..., 0]
-        reconstructions = self.scan_convert_batch(reconstructions[..., None])[..., 0]
-
-        targets = map_range(targets, from_range=(-1, 1), to_range=(0, 255)).astype(np.uint8)
-        target_masks = map_range(target_masks, from_range=(0, 1), to_range=(0, 255)).astype(np.uint8)
-        reconstructions = map_range(reconstructions, from_range=(-1, 1), to_range=(0, 255)).astype(np.uint8)
-        reconstruction_masks = map_range(reconstruction_masks, from_range=(0, 1), to_range=(0, 255)).astype(np.uint8)
-
-        targets_with_mask = overlay_segmentation_on_image_batch(targets, target_masks)
-        reconstructions_with_mask = overlay_segmentation_on_image_batch(reconstructions, reconstruction_masks)
-
-        targets_with_mask = np.pad(targets_with_mask, pad_width=((0, 0), (0, 0), (23, 24), (0, 0)), mode='constant')
-        reconstructions_with_mask = np.pad(reconstructions_with_mask, pad_width=((0, 0), (0, 0), (23, 24), (0, 0)), mode='constant')
-        return targets_with_mask, reconstructions_with_mask
+    def postprocess_for_visualization(self, images, masks):
+        images = self.scan_convert_batch(images[..., None])[..., 0]
+        images = map_range(images, from_range=(-1, 1), to_range=(0, 255)).astype(np.uint8)
+        masks = map_range(masks, from_range=(0, 1), to_range=(0, 255)).astype(np.uint8)
+        images_with_masks = overlay_segmentation_on_image_batch(images, masks)
+        images_with_masks = np.pad(images_with_masks, pad_width=((0, 0), (0, 0), (23, 24), (0, 0)), mode='constant')
+        return images_with_masks
 
     def scan_convert_batch(self, x):
         # x: (batch, n_rho, n_theta, 1)
@@ -254,6 +246,20 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
 
     def output_type(self):
         return "segmentation_mask"
+    
+    def beliefs_to_reconstruction(self, belief_distributions):
+        """
+        This function maps a set of beliefs about the DST output to
+        a single reconstruction.
+
+        Params:
+        - belief_distributions (Tensor of shape [batch, n_particles, ...])
+        """
+        # NOTE: we choose 0.5 here as a hard-coded cutoff for the proportion of 
+        # beliefs that need to agree in order for a pixel to be included in the 
+        # reconstruction mask.
+        reconstructions = ops.cast(((ops.mean(belief_distributions, axis=1)) > 0.5), "uint8")
+        return reconstructions
 
 # TODO: this class and EchoNetSegmentation have a lot in common,
 #       maybe could make a shared 'SegmentationModel' parent
@@ -324,48 +330,71 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
     
     def call_differentiable(self, x):
         logits = self(x)
-        # NOTE: hardcoded to take the channels for LVPW measurements
-        # TODO: include config kwargs to select which measurements to optimize for
-        logits_lvpw = ops.expand_dims(ops.sum(logits[..., :2], axis=-1), axis=-1)
-        return logits_lvpw
+        # NOTE: we sum across all measurement point channels here to get an
+        #   overall picture of where is important
+        logits = ops.expand_dims(ops.sum(logits, axis=-1), axis=-1)
+        return logits
     
-    def postprocess_for_visualization(self, targets, reconstructions, target_masks, reconstruction_masks):
+    def output_type(self):
+        return "segmentation_mask"
+    
+    @staticmethod
+    def make_ultrasound_cone_mask(image_shape, apex_y=0, cone_angle_deg=70):
+        H, W = image_shape[:2]
+        Y, X = np.ogrid[:H, :W]
+        center_x = W // 2
+        apex_y = int(apex_y)
+        dx = X - center_x
+        dy = Y - apex_y
+        angle = np.arctan2(dx, dy + 1e-6) * 180 / np.pi
+        mask = np.abs(angle) < (cone_angle_deg / 2)
+        mask &= (dy >= 0)
+        return mask.astype(np.float32)
+    
+    @staticmethod
+    def find_gaussian_center(mask_channel, threshold=0.0):
+        mask = mask_channel.copy()
+        idx = np.unravel_index(np.argmax(mask), mask.shape)
+        if mask[idx] < threshold:
+            return None
+        return idx[::-1]  # (x, y)
+    
+    @staticmethod
+    def outputs_to_coordinates(outputs, measurement_type):
+        """
+        Params:
+            outputs [batch, height, width, 4]: output tensor produced by calling the model
+            measurement_type (str): one of ["LVPW" | "LVID" | "IVS"]
+        Returns:
+            coordinates [batch, 2, 2]
+        """
+        measurements_to_channels = {
+            "LVPW": [0, 1],
+            "LVID": [1, 2],
+            "IVS":  [2, 3]
+        }
+        cone_mask = EchoNetLVHSegmentation.make_ultrasound_cone_mask(ops.shape(outputs)[1:], apex_y=0, cone_angle_deg=70)
+        # filter out non-zero values outside the scan cone
+        outputs = outputs * cone_mask[..., None]
+        assert measurement_type in measurements_to_channels
+        c1, c2 = measurements_to_channels[measurement_type]
+        bottom_coordinates = np.array([
+            EchoNetLVHSegmentation.find_gaussian_center(outputs[i, ..., c1])
+            for i in range(len(outputs))
+        ])
+        top_coordinates = np.array([
+            EchoNetLVHSegmentation.find_gaussian_center(outputs[i, ..., c2])
+            for i in range(len(outputs))
+        ])
+        return bottom_coordinates, top_coordinates
+
+    def postprocess_for_visualization(self, images, masks):
         overlay_colors = np.array([
             [255, 255, 0],    # Yellow (LVPWd_X1)
             [255, 0, 255],    # Magenta (LVPWd_X2)
             [0, 255, 255],    # Cyan (IVSd_X1)
             [0, 255, 0],      # Green (IVSd_X2)
         ], dtype=np.uint8)
-
-        def make_ultrasound_cone_mask(image_shape, apex_y=0, cone_angle_deg=70):
-            H, W = image_shape[:2]
-            Y, X = np.ogrid[:H, :W]
-            center_x = W // 2
-            apex_y = int(apex_y)
-            dx = X - center_x
-            dy = Y - apex_y
-            angle = np.arctan2(dx, dy + 1e-6) * 180 / np.pi
-            mask = np.abs(angle) < (cone_angle_deg / 2)
-            mask &= (dy >= 0)
-            return mask.astype(np.float32)
-
-        def normalize_img(img):
-            img = np.asarray(img)
-            img = img.astype(np.float32)
-            minv, maxv = np.min(img), np.max(img)
-            if maxv > minv:
-                img = (img - minv) / (maxv - minv)
-            else:
-                img = img * 0
-            img = (img * 255).clip(0, 255).astype(np.uint8)
-            return img
-
-        def find_gaussian_center(mask_channel, threshold=0.0):
-            mask = mask_channel.copy()
-            idx = np.unravel_index(np.argmax(mask), mask.shape)
-            if mask[idx] < threshold:
-                return None
-            return idx[::-1]  # (x, y)
 
         def overlay_labels_on_image(image, label, alpha=0.5):
             image = ops.convert_to_numpy(image)
@@ -377,7 +406,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             else:
                 image = image.copy()
 
-            cone_mask = make_ultrasound_cone_mask(image.shape, apex_y=0, cone_angle_deg=70)
+            cone_mask = EchoNetLVHSegmentation.make_ultrasound_cone_mask(image.shape, apex_y=0, cone_angle_deg=70)
             if label.ndim == 3 and label.shape[-1] > 1:
                 cone_mask = cone_mask[..., None]
 
@@ -397,7 +426,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             for ch in range(4):
                 mask = label[..., ch] ** 2
                 color = overlay_colors[ch]
-                center = find_gaussian_center(mask, threshold=0.0)
+                center = EchoNetLVHSegmentation.find_gaussian_center(mask, threshold=0.0)
                 if center is not None:
                     mask_alpha = mask * alpha
                     for c in range(3):
@@ -425,31 +454,33 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             return out
 
         # Scan convert images
-        targets_resized = ops.image.resize(targets[..., None], size=(224, 224))
-        targets_sc = self.scan_convert_batch(targets_resized)
+        images_resized = ops.image.resize(images[..., None], size=(224, 224))
+        images_sc = self.scan_convert_batch(images_resized)
 
-        reconstructions_resized = ops.image.resize(reconstructions[..., None], size=(224, 224))
-        reconstructions_sc = self.scan_convert_batch(reconstructions_resized)
-
-        targets_resized = ops.image.resize(targets_sc[..., None], size=(224, 224))
-        targets_clipped = ops.clip(targets_resized, -1, 1)
-        targets = zea.utils.translate(targets_clipped, range_from=(-1, 1), range_to=(0, 255))
-
-        reconstructions_resized = ops.image.resize(reconstructions_sc[..., None], size=(224, 224))
-        reconstructions_clipped = ops.clip(reconstructions_resized, -1, 1)
-        reconstructions = zea.utils.translate(reconstructions_clipped, range_from=(-1, 1), range_to=(0, 255))
+        images_resized = ops.image.resize(images_sc[..., None], size=(224, 224))
+        images_clipped = ops.clip(images_resized, -1, 1)
+        images = zea.utils.translate(images_clipped, range_from=(-1, 1), range_to=(0, 255))
 
         # Overlay masks on images
-        targets_with_overlay = []
-        reconstructions_with_overlay = []
-        for img, mask in zip(targets, target_masks):
+        images_with_overlay = []
+        for img, mask in zip(images, masks):
             overlay = overlay_labels_on_image(img, mask)
-            targets_with_overlay.append(overlay)
-        for img, mask in zip(reconstructions, reconstruction_masks):
-            overlay = overlay_labels_on_image(img, mask)
-            reconstructions_with_overlay.append(overlay)
+            images_with_overlay.append(overlay)
 
-        targets_with_overlay = np.stack(targets_with_overlay, axis=0)
-        reconstructions_with_overlay = np.stack(reconstructions_with_overlay, axis=0)
+        images_with_overlay = np.stack(images_with_overlay, axis=0)
 
-        return targets_with_overlay, reconstructions_with_overlay
+        return images_with_overlay
+    
+    def beliefs_to_reconstruction(self, belief_distributions):
+        """
+        This function maps a set of beliefs about the DST output to
+        a single reconstruction.
+
+        Params:
+        - belief_distributions (Tensor of shape [batch, n_particles, ...])
+        """
+        # NOTE: now we just compute the mean... but it's more complicated if
+        # the heatmaps don't overlap... what then? We could average in
+        # coordinate space maybe?
+        reconstructions = ops.mean(belief_distributions, axis=1)
+        return reconstructions
