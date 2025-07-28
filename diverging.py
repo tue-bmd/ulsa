@@ -1,11 +1,12 @@
 import os
 import sys
 
-os.environ["KERAS_BACKEND"] = "jax"
 import zea
 
-zea.init_device()
-sys.path.append("/ulsa")
+if __name__ == "__main__":
+    os.environ["KERAS_BACKEND"] = "jax"
+    zea.init_device(allow_preallocate=False)
+    sys.path.append("/ulsa")
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,97 +14,106 @@ import scipy.signal
 from keras import ops
 from tqdm import tqdm
 
-from active_sampling_temporal import fix_paths, preload_data
+from active_sampling_temporal import preload_data
 from ulsa.ops import FirFilter, LowPassFilter, WaveletDenoise
 from zea.display import scan_convert_2d
 from zea.utils import save_to_gif, translate
 
-agent_config = zea.Config.from_yaml("configs/cardiac_112_3_frames.yaml")
-agent_config = fix_paths(agent_config)
-target_sequence = agent_config.data.target_sequence
-data_type = agent_config.data.data_type
-width = 90  # number of rays in the polar grid
 
-pipeline = zea.Pipeline(
-    [
-        FirFilter(axis=-3, filter_key="bandpass_rf"),
-        WaveletDenoise(),  # optional
-        zea.ops.Demodulate(),
-        LowPassFilter(complex_channels=True, axis=-2),  # optional
-        zea.ops.Downsample(2),  # optional
-        zea.ops.PatchedGrid(
-            [
-                zea.ops.TOFCorrection(),
-                # zea.ops.PfieldWeighting(),  # optional
-                zea.ops.DelayAndSum(),
-            ]
-        ),
-        zea.ops.EnvelopeDetect(),
-        zea.ops.Normalize(),
-        zea.ops.LogCompress(),
-        zea.ops.Lambda(lambda x: ops.expand_dims(x, axis=-1)),
-        zea.ops.Lambda(
-            ops.image.resize,
-            {
-                "size": (112, width),
-                "interpolation": "bilinear",
-                "antialias": True,
-            },
-        ),
-        zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)),
-    ],
-    with_batch_dim=False,
-    jit_options="ops",
-)
-
-
-with zea.File(target_sequence) as file:
-    n_frames = agent_config.io_config.get("frame_cutoff", "all")
-    raw_data_sequence, scan, probe = preload_data(
-        file,
-        n_frames,
-        data_type,
-        type="diverging",
+def diverging_waves(
+    target_sequence,
+    n_frames,
+    dynamic_range=[-70, -30],
+    grid_width=90,
+    resize_height=112,
+):
+    pipeline = zea.Pipeline(
+        [
+            FirFilter(axis=-3, filter_key="bandpass_rf"),
+            WaveletDenoise(),  # optional
+            zea.ops.Demodulate(),
+            LowPassFilter(complex_channels=True, axis=-2),  # optional
+            zea.ops.Downsample(2),  # optional
+            zea.ops.PatchedGrid(
+                [
+                    zea.ops.TOFCorrection(),
+                    # zea.ops.PfieldWeighting(),  # optional
+                    zea.ops.DelayAndSum(),
+                ]
+            ),
+            zea.ops.EnvelopeDetect(),
+            zea.ops.Normalize(),
+            zea.ops.LogCompress(),
+            zea.ops.Lambda(lambda x: ops.expand_dims(x, axis=-1)),
+            zea.ops.Lambda(
+                ops.image.resize,
+                {
+                    "size": (resize_height, grid_width),
+                    "interpolation": "bilinear",
+                    "antialias": True,
+                },
+            ),
+            zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)),
+        ],
+        with_batch_dim=False,
+        jit_options="ops",
     )
 
-images = []
-bandpass_rf = scipy.signal.firwin(
-    numtaps=128,
-    cutoff=np.array([0.5, 1.5]) * scan.center_frequency,
-    pass_zero="bandpass",
-    fs=scan.sampling_frequency,
-)
-scan.polar_limits = list(np.deg2rad([-45, 45]))
-scan.grid_size_x = width
-dynamic_range = [-70, -30]
-scan.dynamic_range = dynamic_range
-scan.fill_value = float(scan.dynamic_range[0])
-params = pipeline.prepare_parameters(
-    scan=scan,
-    bandwidth=2e6,
-    bandpass_rf=bandpass_rf,
-)
-for raw_data in tqdm(raw_data_sequence):
-    output = pipeline(data=raw_data, **params)
-    image = output.pop("data")
-    params["maxval"] = output.pop("maxval")
-    image, _ = scan_convert_2d(
-        image,
-        rho_range=(0, image.shape[0]),
-        theta_range=scan.theta_range,
-        resolution=0.1,
-        fill_value=np.nan,
-        order=0,
-    )
-    images.append(ops.convert_to_numpy(image))
-_images = np.stack(images, axis=0)
-_images = translate(_images, scan.dynamic_range, (0, 255))
-_images = np.clip(_images, 0, 255).astype(np.uint8)
+    with zea.File(target_sequence) as file:
+        raw_data_sequence, scan, probe = preload_data(
+            file,
+            n_frames,
+            data_type="data/raw_data",
+            type="diverging",
+        )
 
-save_to_gif(_images, "output/diverging.gif", fps=agent_config.io_config.gif_fps)
-plt.imshow(
-    images[24], cmap="gray", vmin=scan.dynamic_range[0], vmax=scan.dynamic_range[1]
-)
-plt.axis("off")
-plt.savefig("output/diverging.png", dpi=300, bbox_inches="tight")
-zea.log.info("Saved diverging frame to output/diverging.png")
+    bandpass_rf = scipy.signal.firwin(
+        numtaps=128,
+        cutoff=np.array([0.5, 1.5]) * scan.center_frequency,
+        pass_zero="bandpass",
+        fs=scan.sampling_frequency,
+    )
+    scan.polar_limits = list(np.deg2rad([-45, 45]))
+    scan.grid_size_x = grid_width
+    scan.dynamic_range = dynamic_range
+    scan.fill_value = float(scan.dynamic_range[0])
+    params = pipeline.prepare_parameters(
+        scan=scan,
+        bandwidth=2e6,
+        bandpass_rf=bandpass_rf,
+    )
+
+    images = []
+    for raw_data in tqdm(raw_data_sequence):
+        output = pipeline(data=raw_data, **params)
+        image = output.pop("data")
+        params["maxval"] = output.pop("maxval")
+        image, _ = scan_convert_2d(
+            image,
+            rho_range=(0, image.shape[0]),
+            theta_range=scan.theta_range,
+            resolution=0.1,
+            fill_value=np.nan,
+            order=0,
+        )
+        images.append(ops.convert_to_numpy(image))
+    images = np.stack(images, axis=0)
+
+    return images
+
+
+if __name__ == "__main__":
+    dynamic_range = [-70, -30]
+    images = diverging_waves(
+        "/mnt/USBMD_datasets/echonet_legacy/val/0X10A5FC19152B50A5.hdf5",
+        dynamic_range=dynamic_range,
+    )
+    np.save("output/diverging.npz", images=images, dynamic_range=dynamic_range)
+
+    _images = translate(images, dynamic_range, (0, 255))
+    _images = np.clip(_images, 0, 255).astype(np.uint8)
+    save_to_gif(_images, "output/diverging.gif", fps=30)
+    plt.imshow(images[24], cmap="gray", vmin=dynamic_range[0], vmax=dynamic_range[1])
+    plt.axis("off")
+    plt.savefig("output/diverging.png", dpi=300, bbox_inches="tight")
+    zea.log.info("Saved diverging frame to output/diverging.png")

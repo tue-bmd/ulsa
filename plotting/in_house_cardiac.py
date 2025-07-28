@@ -16,23 +16,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from active_sampling_temporal import active_sampling_single_file
+from diverging import diverging_waves
 from ulsa.io_utils import postprocess_agent_results, side_by_side_gif
-
-# TODO: this is a bit hacky
-print("First running diverging.py...")
-from diverging import dynamic_range as diverging_dynamic_range
-from diverging import images as diverging_images
 
 MAKE_GIF = True
 FRAME_IDX = 24
+FRAME_CUTOFF = 39
 DROP_FIRST_N_FRAMES = 2  # drop first 2 frames to avoid artifacts (from gif only!)
 
-frame_cutoff = FRAME_IDX + 1 if not MAKE_GIF else None
-override_config = (
-    dict(io_config=dict(frame_cutoff=frame_cutoff)) if frame_cutoff else None
+override_config = dict(io_config=dict(frame_cutoff=FRAME_CUTOFF))
+target_sequence = (
+    "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"
 )
 results, _, _, _, agent, agent_config, _ = active_sampling_single_file(
-    "configs/cardiac_112_3_frames.yaml", override_config=override_config
+    "configs/cardiac_112_3_frames.yaml",
+    target_sequence=target_sequence,
+    override_config=override_config,
 )
 image_range = agent.input_range
 
@@ -86,6 +85,21 @@ measurements = postprocess_agent_results(
     image_range=image_range,
     scan_convert_resolution=scan_convert_resolution,
     fill_value="transparent",
+)
+
+diverging_dynamic_range = [-70, -30]
+diverging_images = diverging_waves(
+    target_sequence, FRAME_CUTOFF, diverging_dynamic_range
+)
+
+np.savez(
+    "output/in_house_cardiac.npz",
+    targets=targets,
+    reconstructions=reconstructions,  # TODO: maybe without reconstruction_sharpness_std?
+    measurements=measurements,
+    diverging_images=diverging_images,
+    diverging_dynamic_range=diverging_dynamic_range,
+    image_range=image_range,
 )
 
 exts = ["png", "pdf"]
