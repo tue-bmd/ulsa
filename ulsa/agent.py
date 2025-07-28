@@ -14,6 +14,7 @@ from ulsa.buffer import FrameBuffer, lifo_shift
 from ulsa.pfield import lines_to_pfield
 from ulsa.selection import DownstreamTaskSelection
 from zea.agent.selection import (
+    CovarianceSamplingLines,
     EquispacedLines,
     GreedyEntropy,
     LinesActionModel,
@@ -135,7 +136,7 @@ class AgentState:
 def get_initial_action_selection_fn(
     action_selector: LinesActionModel, initial_selection_strategy="uniform_random"
 ):
-    if isinstance(action_selector, GreedyEntropy):
+    if isinstance(action_selector, (GreedyEntropy, CovarianceSamplingLines)):
         selector_class: MaskActionModel = action_selection_registry[
             initial_selection_strategy
         ]
@@ -185,6 +186,10 @@ def action_selection_wrapper(action_selector: LinesActionModel):
 
         def action_selection(particles, current_lines, seed):
             return action_selector.sample(seed=seed), None
+    elif isinstance(action_selector, CovarianceSamplingLines):
+
+        def action_selection(particles, current_lines, seed):
+            return action_selector.sample(particles=particles, seed=seed), None
     else:
         raise UserWarning("Invalid action selection strategy")
 
