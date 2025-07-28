@@ -102,6 +102,7 @@ from ulsa.agent import reset_agent_state, setup_agent
 from ulsa.downstream_task import compute_dice_score
 from ulsa.io_utils import make_save_dir
 from ulsa.metrics import Metrics
+from ulsa.downstream_task import EchoNetLVHSegmentation
 from zea import Config, Dataset, init_device, log, set_data_paths
 from zea.config import Config
 from zea.data.augmentations import RandomCircleInclusion
@@ -341,7 +342,7 @@ def benchmark(
         )
 
         target_sequence_preprocessed = zea.utils.translate(target_sequence[..., None], dynamic_range, (-1, 1))
-        downstream_task, targets_dst, reconstructions_dst = apply_downstream_task(agent_config, target_sequence_preprocessed, results.reconstructions)
+        downstream_task, targets_dst, reconstructions_dst, _ = apply_downstream_task(agent_config, target_sequence_preprocessed, results.belief_distributions)
 
         denormalized = results.to_uint8(agent.input_range)
         metrics_results = metrics.eval_metrics(
@@ -547,6 +548,8 @@ def run_benchmark(
             save_dir=sweep_save_dir,
         )
         all_metrics_results = out[0]
+        agent = out[-1]
+        del agent # for garbage collection
 
     return sweep_save_dir, all_metrics_results
 
@@ -602,13 +605,31 @@ def extract_sweep_data(
 
         # Extract masks and images for comparison and plotting
         if (
-            "segmentation_mask_targets" in metrics
-            and "segmentation_mask_reconstructions" in metrics
+            ("segmentation_mask_targets" in metrics
+            and "segmentation_mask_reconstructions" in metrics) 
         ):
-            pred_masks = np.array(metrics["segmentation_mask_reconstructions"])
-            gt_masks = np.array(metrics["segmentation_mask_targets"])
-            dice_score = compute_dice_score(pred_masks, gt_masks)
-            results["dice"][selection_strategy][x_value].append(np.mean(dice_score))
+            # TODO: converting to an array is slow here -- maybe faster way to do it?
+            gt_masks = np.array(metrics[f"segmentation_mask_targets"])
+            pred_masks = np.array(metrics[f"segmentation_mask_reconstructions"])
+            if "dice" in keys_to_extract:
+                dice_score = compute_dice_score(pred_masks, gt_masks)
+                results["dice"][selection_strategy][x_value].append(np.mean(dice_score))
+            elif "heatmap_center_mse" in keys_to_extract:
+                measurement_type = "LVPW" # TODO: hard coded for now
+                gt_bottom_coords, gt_top_coords = EchoNetLVHSegmentation.outputs_to_coordinates(gt_masks, measurement_type)
+                pred_bottom_coords, pred_top_coords = EchoNetLVHSegmentation.outputs_to_coordinates(pred_masks, measurement_type)
+                bottom_mean_euclidean_distance = ops.mean([
+                    ops.sqrt(ops.sum((gt_bottom_coords[i] - pred_bottom_coords[i])**2))
+                    for i in range(len(gt_bottom_coords))
+                ])
+                top_mean_euclidean_distance = ops.mean([
+                    ops.sqrt(ops.sum((gt_top_coords[i] - pred_top_coords[i])**2))
+                    for i in range(len(gt_top_coords))
+                ])
+                # NOTE: currently taking the mean over both points, but could report both
+                results["heatmap_center_mse"][selection_strategy][x_value].append(float((bottom_mean_euclidean_distance + top_mean_euclidean_distance) / 2))
+            # TODO: implement earth mover distance / mse for logits
+
 
             # Store masks and images for plotting
             results["masks"][selection_strategy][x_value].append(
