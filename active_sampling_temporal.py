@@ -120,6 +120,7 @@ from ulsa.io_utils import (
     plot_downstream_task_output_for_presentation,
     plot_frame_overview,
     plot_frames_for_presentation,
+    plot_downstream_task_beliefs
 )
 from ulsa.ops import FirFilter, LowPassFilter, WaveletDenoise, lines_rx_apo
 from ulsa.pfield import (
@@ -188,7 +189,7 @@ def elementwise_append_tuples(t1, t2):
     return tuple(combined)
 
 
-def apply_downstream_task(agent_config, targets, reconstructions):
+def apply_downstream_task(agent_config, targets, belief_distributions):
     if agent_config.downstream_task is not None:
         downstream_task_class: DownstreamTask = downstream_task_registry[
             agent_config.downstream_task
@@ -198,25 +199,28 @@ def apply_downstream_task(agent_config, targets, reconstructions):
 
     if downstream_task_class is None:
         downstream_task = None
-        reconstructions_dst = [None] * len(reconstructions)
+        reconstructions_dst = [None] * len(belief_distributions)
         targets_dst = [None] * len(targets)
     else:
         downstream_task = downstream_task_class(batch_size=agent_config.diffusion_inference.batch_size)
-        reconstructions_dst = batched_map(
+        n_frames, n_particles, h, w, c = ops.shape(belief_distributions)
+        beliefs_stacked = ops.reshape(belief_distributions, (n_frames * n_particles, h, w, c))
+        beliefs_dst = batched_map(
             downstream_task.call_generic,
-            reconstructions,
+            beliefs_stacked,
             jit=True,
             batch_size=agent_config.diffusion_inference.batch_size,
         )
-        # TODO: update range_from to match dataset
-        targets_normalized = zea.utils.translate(targets, range_from=(0, 255), range_to=(-1, 1))
+        _, h, w, c = ops.shape(beliefs_dst)
+        beliefs_dst = ops.reshape(beliefs_dst, (n_frames, n_particles, h, w, c))
+        reconstructions_dst = downstream_task.beliefs_to_reconstruction(beliefs_dst)
         targets_dst = batched_map(
             downstream_task.call_generic,
-            targets_normalized,
+            targets,
             jit=True,
             batch_size=agent_config.diffusion_inference.batch_size,
         )
-    return downstream_task, targets_dst, reconstructions_dst
+    return downstream_task, targets_dst, reconstructions_dst, beliefs_dst
 
 
 @dataclass
@@ -690,8 +694,9 @@ if __name__ == "__main__":
     )
 
     # Load downstream task model and apply to targets and reconstructions for comparison
-    downstream_task, targets_dst, reconstructions_dst = apply_downstream_task(
-        agent_config, validation_sample_frames[..., None], results.reconstructions
+    targets_normalized = zea.utils.translate(validation_sample_frames, range_from=dynamic_range, range_to=(-1, 1))
+    downstream_task, targets_dst, reconstructions_dst, beliefs_dst = apply_downstream_task(
+        agent_config, targets_normalized[..., None], results.belief_distributions
     )
 
     # TODO: maybe more io_config to script args? Since this isn't relevant to benchmarking
@@ -731,14 +736,26 @@ if __name__ == "__main__":
         postfix_filename = Path(dataset_path).stem
         squeezed_results = results.squeeze(-1)
 
-        frame_to_plot = 0
-        plot_belief_distribution_for_presentation(
-            save_dir / run_id,
-            squeezed_results.belief_distributions[frame_to_plot],
-            squeezed_results.masks[frame_to_plot],
-            agent_config.io_config,
-            next_masks=squeezed_results.masks[frame_to_plot + 1],
-        )
+        for frame_to_plot in [0, 1, 2, 3, 4, 5, 6]:
+            plot_belief_distribution_for_presentation(
+                save_dir / run_id,
+                squeezed_results.belief_distributions[frame_to_plot],
+                squeezed_results.masks[frame_to_plot],
+                agent_config.io_config,
+                frame_idx=frame_to_plot,
+                next_masks=squeezed_results.masks[frame_to_plot + 1],
+            )
+            if downstream_task is not None:
+                plot_downstream_task_beliefs(
+                    save_dir / run_id,
+                    squeezed_results.belief_distributions[frame_to_plot],
+                    beliefs_dst[frame_to_plot],
+                    downstream_task,
+                    squeezed_results.target_imgs[frame_to_plot],
+                    np.squeeze(targets_dst)[frame_to_plot],
+                    agent_config.io_config,
+                    frame_to_plot
+                )
 
         plot_frames_for_presentation(
             save_dir / run_id,
