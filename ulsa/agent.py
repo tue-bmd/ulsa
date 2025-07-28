@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Callable, Tuple, Optional
+from typing import Any, Callable, Optional, Tuple
 
 import jax
 import keras
@@ -14,6 +14,7 @@ from ulsa.buffer import FrameBuffer, lifo_shift
 from ulsa.pfield import lines_to_pfield
 from ulsa.selection import DownstreamTaskSelection
 from zea.agent.selection import (
+    CovarianceSamplingLines,
     EquispacedLines,
     GreedyEntropy,
     LinesActionModel,
@@ -109,7 +110,7 @@ class AgentState:
     belief_distribution: Any  # tensor of shape [n_particles, height, width, 1]: posterior samples at time t
     pipeline_state: Any
     target_pipeline_state: Any
-    saliency_map: Any # heatmap used to make action selection decisions
+    saliency_map: Any  # heatmap used to make action selection decisions
 
     def tree_flatten(self):
         # All fields are dynamic
@@ -135,7 +136,7 @@ class AgentState:
 def get_initial_action_selection_fn(
     action_selector: LinesActionModel, initial_selection_strategy="uniform_random"
 ):
-    if isinstance(action_selector, GreedyEntropy):
+    if isinstance(action_selector, (GreedyEntropy, CovarianceSamplingLines)):
         selector_class: MaskActionModel = action_selection_registry[
             initial_selection_strategy
         ]
@@ -162,12 +163,12 @@ def action_selection_wrapper(action_selector: LinesActionModel):
 
     # Makes sure signature is the same for all action selection strategies
     if isinstance(action_selector, DownstreamTaskSelection):
+
         def action_selection(particles, current_lines, seed):
-            selected_lines, mask, salience = action_selector.sample(
-                particles=particles
-            )
+            selected_lines, mask, salience = action_selector.sample(particles=particles)
             return (selected_lines, mask), salience
     elif isinstance(action_selector, GreedyEntropy):
+
         def action_selection(particles, current_lines, seed):
             return action_selector.sample(particles=particles), None
     elif isinstance(action_selector, EquispacedLines):
@@ -176,12 +177,19 @@ def action_selection_wrapper(action_selector: LinesActionModel):
             if current_lines is None:
                 return action_selector.initial_sample_stateless(), None
             else:
-                return action_selector.sample_stateless(current_lines=current_lines), None
+                return action_selector.sample_stateless(
+                    current_lines=current_lines
+                ), None
 
         action_selection = selection
     elif isinstance(action_selector, UniformRandomLines):
+
         def action_selection(particles, current_lines, seed):
             return action_selector.sample(seed=seed), None
+    elif isinstance(action_selector, CovarianceSamplingLines):
+
+        def action_selection(particles, current_lines, seed):
+            return action_selector.sample(particles=particles, seed=seed), None
     else:
         raise UserWarning("Invalid action selection strategy")
 
@@ -196,7 +204,9 @@ def action_selection_wrapper(action_selector: LinesActionModel):
             particles = ops.expand_dims(particles, axis=0)
 
         # Run the action selection function
-        (selected_lines, mask_t), saliency_map = action_selection(particles, current_lines, seed)
+        (selected_lines, mask_t), saliency_map = action_selection(
+            particles, current_lines, seed
+        )
 
         # Ensure the output has the correct shape
         selected_lines = ops.squeeze(selected_lines, axis=0)  # remove batch dim
@@ -234,7 +244,9 @@ def action_selection_pre_post(
             particles = pre(particles)
 
         # Call action selection function
-        selected_lines, mask_t, saliency_map = action_selector(particles, current_lines, seed)
+        selected_lines, mask_t, saliency_map = action_selector(
+            particles, current_lines, seed
+        )
 
         # Apply post function
         mask_t = post(mask_t)
@@ -276,7 +288,7 @@ def reset_agent_state(agent: Agent, seed, batch_size=None):
         belief_distribution=None,
         pipeline_state={},
         target_pipeline_state={},
-        saliency_map=saliency_map
+        saliency_map=saliency_map,
     )
 
 
@@ -458,7 +470,7 @@ def setup_agent(
         assert pfield is not None, "pfield must be provided"
         # TODO: is resizing the pfield fine?
         pfield = ops.image.resize(
-            pfield,  # (n_tx, n_z, n_x)
+            pfield,  # (n_tx, grid_size_z, grid_size_x)
             agent_config.action_selection.shape,
             interpolation="bilinear",
             antialias=True,
@@ -581,7 +593,7 @@ def recover(
         posterior_samples=new_posterior_samples,
         belief_distribution=belief_distribution,
         seed=base_seed,
-        saliency_map=saliency_map
+        saliency_map=saliency_map,
     )
 
     return recovered_frame, new_agent_state

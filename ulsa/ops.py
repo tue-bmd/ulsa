@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import jax
 import numpy as np
 from keras import ops
@@ -53,6 +55,47 @@ def wavelet_denoise_full(data, axis, **kwargs):
     return np.apply_along_axis(lambda x: wavelet_denoise_rf(x, **kwargs), axis, data)
 
 
+class BM3DDenoiser(zea.ops.Operation):
+    """Block matching 3D denoiser."""
+
+    def __init__(self, sigma, stage="all_stages", **kwargs):
+        super().__init__(**kwargs, jittable=False)
+        import bm3d  # pip install bm3d
+
+        self.sigma = sigma
+        str_to_stage = {
+            "hard_thresholding": bm3d.BM3DStages.HARD_THRESHOLDING,
+            "all_stages": bm3d.BM3DStages.ALL_STAGES,
+        }
+
+        self.stage = str_to_stage[stage]
+
+    def call(self, **kwargs):
+        import bm3d  # pip install bm3d
+
+        image = kwargs[self.key]
+        denoised_image = bm3d.bm3d(image, self.sigma, stage_arg=self.stage)
+
+        return {self.output_key: denoised_image}
+
+
+class Sharpen(zea.ops.Operation):
+    """Sharpen an image using unsharp masking."""
+
+    def __init__(self, sigma=1.0, amount=1.0, **kwargs):
+        super().__init__(**kwargs, jittable=False)
+        self.sigma = sigma
+        self.amount = amount
+
+    def call(self, **kwargs):
+        from skimage.filters import unsharp_mask  # pip install scikit-image
+
+        image = kwargs[self.key]
+        sharpened_image = unsharp_mask(image, sigma=self.sigma, amount=self.amount)
+
+        return {self.output_key: sharpened_image}
+
+
 class WaveletDenoise(zea.ops.Operation):
     def __init__(self, wavelet="db4", level=4, threshold_factor=0.1, axis=-3):
         super().__init__(jittable=False)
@@ -97,7 +140,7 @@ def iq2doppler(
     """Compute Doppler from packet of I/Q Data.
 
     Args:
-        data (ndarray): I/Q complex data of shape (n_z, n_x, n_frames).
+        data (ndarray): I/Q complex data of shape (grid_size_z, grid_size_x, n_frames).
             n_frames corresponds to the ensemble length used to compute
             the Doppler signal.
         center_frequency (float): Center frequency of the ultrasound probe in Hz.
@@ -112,7 +155,7 @@ def iq2doppler(
             and the next frame.
 
     Returns:
-        doppler_velocities (ndarray): Doppler velocity map of shape (n_z, n_x).
+        doppler_velocities (ndarray): Doppler velocity map of shape (grid_size_z, grid_size_x).
 
     """
     assert data.ndim == 3, "Data must be a 3-D array"
@@ -157,7 +200,7 @@ def tissue_doppler_strain_rate(velocity_map, axis=0, spacing=1.0, method="centra
     Compute tissue strain rate (velocity gradient) from a tissue Doppler velocity map.
 
     Args:
-        velocity_map (ndarray): Tissue velocity map (e.g., from Doppler), shape (n_z, n_x).
+        velocity_map (ndarray): Tissue velocity map (e.g., from Doppler), shape (grid_size_z, grid_size_x).
         axis (int): Axis along which to compute the gradient (default: 0, axial/z).
         spacing (float): Physical distance between points along the axis (in mm or m).
         method (str): Gradient method: "central" (default), "forward", or "backward".
@@ -246,18 +289,63 @@ class LowPassFilter(FirFilter):
         return super().call(fir_filter_taps=lpf, **kwargs)
 
 
-def lines_rx_apo(n_tx, n_z, n_x):
+class HistogramMatching(zea.ops.Operation):
+    """Histogram matching operation."""
+
+    def __init__(self, reference_image, dynamic_range, **kwargs):
+        super().__init__(**kwargs, jittable=False)
+        self.reference_image = reference_image
+        self.dynamic_range = dynamic_range
+
+    def call(self, **kwargs):
+        from skimage import exposure  # pip install scikit-image
+
+        image = kwargs[self.key]
+
+        matched_image = exposure.match_histograms(image, self.reference_image)
+
+        return {self.output_key: matched_image, "dynamic_range": self.dynamic_range}
+
+
+class HistogramMatchingForModel(HistogramMatching):
+    def __init__(self, config_path: str, frame_idx: int = 0, **kwargs):
+        config = zea.Config.from_yaml(config_path)
+        data_paths = zea.set_data_paths("/ulsa/users.yaml")  # TODO hardcoded
+        dataset_folder = data_paths.data_root / config.data.train_folder
+        files = Path(dataset_folder).glob("*.hdf5")
+        reference_path = next(iter(files))
+        with zea.File(reference_path) as file:
+            reference_image = file.load_data(config.data.hdf5_key, indices=frame_idx)
+        super().__init__(reference_image, **kwargs)
+
+
+class LogCompressNoClip(zea.ops.Operation):
+    """Logarithmic compression of data."""
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+
+        small_number = ops.convert_to_tensor(1e-16, dtype=data.dtype)
+        data = ops.where(data == 0, small_number, data)
+        compressed_data = 20 * ops.log10(data)
+
+        return {self.output_key: compressed_data}
+
+
+def lines_rx_apo(n_tx, grid_size_z, grid_size_x):
     """
     Create a receive apodization for line scanning.
     This is a simple apodization that applies a uniform weight to all elements.
 
     Returns:
-        rx_apo: np.ndarray of shape (n_tx, n_z, n_x)
+        rx_apo: np.ndarray of shape (n_tx, grid_size_z, grid_size_x)
     """
-    assert n_x % n_tx == 0, "n_x must be divisible by n_tx for this apodization scheme."
-    step = n_x // n_tx
-    rx_apo = np.zeros((n_tx, n_z, n_x), dtype=np.float32)
-    for tx, line in zip(range(n_tx), range(0, n_x, step)):
+    assert grid_size_x % n_tx == 0, (
+        "grid_size_x must be divisible by n_tx for this apodization scheme."
+    )
+    step = grid_size_x // n_tx
+    rx_apo = np.zeros((n_tx, grid_size_z, grid_size_x), dtype=np.float32)
+    for tx, line in zip(range(n_tx), range(0, grid_size_x, step)):
         rx_apo[tx, :, line : line + step] = 1.0
     rx_apo = rx_apo.reshape((n_tx, -1))
     return rx_apo[..., None]  # shape (n_tx, n_pix, 1)

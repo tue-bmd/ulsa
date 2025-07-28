@@ -25,12 +25,6 @@ def parse_args():
         choices=["tensorflow", "torch", "jax"],
     )
     parser.add_argument(
-        "--random_circle_inclusion",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Include a random circle in the target image.",
-    )
-    parser.add_argument(
         "--target_sequence",
         type=str,
         # default="/mnt/z/Ultrasound-BMd/data/oisin/carotid_img/512_128/test/10_cross_2cm_L_0000.img.hdf5",

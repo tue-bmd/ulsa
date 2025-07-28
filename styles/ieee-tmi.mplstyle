@@ -1,0 +1,47 @@
+# ieee-tmi.mplstyle
+
+# Font settings
+font.serif: Times New Roman, Times
+font.family: serif
+mathtext.fontset: dejavuserif
+font.size: 8
+
+# Use LaTeX for math formatting (let's enable on a plot-by-plot basis)
+text.usetex: False
+text.latex.preamble: \usepackage{amsmath} \usepackage{amssymb}
+
+# Axes settings
+axes.labelsize: 8
+axes.titlesize: 10
+axes.linewidth: 0.75
+
+# Tick settings
+xtick.labelsize: 8
+ytick.labelsize: 8
+xtick.major.width: 0.75
+ytick.major.width: 0.75
+xtick.minor.width: 0.5
+ytick.minor.width: 0.5
+
+# Line settings
+lines.linewidth: 1.0
+lines.markersize: 4
+
+# Figure settings
+figure.figsize: 3.5, 2.5  # in inches (two columns: 7.16)
+figure.dpi: 300
+figure.constrained_layout.use: True
+figure.labelsize: 8
+figure.titlesize: 10
+
+# Legend settings
+legend.fontsize: 8
+legend.frameon: False
+
+# Savefig settings
+savefig.dpi: 300
+savefig.format: pdf
+# savefig.bbox: tight  # disabled because this will not respect figsize
+
+# Grid settings
+grid.alpha: 0.3
