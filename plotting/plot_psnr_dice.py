@@ -5,10 +5,10 @@ Makes violin plots of PSNR and DICE scores for the various scan line selection s
 import argparse
 import os
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+import pandas as pd  # pip install pandas
 import scipy.ndimage
 from rich.console import Console
 from rich.table import Table
@@ -76,13 +76,14 @@ def extract_sweep_data(
     strategies_to_plot=None,
     gt_masks=None,
     include_only_these_files=None,
+    ef_lookup=None,
 ):
     """Can be used to load all the metrics from the run_benchmark function."""
     sweep_details_path = os.path.join(sweep_dir, "sweep_details.yaml")
     if not os.path.exists(sweep_details_path):
         raise FileNotFoundError(f"Missing sweep_details.yaml in {sweep_dir}")
 
-    results = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    results = []
 
     # Loop over runs in the sweep directory
     for run_dir in sorted(os.listdir(sweep_dir)):
@@ -144,16 +145,14 @@ def extract_sweep_data(
         ):
             continue
 
-        # Extract prediction masks and images (and skip if not available)
-        if "reconstructions" not in metrics or "masks" not in metrics:
-            continue
-        pred_images = metrics["reconstructions"]
-
-        # Store masks and images in results
-        # TODO: what is this used for @OisinNolan?
-        # results["masks"][selection_strategy][x_value].append(
-        #     {"masks": pred_masks, "x_scan_converted": pred_images, "run_dir": run_path}
-        # )
+        # Get EF value
+        filename = Path(target_file).stem
+        if ef_lookup is not None:
+            if filename not in ef_lookup:
+                log.warning(f"No EF data found for {filename}")
+            ef_value = ef_lookup[filename]
+        else:
+            ef_value = None
 
         # Compute DICE if ground truths available
         if gt_masks is not None and target_file in gt_masks:
@@ -163,11 +162,15 @@ def extract_sweep_data(
             gt_masks_array = np.array(gt_sequence["masks"])
             gt_masks_array = np.squeeze(gt_masks_array, axis=1)
             dice_score = compute_dice_score(pred_masks, gt_masks_array)
+            mean_dice = np.mean(dice_score)
+        else:
+            mean_dice = None
 
             # Store mean DICE over patient frames
-            results["dice"][selection_strategy][x_value].append(np.mean(dice_score))
+            # results["dice"][selection_strategy][x_value].append(mean_dice)
 
         # Add other metrics
+        metric_results = {}
         for metric_name in keys_to_extract:
             if metric_name not in metrics:
                 continue  # Skip if metric not found
@@ -175,9 +178,21 @@ def extract_sweep_data(
             metric_values = metrics[metric_name]
             if isinstance(metric_values, np.ndarray) and metric_values.size > 0:
                 sequence_means = np.mean(metric_values, axis=-1)
-                results[metric_name][selection_strategy][x_value].append(sequence_means)
+                metric_results[metric_name] = sequence_means
 
-    return results
+        results.append(
+            {
+                "EF": ef_value,
+                "selection_strategy": selection_strategy,
+                "x_value": x_value,
+                "filepath": target_file,
+                "filename": filename,
+                "dice": mean_dice,
+                **metric_results,
+            }
+        )
+
+    return pd.DataFrame(results)
 
 
 def get_ground_truth_masks(fully_observed_path):
@@ -268,34 +283,44 @@ def sort_by_names(combined_results, names):
     return {k: combined_results[k] for k in names if k in combined_results}
 
 
-def recursive_map_to_dict(dictionary):
-    """Recursively convert all values in a dictionary to dict.
-
-    Can be useful to map defaultdicts or other nested structures to regular dicts."""
-    if isinstance(dictionary, dict):
-        return {k: recursive_map_to_dict(v) for k, v in dictionary.items()}
-    else:
-        return dictionary
-
-
 def extract_and_combine_sweep_data(sweep_dirs, *args, **kwargs):
-    combined_results = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    combined_results = []
 
     for sweep_dir in sweep_dirs:
         try:
-            results = extract_sweep_data(sweep_dir, *args, **kwargs)
-
-            # Combine results by extending lists
-            for metric in results:
-                for strategy in results[metric]:
-                    for x_value in results[metric][strategy]:
-                        combined_results[metric][strategy][x_value].extend(
-                            results[metric][strategy][x_value]
-                        )
+            combined_results.append(extract_sweep_data(sweep_dir, *args, **kwargs))
 
         except Exception as e:
             print(f"Failed to process {sweep_dir}: {e}")
-    return combined_results
+    return pd.concat(combined_results, ignore_index=True)  # ignore_index?
+
+
+def df_to_dict(df: pd.DataFrame, metric_name: str, filter_nan=True):
+    """Convert DataFrame to a nested dictionary for plotting.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the results.
+        metric_name (str): Name of the metric to extract.
+        filter_nan (bool): Whether to filter out NaN and None values.
+            Used in our case to drop the failed ground truth segmentation.
+    Returns:
+        dict: Nested dictionary with selection strategies as keys and x_values as sub-keys.
+    """
+    result = {}
+    for _, row in df.iterrows():
+        strategy = row["selection_strategy"]
+        x_value = row["x_value"]
+        value = row[metric_name]
+        if filter_nan and (value is None or np.isnan(value).any()):
+            continue
+
+        if strategy not in result:
+            result[strategy] = {}
+        if x_value not in result[strategy]:
+            result[strategy][x_value] = []
+        result[strategy][x_value].append(value)
+
+    return result
 
 
 if __name__ == "__main__":
@@ -308,9 +333,11 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if Path("./combined_results.npy").exists():
-        print("Loading existing combined results from ./combined_results.npy")
-        combined_results = np.load("./combined_results.npy", allow_pickle=True).item()
+    TEMP_FILE = Path("./plot_psnr_dice.pkl")
+
+    if TEMP_FILE.exists():
+        print(f"Loading existing combined results from {str(TEMP_FILE)}")
+        combined_results = pd.read_pickle(TEMP_FILE)
     else:
         FULLY_OBSERVED_PATH = DATA_FOLDER / "fully_observed_echonet_seg"
         SUBSAMPLED_PATHS = [
@@ -330,8 +357,7 @@ if __name__ == "__main__":
             keys_to_extract=["mse", "psnr", "dice"],
             x_axis_key=args.x_axis,
         )
-        combined_results = recursive_map_to_dict(combined_results)
-        np.save("./combined_results.npy", combined_results)
+        combined_results.to_pickle(TEMP_FILE)
 
     plotter = ViolinPlotter(
         xlabel=get_axis_label(args.x_axis),
@@ -346,7 +372,7 @@ if __name__ == "__main__":
     x_values = [2, 4, 7, 14]
     formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
     plotter.plot(
-        combined_results[metric_name],
+        df_to_dict(combined_results, metric_name),
         save_path=f"./echonet_{metric_name}_violin_plot.pdf",
         x_label_values=x_values,
         metric_name=formatted_metric_name,
@@ -359,7 +385,7 @@ if __name__ == "__main__":
     x_values = [7, 14, 28]
     formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
     plotter.plot(
-        combined_results[metric_name],
+        df_to_dict(combined_results, metric_name),
         save_path=f"./{metric_name}_violin_plot.pdf",
         x_label_values=x_values,
         metric_name=formatted_metric_name,
@@ -374,9 +400,10 @@ if __name__ == "__main__":
         table.add_column("Std", style="yellow")
         table.add_column("Count", style="white")
 
-        for group in combined_results[metric_name].keys():
-            for x_value in natural_sort(combined_results[metric_name][group].keys()):
-                values = combined_results[metric_name][group][x_value]
+        results = df_to_dict(combined_results, metric_name)
+        for group in results.keys():
+            for x_value in natural_sort(results[group].keys()):
+                values = results[group][x_value]
                 mean = np.mean(values)
                 std = np.std(values)
                 count = len(values)

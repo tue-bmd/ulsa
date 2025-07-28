@@ -7,3 +7,4 @@ users.yaml
 .vscode
 *.pdf
 *.npy
+*.pkl

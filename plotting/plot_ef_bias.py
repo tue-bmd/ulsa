@@ -5,6 +5,7 @@ suggesting no bias against outlier patients.
 """
 
 import os
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -12,77 +13,15 @@ import numpy as np
 import pandas as pd  # pip install pandas
 import yaml
 
+sys.path.append("/ulsa")
 
-def load_yaml(filepath):
-    """Load YAML file."""
-    with open(filepath, "r") as f:
-        return yaml.safe_load(f)
-
-
-def get_filename_from_path(filepath):
-    """Extract filename without extension from full path."""
-    return Path(filepath).stem
+from plotting.plot_psnr_dice import extract_and_combine_sweep_data
 
 
 def load_ef_data(csv_path):
     """Load EF data from FileList.csv into a dictionary."""
     df = pd.read_csv(csv_path)
     return dict(zip(df["FileName"], df["EF"]))
-
-
-def extract_psnr_ef_data(sweep_dir, ef_lookup):
-    """Extract PSNR values and match with EF values."""
-    results = []
-
-    for run_dir in sorted(os.listdir(sweep_dir)):
-        run_path = os.path.join(sweep_dir, run_dir)
-        if not os.path.isdir(run_path):
-            continue
-
-        metrics_path = os.path.join(run_path, "metrics.npz")
-        filepath_yaml = os.path.join(run_path, "target_filepath.yaml")
-        config_path = os.path.join(run_path, "config.yaml")
-
-        if not all(
-            os.path.exists(p) for p in [metrics_path, filepath_yaml, config_path]
-        ):
-            continue
-
-        # Load configuration and get num_lines
-        config = load_yaml(config_path)
-        num_lines = config.get("action_selection", {}).get("num_lines_to_sample")
-        selection_strategy = config.get("action_selection", {}).get(
-            "selection_strategy"
-        )
-
-        # Get target filename
-        target_file = load_yaml(filepath_yaml)["target_filepath"]
-        filename = get_filename_from_path(target_file)
-
-        # Get EF value
-        if filename not in ef_lookup:
-            print(f"Warning: No EF data found for {filename}")
-            continue
-
-        ef_value = ef_lookup[filename]
-
-        # Load PSNR values
-        metrics = np.load(metrics_path, allow_pickle=True)
-        if "psnr" in metrics:
-            psnr_values = metrics["psnr"]
-            if isinstance(psnr_values, np.ndarray) and psnr_values.size > 0:
-                mean_psnr = np.mean(psnr_values)
-                results.append(
-                    {
-                        "EF": ef_value,
-                        "PSNR": mean_psnr,
-                        "num_lines": num_lines,
-                        "strategy": selection_strategy,
-                        "filename": filename,
-                    }
-                )
-
-    return pd.DataFrame(results)
 
 
 def plot_ef_psnr_correlation(df, save_path=None):
@@ -104,15 +43,15 @@ def plot_ef_psnr_correlation(df, save_path=None):
     ax_marg_y = fig.add_subplot(gs[1, 1], sharey=ax_joint)
 
     # Plot scatter by strategy
-    strategies = df["strategy"].unique()
+    strategies = df["selection_strategy"].unique()
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
     markers = ["o", "s", "D", "^", "v"]
 
     for idx, strategy in enumerate(strategies):
-        mask = df["strategy"] == strategy
+        mask = df["selection_strategy"] == strategy
         ax_joint.scatter(
             df[mask]["EF"],
-            df[mask]["PSNR"],
+            df[mask]["psnr"],
             alpha=0.7,
             label=strategy,
             color=colors[idx % len(colors)],
@@ -120,14 +59,14 @@ def plot_ef_psnr_correlation(df, save_path=None):
             s=20,  # Smaller markers for paper
         )
 
-    # Add correlation line
-    z = np.polyfit(df["EF"], df["PSNR"], 1)
-    p = np.poly1d(z)
-    x_range = np.linspace(df["EF"].min(), df["EF"].max(), 100)
-    ax_joint.plot(x_range, p(x_range), "r--", alpha=0.8, linewidth=1)
+        # Add correlation line
+        z = np.polyfit(df[mask]["EF"], df[mask]["psnr"], 1)
+        p = np.poly1d(z)
+        x_range = np.linspace(df[mask]["EF"].min(), df[mask]["EF"].max(), 100)
+        ax_joint.plot(x_range, p(x_range), "r--", alpha=0.8, linewidth=1)
 
     # Calculate correlation coefficient
-    corr = df["EF"].corr(df["PSNR"])
+    corr = df[mask]["EF"].corr(df["psnr"])
     exp = int(np.floor(np.log10(abs(corr))))
     mantissa = corr / (10**exp)
     ax_joint.text(
@@ -136,32 +75,33 @@ def plot_ef_psnr_correlation(df, save_path=None):
         f"r = {mantissa:.2f}×10$^{{{exp}}}$",
         transform=ax_joint.transAxes,
     )
+    # fig.legend()
 
     # Plot marginal distributions using KDE
     from scipy.stats import gaussian_kde
 
     for idx, strategy in enumerate(strategies):
-        mask = df["strategy"] == strategy
+        mask = df["selection_strategy"] == strategy
         color = colors[idx % len(colors)]
 
         # X-axis histogram and KDE
         ax_marg_x.hist(df[mask]["EF"], bins=15, alpha=0.5, density=True, color=color)
         kde_x = gaussian_kde(df[mask]["EF"])
-        x_range = np.linspace(df["EF"].min(), df["EF"].max(), 100)
+        x_range = np.linspace(df[mask]["EF"].min(), df[mask]["EF"].max(), 100)
         ax_marg_x.plot(x_range, kde_x(x_range), color=color, linewidth=1)
         ax_marg_x.fill_between(x_range, kde_x(x_range), alpha=0.3, color=color)
 
         # Y-axis histogram and KDE
         ax_marg_y.hist(
-            df[mask]["PSNR"],
+            df[mask]["psnr"],
             bins=15,
             alpha=0.5,
             density=True,
             orientation="horizontal",
             color=color,
         )
-        kde_y = gaussian_kde(df[mask]["PSNR"])
-        y_range = np.linspace(df["PSNR"].min(), df["PSNR"].max(), 100)
+        kde_y = gaussian_kde(df[mask]["psnr"])
+        y_range = np.linspace(df["psnr"].min(), df["psnr"].max(), 100)
         ax_marg_y.plot(kde_y(y_range), y_range, color=color, linewidth=1)
         ax_marg_y.fill_betweenx(y_range, kde_y(y_range), alpha=0.3, color=color)
 
@@ -191,26 +131,46 @@ def plot_ef_psnr_correlation(df, save_path=None):
 
 
 if __name__ == "__main__":
-    SWEEP_PATH = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_out/ef_bias_2/sweep_2025_03_27_135536"
+    DATA_ROOT = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data"
+    DATA_FOLDER = Path(DATA_ROOT) / "Wessel/output/lud/ULSA_benchmarks"
+    SUBSAMPLED_PATHS = [
+        DATA_FOLDER / "sharding_sweep_2025-05-30_08-56-07",
+        DATA_FOLDER / "sharding_sweep_2025-06-04_13-52-43",
+    ]
     EF_CSV_PATH = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/USBMD_datasets/_RAW/EchoNet-Dynamic/FileList.csv"
     SAVE_ROOT = "."
 
-    # Load EF lookup table
-    ef_lookup = load_ef_data(EF_CSV_PATH)
+    if Path("plot_ef_bias.pkl").exists():
+        print("Loading cached results from plot_ef_bias.pkl")
+        results_df = pd.read_pickle("plot_ef_bias.pkl")
+    else:
+        # Load EF lookup table
+        ef_lookup = load_ef_data(EF_CSV_PATH)
 
-    # Extract PSNR and EF data
-    results_df = extract_psnr_ef_data(SWEEP_PATH, ef_lookup)
+        # Extract PSNR and EF data
+        results_df = extract_and_combine_sweep_data(
+            SUBSAMPLED_PATHS, keys_to_extract=["psnr"], ef_lookup=ef_lookup
+        )
+
+    df = results_df[results_df["x_value"] == 14]
 
     # Create plots
     with plt.style.context("styles/ieee-tmi.mplstyle"):
-        plot_ef_psnr_correlation(
-            results_df, save_path=os.path.join(SAVE_ROOT, "ef_psnr_correlation.pdf")
-        )
+        strategies = df["selection_strategy"].unique()
+        for strategy in strategies:
+            mask = df["selection_strategy"] == strategy
+            for ext in [".pdf", ".png"]:
+                plot_ef_psnr_correlation(
+                    df[mask],
+                    save_path=os.path.join(
+                        SAVE_ROOT, f"ef_psnr_correlation_{strategy}{ext}"
+                    ),
+                )
 
     # Print summary statistics
     print("\nSummary Statistics:")
     print(
-        results_df.groupby("strategy").agg(
-            {"PSNR": ["mean", "std"], "EF": ["count", "mean", "std"]}
+        results_df.groupby("selection_strategy").agg(
+            {"psnr": ["mean", "std"], "EF": ["count", "mean", "std"]}
         )
     )

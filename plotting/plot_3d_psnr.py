@@ -1,15 +1,14 @@
 import argparse
 import os
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-import yaml
+import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
-from zea import Config, init_device
+from zea import init_device
 
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
@@ -18,15 +17,12 @@ if __name__ == "__main__":
 
 # Import plotting constants/utilities from plot_psnr_dice.py
 from plotting.plot_psnr_dice import (
-    AXIS_LABEL_MAP,
     METRIC_NAMES,
-    STRATEGIES_TO_PLOT,
-    STRATEGY_CANONICAL_MAP,
     STRATEGY_COLORS,
     STRATEGY_NAMES,
-    extract_sweep_data,
+    df_to_dict,
+    extract_and_combine_sweep_data,
     get_axis_label,
-    recursive_map_to_dict,
     sort_by_names,
 )
 from plotting.plot_utils import OverlappingHistogramPlotter, ViolinPlotter
@@ -41,6 +37,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    TEMP_FILE = Path("./plot_3d_psnr.pkl")
+
     # Define your sweep paths here
     SWEEPS = [
         "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_out/3d_test_3_frame/sweep_2025_06_17_092553_947259",
@@ -48,41 +46,18 @@ if __name__ == "__main__":
         "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_out/3d_test_3_frame/sweep_2025_06_17_165304_798534",
     ]
 
-    # Hardcoded list of target filepaths to include (set to None to include all)
-    # INCLUDE_ONLY_THESE_FILES = [
-    #     "/mnt/z/Ultrasound-BMd/data/tristan/elevation_interpolation/data/cleaned/test/002/IM_0033.hdf5",
-    #     "/mnt/z/Ultrasound-BMd/data/tristan/elevation_interpolation/data/cleaned/test/0039_MI_PV_strain/IM_0041.hdf5"
-    #     # Add more filepaths as needed
-    # ]
-    # Set to None to include all
-    INCLUDE_ONLY_THESE_FILES = None
+    keys_to_extract = ["psnr"]
 
-    # Initialize combined results with the same structure as individual results
-    combined_results = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-
-    # Process each subsampled path
-    for subsampled_path in SWEEPS:
-        try:
-            results = extract_sweep_data(
-                subsampled_path,
-                keys_to_extract=["psnr"],  # Only MSE and PSNR
-                x_axis_key=args.x_axis,
-                include_only_these_files=INCLUDE_ONLY_THESE_FILES,
-            )
-
-            # Combine results by extending lists
-            for metric in results:
-                for strategy in results[metric]:
-                    for x_value in results[metric][strategy]:
-                        combined_results[metric][strategy][x_value].extend(
-                            results[metric][strategy][x_value]
-                        )
-
-        except Exception as e:
-            print(f"Failed to process {subsampled_path}: {e}")
-
-    combined_results = recursive_map_to_dict(combined_results)
-    np.save("./combined_results_3d.npy", combined_results)
+    if TEMP_FILE.exists():
+        print(f"Loading existing combined results from {str(TEMP_FILE)}")
+        combined_results = pd.read_pickle(TEMP_FILE)
+    else:
+        combined_results = extract_and_combine_sweep_data(
+            SWEEPS,
+            keys_to_extract=["psnr"],
+            x_axis_key=args.x_axis,
+        )
+        combined_results.to_pickle(TEMP_FILE)
 
     plotter = ViolinPlotter(
         xlabel="# Elevation Planes (out of 48)",
@@ -93,13 +68,18 @@ if __name__ == "__main__":
         context="styles/ieee-tmi.mplstyle",
     )
 
+    results = {}
+    for metric_name in keys_to_extract:
+        results[metric_name] = df_to_dict(combined_results, metric_name)
+    combined_results = results
+
     # PSNR plot
     metric_name = "psnr"
     x_values = [3, 6, 12]
     formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
     plotter.plot(
         sort_by_names(combined_results[metric_name], STRATEGY_NAMES.keys()),
-        save_path=f"./{metric_name}_violin_plot.pdf",
+        save_path=f"./3d_{metric_name}_violin_plot.pdf",
         x_label_values=x_values,
         metric_name=formatted_metric_name,
         order_by_means=False,
@@ -132,7 +112,7 @@ if __name__ == "__main__":
     )
     hist_plotter.plot_overlapping_histograms_by_xvalue(
         combined_results[metric_name],
-        save_path=f"./{metric_name}_overlapping_histograms.pdf",
+        save_path=f"./3d_{metric_name}_overlapping_histograms.pdf",
         x_label_values=x_values,
         metric_name=formatted_metric_name,
         outer_y_label="# Elevation Planes",  # Large label for the stack
