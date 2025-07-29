@@ -1,0 +1,34 @@
+action_selection:
+  n_possible_actions: 48
+  n_actions: 8
+  shape: [400, 48]
+  selection_strategy: "uniform_random"
+  # kwargs:
+  #   average_across_batch: true
+  
+downstream_task: null
+is_3d: true # maybe more elegant way to handle this
+
+diffusion_inference:
+  run_dir: "{output_dir}/ddim/2025_06_16_155010_986984_ddim_train_elevation_multi_frame/zeahub"
+  num_steps: 500
+  initial_step: 450 # [0, num_steps]
+  batch_size: 4 # posterior samples
+  guidance_kwargs:
+    omega: 3
+    initial_omega: 1
+  reconstruction_method: "choose_first" # "choose_first" | "maximum_likelihood" | "mean"
+  hard_project: true
+
+io_config:
+  plot_step_overview: false
+  plot_frame_overview: false
+  plot_frames_for_presentation: true
+  save_target_img: false
+  save_animation: true
+  scan_convert: true
+  scan_conversion_angles: [-45, 45]
+  frame_cutoff: 100
+  gif_fps: 30
+  verbose: false
+  reconstruction_sharpness_std: 0.05

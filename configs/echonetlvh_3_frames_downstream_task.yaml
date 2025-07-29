@@ -9,7 +9,7 @@ action_selection:
 downstream_task: "echonetlvh_segmentation"
 
 diffusion_inference:
-  run_dir: "/mnt/z/Ultrasound-BMd/pretrained/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"
+  run_dir: "{output_dir}/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"
   num_steps: 500
   initial_step: 50 # [0, num_steps]
   batch_size: 4 # posterior samples
