@@ -333,7 +333,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    TEMP_FILE = Path("./plot_psnr_dice.pkl")
+    TEMP_FILE = Path("/tmp/plot_psnr_dice.pkl")
 
     if TEMP_FILE.exists():
         print(f"Loading existing combined results from {str(TEMP_FILE)}")

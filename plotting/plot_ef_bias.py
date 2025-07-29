@@ -140,9 +140,10 @@ if __name__ == "__main__":
     EF_CSV_PATH = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/USBMD_datasets/_RAW/EchoNet-Dynamic/FileList.csv"
     SAVE_ROOT = "."
 
-    if Path("plot_ef_bias.pkl").exists():
-        print("Loading cached results from plot_ef_bias.pkl")
-        results_df = pd.read_pickle("plot_ef_bias.pkl")
+    TEMP_FILE = Path("/tmp/plot_ef_bias.pkl")
+    if Path(TEMP_FILE).exists():
+        print(f"Loading cached results from {TEMP_FILE}")
+        results_df = pd.read_pickle(TEMP_FILE)
     else:
         # Load EF lookup table
         ef_lookup = load_ef_data(EF_CSV_PATH)

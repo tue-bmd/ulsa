@@ -20,18 +20,18 @@ def natural_sort(l: list):
 class ViolinPlotter:
     def __init__(
         self,
-        group_names=None,
-        group_colors=None,
-        xlabel="X",
-        ylabel="Metric",
-        file_ext="pdf",
-        legend_loc="best",
+        group_names: dict = None,
+        group_colors: dict = None,
+        xlabel: str = "X",
+        ylabel: str = "Metric",
+        file_ext: str = "pdf",
+        legend_loc: str = "best",
         legend_bbox=None,
-        figsize=None,
-        context=None,
-        legend_position="top",  # "top" or "right"
-        scatter_kwargs=None,
-        violin_kwargs=None,
+        figsize: tuple = None,
+        context: str = None,
+        legend_position: str = "top",  # "top" or "right"
+        scatter_kwargs: dict = None,
+        violin_kwargs: dict = None,
     ):
         """
         group_names: dict mapping group key to display name

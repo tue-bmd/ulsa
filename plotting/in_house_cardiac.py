@@ -11,6 +11,8 @@ sys.path.append("/ulsa")  # for relative imports
 
 zea.init_device(allow_preallocate=False)
 
+from pathlib import Path
+
 import keras
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,7 +23,7 @@ from ulsa.io_utils import postprocess_agent_results, side_by_side_gif
 
 MAKE_GIF = True
 FRAME_IDX = 24
-FRAME_CUTOFF = 39
+FRAME_CUTOFF = 100
 DROP_FIRST_N_FRAMES = 2  # drop first 2 frames to avoid artifacts (from gif only!)
 
 override_config = dict(io_config=dict(frame_cutoff=FRAME_CUTOFF))
@@ -92,15 +94,19 @@ diverging_images = diverging_waves(
     target_sequence, FRAME_CUTOFF, diverging_dynamic_range
 )
 
+filestem = Path(target_sequence).stem
 np.savez(
-    "output/in_house_cardiac.npz",
+    f"output/{filestem}.npz",
     targets=targets,
     reconstructions=reconstructions,  # TODO: maybe without reconstruction_sharpness_std?
     measurements=measurements,
     diverging_images=diverging_images,
     diverging_dynamic_range=diverging_dynamic_range,
     image_range=image_range,
+    filestem=filestem,
 )
+images = zea.display.to_8bit(targets, image_range, pillow=False)
+zea.utils.save_to_mp4(images, f"output/{filestem}_targets.mp4", fps=5)
 
 exts = ["png", "pdf"]
 with plt.style.context("styles/ieee-tmi.mplstyle"):

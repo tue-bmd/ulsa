@@ -37,7 +37,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    TEMP_FILE = Path("./plot_3d_psnr.pkl")
+    TEMP_FILE = Path("/tmp/plot_3d_psnr.pkl")
 
     # Define your sweep paths here
     SWEEPS = [

@@ -10,7 +10,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 import numpy as np
 import scipy
@@ -112,10 +112,10 @@ from ulsa.io_utils import (
     make_save_dir,
     map_range,
     plot_belief_distribution_for_presentation,
+    plot_downstream_task_beliefs,
     plot_downstream_task_output_for_presentation,
     plot_frame_overview,
     plot_frames_for_presentation,
-    plot_downstream_task_beliefs
 )
 from ulsa.ops import FirFilter, LowPassFilter, WaveletDenoise, lines_rx_apo
 from ulsa.pfield import (
@@ -160,36 +160,16 @@ def hard_projection(image, masked_measurements):
     return ops.where(masked_measurements != 0, masked_measurements, image)
 
 
-def soft_projection(
-    image, measurements, weighting_map, data_range=(-1, 1), mask_range=(0, 1)
+def apply_downstream_task(
+    downstream_task: Optional[Callable], agent_config, targets, belief_distributions
 ):
-    _measurements = translate(measurements, data_range, mask_range)
-    _measurements *= weighting_map
-    _image = translate(image, data_range, mask_range)
-    _image *= 1 - weighting_map
-    combined = _measurements + _image
-    return translate(combined, mask_range, data_range)
-
-
-def elementwise_append_tuples(t1, t2):
-    """
-    Elementwise append tuple of tensors
-
-    t2 tensors will be appended to t1 tensors
-    """
-    assert len(t1) == len(t2)
-    combined = []
-    for e1, e2 in zip(t1, t2):
-        combined.append(ops.concatenate([e1[None, ...], e2]))
-    return tuple(combined)
-
-
-def apply_downstream_task(downstream_task: Optional[Callable], agent_config, targets, belief_distributions):
     if downstream_task is None:
         return None, None, None, None
     else:
         n_frames, n_particles, h, w, c = ops.shape(belief_distributions)
-        beliefs_stacked = ops.reshape(belief_distributions, (n_frames * n_particles, h, w, c))
+        beliefs_stacked = ops.reshape(
+            belief_distributions, (n_frames * n_particles, h, w, c)
+        )
         beliefs_dst = batched_map(
             downstream_task.call_generic,
             beliefs_stacked,
@@ -269,7 +249,7 @@ def run_active_sampling(
     hard_project=False,
     verbose=True,
     post_pipeline=None,
-    pfield: np.ndarray = None
+    pfield: np.ndarray = None,
 ) -> AgentResults:
     if verbose:
         log.info(log.blue("Running active sampling"))
@@ -594,7 +574,7 @@ def active_sampling_single_file(
     data_type: str = None,
     image_range: tuple = None,
     seed: int = 42,
-    override_config=None
+    override_config=None,
 ):
     data_paths = set_data_paths("users.yaml", local=False)
     data_root = data_paths["data_root"]
@@ -687,14 +667,23 @@ def active_sampling_single_file(
     )
 
     if agent_config.downstream_task is not None:
-        downstream_task = downstream_task_registry[agent_config.downstream_task](batch_size = agent_config.diffusion_inference.batch_size)
+        downstream_task = downstream_task_registry[agent_config.downstream_task](
+            batch_size=agent_config.diffusion_inference.batch_size
+        )
     else:
         downstream_task = None
 
     # Load downstream task model and apply to targets and reconstructions for comparison
-    targets_normalized = zea.utils.translate(validation_sample_frames, range_from=dynamic_range, range_to=(-1, 1))
-    downstream_task, targets_dst, reconstructions_dst, beliefs_dst = apply_downstream_task(
-        downstream_task, agent_config, targets_normalized[..., None], results.belief_distributions
+    targets_normalized = zea.utils.translate(
+        validation_sample_frames, range_from=dynamic_range, range_to=(-1, 1)
+    )
+    downstream_task, targets_dst, reconstructions_dst, beliefs_dst = (
+        apply_downstream_task(
+            downstream_task,
+            agent_config,
+            targets_normalized[..., None],
+            results.belief_distributions,
+        )
     )
 
     return (
@@ -782,7 +771,7 @@ def save_results(
                     squeezed_results.target_imgs[frame_to_plot],
                     np.squeeze(targets_dst)[frame_to_plot],
                     agent_config.io_config,
-                    frame_to_plot
+                    frame_to_plot,
                 )
 
         plot_frames_for_presentation(
