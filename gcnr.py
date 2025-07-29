@@ -124,12 +124,44 @@ import matplotlib.pyplot as plt
 
 with plt.style.context("styles/ieee-tmi.mplstyle"):
     fig = plt.figure()
-    for k, gcnr in sort_by_names(relative_gcnr, group_names.keys()).items():
+    markers = ["x", "o", "v", "s", "d", "+"]
+    ls = ["-", "--", ":", "-.", [5, [10, 3]], [0, [3, 1, 1, 1]]]
+    color = [
+        "tab:blue",
+        "tab:orange",
+        "tab:green",
+        "tab:red",
+        "tab:purple",
+        "tab:brown",
+    ]
+    for i, (k, gcnr) in enumerate(
+        sort_by_names(relative_gcnr, group_names.keys()).items()
+    ):
         plt.plot(
             selected_frames,
             gcnr,
+            linestyle="",
+            alpha=0.5,
+            color=color[i % len(color)],
+            marker=markers[i % len(markers)],
+        )
+        # smooth gcnr line
+        plt.plot(
+            selected_frames,
+            np.convolve(gcnr, np.ones(5) / 5, mode="same"),
+            linestyle=ls[i % len(ls)],
+            color=color[i % len(color)],
+            # no marker
+            marker="",
+        )
+        # empty line just for legend
+        plt.plot(
+            [],
+            [],
             label=group_names[k],
-            # linestyle="",
+            linestyle=ls[i % len(ls)],
+            color=color[i % len(color)],
+            marker=markers[i % len(markers)],
         )
 
     plt.xlabel("Frame index [-]")
