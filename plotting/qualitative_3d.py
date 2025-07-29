@@ -87,7 +87,7 @@ for p, run_dir in enumerate(patients):
     #     rho = f["/scan/frustum/rho"][()]
     #     theta = f["/scan/frustum/theta"][()]
     #     phi = f["/scan/frustum/phi"][()]
-    grid = np.load("/ulsa/grid.npz")
+    grid = np.load("/ulsa/styles/grid.npz")
     rho, theta, phi = grid["rho"], grid["theta"], grid["phi"]
     rho_range = (float(np.min(rho)), float(np.max(rho)))
     theta_range = (float(np.min(theta)), float(np.max(theta)))
