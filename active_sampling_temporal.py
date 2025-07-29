@@ -276,7 +276,7 @@ def run_active_sampling(
         agent.print_summary()
 
     # Prepare acquisition function
-    if scan and scan.n_tx > 1:
+    if getattr(scan, "n_tx", None) is not None and scan.n_tx > 1:
         disabled_pfield = ops.ones((scan.grid_size_z * scan.grid_size_x, scan.n_tx))
         if pfield is not None:
             flat_pfield = pfield.reshape(scan.n_tx, -1).swapaxes(0, 1)
@@ -515,7 +515,7 @@ def make_pipeline(
             with_batch_dim=False,
             jit_options=jit_options,
         )
-    else:
+    elif data_type == "data/image":
         pipeline = Pipeline(
             [
                 normalize,
@@ -532,8 +532,10 @@ def make_pipeline(
             jit_options=jit_options,
             with_batch_dim=False,
         )
-
-    if data_type == "data/image_3D":
+    elif data_type == "data/image_3D":
+        pipeline = Pipeline(
+            [normalize, expand_dims], jit_options="pipeline", with_batch_dim=False
+        )
         # transpose so that azimuth dimension is on the outside, like a batch.
         # then we simply apply the 2d DM along all azimuthal angles
         pipeline.append(zea.ops.Transpose((1, 0, 2, 3)))
@@ -654,8 +656,8 @@ def active_sampling_single_file(
         agent_config,
         seed=jax.random.PRNGKey(seed),
         pfield=pfield,
-        jit_mode="recover",
-        # jit_mode=None,
+        # jit_mode="recover",
+        jit_mode=None,
     )
 
     pipeline = make_pipeline(
