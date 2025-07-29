@@ -26,7 +26,7 @@ assume 200 shards -> 7.5min per shard
 
 ```bash
 sbatch --time=00:12:00 --array=0-199 \
-    --output=slurm/slurm-%A_%a.out launch/snellius_entry_sharded.sh \
+    --output=slurm/slurm-%A_%a.out launch/snellius_sharded.sh \
     python benchmarking_scripts/eval_echonet_dynamic.py \
     --append_save_dir "sharding_sweep_$(date +"%Y-%m-%d_%H-%M-%S")" --num_shards 200
 ```
