@@ -43,12 +43,7 @@ class GetAutoDynamicRange(zea.ops.Operation):
         return {"dynamic_range": dynamic_range}
 
 
-def focused_waves(
-    target_sequence,
-    n_frames,
-    dynamic_range=[-70, -10],
-    resize_height=112,
-):
+def focused_waves(target_sequence, n_frames, resize_height=112):
     with zea.File(target_sequence) as file:
         raw_data_sequence, scan, _ = preload_data(
             file,
@@ -142,13 +137,10 @@ if __name__ == "__main__":
     folder = Path("/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/")
     # find all a4ch files
     files = list(folder.glob("*_A4CH_*.hdf5"))
-    n_frames = 50
+    n_frames = None  # all frames
 
-    dynamic_range = [-70, -10]
     for file in files:
-        images, dynamic_range = focused_waves(
-            file, n_frames, dynamic_range=dynamic_range
-        )
+        images, dynamic_range = focused_waves(file, n_frames)
         _images = translate(images, dynamic_range, (0, 255))
         _images = np.clip(_images, 0, 255).astype(np.uint8)
         mp4_path = (save_dir / file.stem).with_suffix(".mp4")
