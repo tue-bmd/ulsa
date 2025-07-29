@@ -56,6 +56,27 @@ if __name__ == "__main__":
         Path("/ulsa/configs/echonet_3_frames.yaml")
     )
 
+    # 41 hours
+    sweep_save_dir, all_metrics_results = run_benchmark(
+        agent_config=ulsa_agent_config,
+        target_dir=TARGET_DIR,
+        save_dir=SAVE_DIR,
+        sweep_params={
+            "action_selection.n_actions": args.n_actions,
+            "action_selection.selection_strategy": [
+                "equispaced",
+                "greedy_entropy",
+                "uniform_random",
+            ],
+            "diffusion_inference.batch_size": [4],
+            "downstream_task": ["echonet_segmentation"],  # just runs additionally
+        },
+        limit_n_samples=None,  # set to None to use all samples
+        limit_n_frames=100,  # makes sure every patient is equally represented
+        num_shards=args.num_shards,
+        shard_index=args.shard_index,
+    )
+
     # 21 hours
     sweep_save_dir, all_metrics_results = run_benchmark(
         agent_config=ulsa_agent_config,
@@ -67,27 +88,6 @@ if __name__ == "__main__":
                 "covariance"
             ],
             "action_selection.kwargs": [{"n_masks": 100000}], # 1e5
-            "diffusion_inference.batch_size": [4],
-            "downstream_task": ["echonet_segmentation"],  # just runs additionally
-        },
-        limit_n_samples=None,  # set to None to use all samples
-        limit_n_frames=100,  # makes sure every patient is equally represented
-        num_shards=args.num_shards,
-        shard_index=args.shard_index,
-    )
-
-    # 41 hours
-    sweep_save_dir, all_metrics_results = run_benchmark(
-        agent_config=ulsa_agent_config,
-        target_dir=TARGET_DIR,
-        save_dir=SAVE_DIR,
-        sweep_params={
-            "action_selection.n_actions": args.n_actions,
-            "action_selection.selection_strategy": [
-                "uniform_random",
-                "greedy_entropy",
-                "equispaced",
-            ],
             "diffusion_inference.batch_size": [4],
             "downstream_task": ["echonet_segmentation"],  # just runs additionally
         },
