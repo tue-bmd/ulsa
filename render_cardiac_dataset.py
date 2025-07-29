@@ -47,9 +47,16 @@ def focused_waves(
     target_sequence,
     n_frames,
     dynamic_range=[-70, -10],
-    grid_width=90,
     resize_height=112,
 ):
+    with zea.File(target_sequence) as file:
+        raw_data_sequence, scan, _ = preload_data(
+            file,
+            n_frames,
+            data_type="data/raw_data",
+            type="focused",
+        )
+
     pipeline = zea.Pipeline(
         [
             FirFilter(axis=-3, filter_key="bandpass_rf"),
@@ -72,24 +79,17 @@ def focused_waves(
             zea.ops.Lambda(
                 ops.image.resize,
                 {
-                    "size": (resize_height, grid_width),
+                    "size": (resize_height, scan.grid_size_x),
                     "interpolation": "bilinear",
                     "antialias": True,
                 },
             ),
             zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)),
+            # zea.ops.ScanConvert(),
         ],
         with_batch_dim=False,
         jit_options="ops",
     )
-
-    with zea.File(target_sequence) as file:
-        raw_data_sequence, scan, probe = preload_data(
-            file,
-            n_frames,
-            data_type="data/raw_data",
-            type="focused",
-        )
 
     bandpass_rf = scipy.signal.firwin(
         numtaps=128,
@@ -98,7 +98,6 @@ def focused_waves(
         fs=scan.sampling_frequency,
     )
     scan.polar_limits = list(np.deg2rad([-45, 45]))
-    scan.grid_size_x = grid_width
     scan.dynamic_range = None
     rx_apo = lines_rx_apo(scan.n_tx, scan.grid_size_z, scan.grid_size_x)
     params = pipeline.prepare_parameters(
@@ -111,7 +110,7 @@ def focused_waves(
         scan_convert_2d, static_argnames=("fill_value", "order")
     )
 
-    image_shape = (resize_height, grid_width)
+    image_shape = (resize_height, scan.grid_size_x)
     coords, _ = compute_scan_convert_2d_coordinates(
         image_shape=image_shape,
         rho_range=(0, image_shape[0]),
