@@ -87,6 +87,9 @@ if __name__ == "__main__":
     TARGET_DIR = data_paths.data_root / "USBMD_datasets" / "echonet" / "val"
     SAVE_DIR = data_paths.output / "ULSA_benchmarks" / "echonet"
 
+    if args.append_save_dir is not None:
+        SAVE_DIR = SAVE_DIR / args.append_save_dir
+
     ulsa_agent_config = Config.from_yaml(Path("/ulsa/configs/echonet_3_frames.yaml"))
 
     # 41 hours
