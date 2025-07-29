@@ -702,7 +702,7 @@ def plot_slices_from_3d_volumes(
             # crop and resize frustum image to fit with other images
             frustum_ax.set_position([0, 0, 2, 2])
             frustum_image = matplotlib_figure_to_numpy(
-                frustum_fig, savefig_kwargs={"dpi": 300, "bbox_inches": "tight"}
+                frustum_fig # , savefig_kwargs={"dpi": 300, "bbox_inches": "tight"}
             )
 
             background_value = frustum_image[0, 0, 0]

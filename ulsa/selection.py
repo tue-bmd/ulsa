@@ -86,7 +86,7 @@ class DownstreamTaskSelection(GreedyEntropy):
             particles (Tensor): Particles of shape (batch_size, n_particles, height, width)
 
         Returns:
-           Tuple[Tensor, Tensor]:
+            Tuple[Tensor, Tensor]:
                 - Newly selected lines as k-hot vectors, shaped (batch_size, n_possible_actions)
                 - Masks of shape (batch_size, img_height, img_width)
         """
@@ -108,3 +108,55 @@ class DownstreamTaskSelection(GreedyEntropy):
             axis=0,
         )
         return selected_lines_k_hot, self.lines_to_im_size(selected_lines_k_hot), pixelwise_contribution_to_var_dst
+
+@action_selection_registry(name="greedy_variance")
+class GreedyVariance(GreedyEntropy):
+    """
+    Greedily select the lines with maximum variance.
+    """
+    def __init__(
+        self,
+        n_actions: int,
+        n_possible_actions: int,
+        img_width: int,
+        img_height: int,
+        mean: float = 0,
+        std_dev: float = 1,
+        num_lines_to_update: int = 5,
+        average_across_batch: bool = False,
+    ):
+        super().__init__(n_actions, n_possible_actions, img_width, img_height, mean, std_dev, num_lines_to_update)
+        self.average_across_batch = average_across_batch
+
+
+    def sample(self, particles):
+        """Sample the action using the greedy variance method.
+
+        Args:
+            particles (Tensor): Particles of shape (batch_size, n_particles, height, width)
+
+        Returns:
+            Tuple[Tensor, Tensor]:
+                - Newly selected lines as k-hot vectors, shaped (batch_size, n_possible_actions)
+                - Masks of shape (batch_size, img_height, img_width)
+        """
+        pixelwise_variance = ops.var(particles, axis=1) # [batch_size, height, width]
+        # NOTE: we compute the linewise variance as the sum of pixelwise variances. 
+        # Since we're using variance as our entropy, we have that H(X_1, X_2, ...) = H(X_1) + H(X_2) + ...
+        linewise_variance = ops.sum(pixelwise_variance, axis=1) # [batch_size, width]
+        if self.average_across_batch:
+            linewise_variance = ops.mean(linewise_variance, axis=1) # for 3d case [1, width]
+
+        # Greedily select best line, reweight entropies, and repeat
+        all_selected_lines = []
+        for _ in range(self.n_actions):
+            max_contribution_line, linewise_variance = ops.vectorized_map(
+                self.select_line_and_reweight_entropy, linewise_variance
+            )
+            all_selected_lines.append(max_contribution_line)
+
+        selected_lines_k_hot = ops.any(
+            ops.one_hot(all_selected_lines, self.n_possible_actions, dtype=masks._DEFAULT_DTYPE),
+            axis=0,
+        )
+        return selected_lines_k_hot, self.lines_to_im_size(selected_lines_k_hot)

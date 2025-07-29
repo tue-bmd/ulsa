@@ -10,6 +10,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional, Callable
 
 import numpy as np
 import scipy
@@ -183,20 +184,10 @@ def elementwise_append_tuples(t1, t2):
     return tuple(combined)
 
 
-def apply_downstream_task(agent_config, targets, belief_distributions):
-    if agent_config.downstream_task is not None:
-        downstream_task_class: DownstreamTask = downstream_task_registry[
-            agent_config.downstream_task
-        ]
+def apply_downstream_task(downstream_task: Optional[Callable], agent_config, targets, belief_distributions):
+    if downstream_task is None:
+        return None, None, None, None
     else:
-        return None, None, None
-
-    if downstream_task_class is None:
-        downstream_task = None
-        reconstructions_dst = [None] * len(belief_distributions)
-        targets_dst = [None] * len(targets)
-    else:
-        downstream_task = downstream_task_class(batch_size=agent_config.diffusion_inference.batch_size)
         n_frames, n_particles, h, w, c = ops.shape(belief_distributions)
         beliefs_stacked = ops.reshape(belief_distributions, (n_frames * n_particles, h, w, c))
         beliefs_dst = batched_map(
@@ -214,7 +205,7 @@ def apply_downstream_task(agent_config, targets, belief_distributions):
             jit=True,
             batch_size=agent_config.diffusion_inference.batch_size,
         )
-    return downstream_task, targets_dst, reconstructions_dst, beliefs_dst
+        return downstream_task, targets_dst, reconstructions_dst, beliefs_dst
 
 
 @dataclass
@@ -278,7 +269,7 @@ def run_active_sampling(
     hard_project=False,
     verbose=True,
     post_pipeline=None,
-    pfield: np.ndarray = None,
+    pfield: np.ndarray = None
 ) -> AgentResults:
     if verbose:
         log.info(log.blue("Running active sampling"))
@@ -601,7 +592,7 @@ def active_sampling_single_file(
     data_type: str = None,
     image_range: tuple = None,
     seed: int = 42,
-    override_config=None,
+    override_config=None
 ):
     data_paths = set_data_paths("users.yaml", local=False)
     data_root = data_paths["data_root"]
@@ -693,16 +684,23 @@ def active_sampling_single_file(
         pfield=pfield,
     )
 
+    if agent_config.downstream_task is not None:
+        downstream_task = downstream_task_registry[agent_config.downstream_task](batch_size = agent_config.diffusion_inference.batch_size)
+    else:
+        downstream_task = None
+
     # Load downstream task model and apply to targets and reconstructions for comparison
     targets_normalized = zea.utils.translate(validation_sample_frames, range_from=dynamic_range, range_to=(-1, 1))
     downstream_task, targets_dst, reconstructions_dst, beliefs_dst = apply_downstream_task(
-        agent_config, targets_normalized[..., None], results.belief_distributions
+        downstream_task, agent_config, targets_normalized[..., None], results.belief_distributions
     )
+
     return (
         results,
         downstream_task,
         targets_dst,
         reconstructions_dst,
+        beliefs_dst,
         agent,
         agent_config,
         dataset_path,
@@ -714,6 +712,7 @@ def save_results(
     downstream_task,
     targets_dst,
     reconstructions_dst,
+    beliefs_dst,
     agent,
     agent_config,
     dataset_path,
@@ -763,7 +762,7 @@ def save_results(
         postfix_filename = Path(dataset_path).stem
         squeezed_results = results.squeeze(-1)
 
-        for frame_to_plot in [0, 1, 2, 3, 4, 5, 6]:
+        for frame_to_plot in [0]:
             plot_belief_distribution_for_presentation(
                 save_dir / run_id,
                 squeezed_results.belief_distributions[frame_to_plot],
@@ -776,7 +775,7 @@ def save_results(
                 plot_downstream_task_beliefs(
                     save_dir / run_id,
                     squeezed_results.belief_distributions[frame_to_plot],
-                    beliefs_dst[frame_to_plot],
+                    np.squeeze(beliefs_dst[frame_to_plot]),
                     downstream_task,
                     squeezed_results.target_imgs[frame_to_plot],
                     np.squeeze(targets_dst)[frame_to_plot],
@@ -828,6 +827,7 @@ if __name__ == "__main__":
         downstream_task,
         targets_dst,
         reconstructions_dst,
+        beliefs_dst,
         agent,
         agent_config,
         dataset_path,
@@ -844,6 +844,7 @@ if __name__ == "__main__":
         downstream_task,
         targets_dst,
         reconstructions_dst,
+        beliefs_dst,
         agent,
         agent_config,
         dataset_path,

@@ -43,7 +43,7 @@ def overlay_segmentation_on_image_batch(images, segmentation_masks, alpha=0.3):
     images: (N, H, W) uint8
     segmentation_masks: (N, H, W) uint8, values 0 or 255
     Returns: (N, H, W, 3) uint8
-    """
+    """        
     assert images.shape == segmentation_masks.shape, (
         "Images and masks must have same shape"
     )
@@ -264,7 +264,11 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
         # NOTE: we choose 0.5 here as a hard-coded cutoff for the proportion of 
         # beliefs that need to agree in order for a pixel to be included in the 
         # reconstruction mask.
-        reconstructions = ops.cast(((ops.mean(belief_distributions, axis=1)) > 0.5), "uint8")
+        # reconstructions = ops.cast(((ops.mean(belief_distributions, axis=1)) > 0.5), "uint8")
+        
+        # NOTE: here we use 'choose first' reconstruction in order to get a segmentation
+        # that is consistent with the first particle video
+        reconstructions = ops.cast((belief_distributions[:, 0, ...] > 0.5), "uint8")
         return reconstructions
 
 

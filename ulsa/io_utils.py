@@ -552,7 +552,7 @@ def plot_downstream_task_beliefs(
     beliefs_with_mask = downstream_task.postprocess_for_visualization(belief_distribution, beliefs_dst)
 
     # Prepare mask agreement: sum of beliefs_dst masks
-    mask_agreement = ops.sum(beliefs_dst, axis=[0, -1])
+    mask_agreement = ops.sum(beliefs_dst, axis=0)
 
     # Prepare grid of beliefs_with_mask (e.g. 2x2)
     n_beliefs = len(beliefs_with_mask)

@@ -99,10 +99,14 @@ from active_sampling_temporal import (
     run_active_sampling,
 )
 from ulsa.agent import reset_agent_state, setup_agent
-from ulsa.downstream_task import compute_dice_score
 from ulsa.io_utils import make_save_dir
 from ulsa.metrics import Metrics
-from ulsa.downstream_task import EchoNetLVHSegmentation
+from ulsa.downstream_task import (
+    DownstreamTask,
+    downstream_task_registry,
+    EchoNetLVHSegmentation,
+    compute_dice_score
+)
 from zea import Config, Dataset, init_device, log, set_data_paths
 from zea.config import Config
 from zea.data.augmentations import RandomCircleInclusion
@@ -302,6 +306,11 @@ def benchmark(
             image_range=[0, 255],
         )
 
+    if agent_config.downstream_task is not None:
+        downstream_task = downstream_task_registry[agent_config.downstream_task](batch_size = agent_config.diffusion_inference.batch_size)
+    else:
+        downstream_task = None
+
     if file_indices is None:
         file_indices = range(len(dataset))
     if isinstance(file_indices, int):
@@ -338,11 +347,11 @@ def benchmark(
             probe,
             hard_project=agent_config.diffusion_inference.hard_project,
             verbose=False,
-            post_pipeline=post_pipeline,
+            post_pipeline=post_pipeline
         )
 
         target_sequence_preprocessed = zea.utils.translate(target_sequence[..., None], dynamic_range, (-1, 1))
-        downstream_task, targets_dst, reconstructions_dst, _ = apply_downstream_task(agent_config, target_sequence_preprocessed, results.belief_distributions)
+        downstream_task, targets_dst, reconstructions_dst, _ = apply_downstream_task(downstream_task, agent_config, target_sequence_preprocessed, results.belief_distributions)
 
         denormalized = results.to_uint8(agent.input_range)
         metrics_results = metrics.eval_metrics(

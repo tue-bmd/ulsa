@@ -12,7 +12,7 @@ from rich.table import Table
 import zea
 from ulsa.buffer import FrameBuffer, lifo_shift
 from ulsa.pfield import lines_to_pfield
-from ulsa.selection import DownstreamTaskSelection
+from ulsa.selection import DownstreamTaskSelection, GreedyVariance
 from zea.agent.selection import (
     CovarianceSamplingLines,
     EquispacedLines,
@@ -169,6 +169,9 @@ def action_selection_wrapper(action_selector: LinesActionModel):
             return (selected_lines, mask), salience
     elif isinstance(action_selector, GreedyEntropy):
 
+        def action_selection(particles, current_lines, seed):
+            return action_selector.sample(particles=particles), None
+    elif isinstance(action_selector, GreedyVariance):
         def action_selection(particles, current_lines, seed):
             return action_selector.sample(particles=particles), None
     elif isinstance(action_selector, EquispacedLines):
