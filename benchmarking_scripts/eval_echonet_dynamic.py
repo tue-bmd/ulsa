@@ -1,7 +1,40 @@
+"""
+Linux-server:
+
+```bash
+./launch/start_container.sh python benchmarking_scripts/eval_echonet_dynamic.py
+```
+
+Snellius
+
+(check comment in snellius_entry.sh to make sure the code is used):
+```bash
+sbatch --time=05:00:00 launch/snellius_entry.sh python benchmarking_scripts/eval_echonet_dynamic.py
+```
+
+Snellius (sharding):
+
+(make sure that the number of shards is actually needed for the sweep)
+
+e.g.
+
+500 files, 9 sweep entries, 100 frames = 450000 frames
+assume 5 fps
+90000s = 1500min
+assume 200 shards -> 7.5min per shard
+
+
+```bash
+sbatch --time=00:12:00 --array=0-199 \
+    --output=slurm/slurm-%A_%a.out launch/snellius_entry_sharded.sh \
+    python benchmarking_scripts/eval_echonet_dynamic.py \
+    --append_save_dir "sharding_sweep_$(date +"%Y-%m-%d_%H-%M-%S")" --num_shards 200
+```
+"""
+
+import argparse
 import os
 import sys
-import argparse
-
 
 if __name__ == "__main__":
     sys.path.append("/ulsa")
@@ -13,11 +46,12 @@ if __name__ == "__main__":
     data_paths = set_data_paths("/ulsa/users.yaml")
 
 from pathlib import Path
+
 import keras
 
+from benchmark_active_sampling_ultrasound import run_benchmark
 from zea import Config
 
-from benchmark_active_sampling_ultrasound import run_benchmark
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run ULSA benchmark for echonet.")
@@ -45,6 +79,7 @@ def parse_args():
     )
     return parser.parse_args()
 
+
 if __name__ == "__main__":
     args = parse_args()
     keras.mixed_precision.set_global_policy("float32")  # echonet-dynamic uses float32
@@ -52,9 +87,7 @@ if __name__ == "__main__":
     TARGET_DIR = data_paths.data_root / "USBMD_datasets" / "echonet" / "val"
     SAVE_DIR = data_paths.output / "ULSA_benchmarks" / "echonet"
 
-    ulsa_agent_config = Config.from_yaml(
-        Path("/ulsa/configs/echonet_3_frames.yaml")
-    )
+    ulsa_agent_config = Config.from_yaml(Path("/ulsa/configs/echonet_3_frames.yaml"))
 
     # 41 hours
     sweep_save_dir, all_metrics_results = run_benchmark(
@@ -84,10 +117,8 @@ if __name__ == "__main__":
         save_dir=SAVE_DIR,
         sweep_params={
             "action_selection.n_actions": args.n_actions,
-            "action_selection.selection_strategy": [
-                "covariance"
-            ],
-            "action_selection.kwargs": [{"n_masks": 100000}], # 1e5
+            "action_selection.selection_strategy": ["covariance"],
+            "action_selection.kwargs": [{"n_masks": 100000}],  # 1e5
             "diffusion_inference.batch_size": [4],
             "downstream_task": ["echonet_segmentation"],  # just runs additionally
         },
