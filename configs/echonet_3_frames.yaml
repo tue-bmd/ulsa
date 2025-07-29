@@ -3,6 +3,7 @@ action_selection:
   n_actions: 7
   shape: [112, 112]
   selection_strategy: "greedy_variance" # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
+  kwargs: {}
 
 downstream_task: "echonet_segmentation"
 
