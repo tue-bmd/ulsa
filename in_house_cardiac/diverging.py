@@ -105,7 +105,7 @@ def diverging_waves(
 if __name__ == "__main__":
     dynamic_range = [-70, -30]
     images = diverging_waves(
-        "/mnt/USBMD_datasets/echonet_legacy/val/0X10A5FC19152B50A5.hdf5",
+        "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5",
         dynamic_range=dynamic_range,
     )
     np.save("output/diverging.npz", images=images, dynamic_range=dynamic_range)

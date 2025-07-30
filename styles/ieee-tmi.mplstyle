@@ -45,3 +45,6 @@ savefig.format: pdf
 
 # Grid settings
 grid.alpha: 0.3
+
+# Set color cycle
+axes.prop_cycle : (cycler('color', ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:brown']) + cycler('ls', ['-', '--', ':', '-.', [5, [10, 3]], [0, [3, 1, 1, 1]]]) + cycler('marker', ['x', 'o', 'v', 's', 'd', '+']))

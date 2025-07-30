@@ -92,49 +92,88 @@ gcnr = gcnr_per_frame(reconstructions, masks1, masks2)
 print(np.mean(gcnr))
 gcnr_all["reconstructions"] = gcnr
 
+
+gcnr_targets = gcnr_all.pop("targets")
+relative_gcnr = {}
+for k, v in gcnr_all.items():
+    relative_gcnr[k] = v - gcnr_targets
+
+
+def sort_by_names(combined_results, names):
+    """Sort combined results by strategy names."""
+    return {k: combined_results[k] for k in names if k in combined_results}
+
+
 group_names = {
+    "reconstructions": "Active Perception",
     "targets": "Focused",
     "diverging_images": "Diverging",
-    "reconstructions": "Active Perception",
 }
 plotter = ViolinPlotter(group_names, xlabel="Subjects")
-plotter.plot(
-    add_layer_to_dict(gcnr_all, "I"),
-    "gcnr.png",
-    x_label_values=["I"],
-    metric_name="gCNR",
-    context="styles/ieee-tmi.mplstyle",
-)
+for ext in [".png", ".pdf"]:
+    plotter.plot(
+        sort_by_names(add_layer_to_dict(relative_gcnr, "I"), group_names.keys()),
+        f"output/gcnr_violin{ext}",
+        x_label_values=["I"],
+        metric_name="gCNR",
+        context="styles/ieee-tmi.mplstyle",
+    )
 
 
 import matplotlib.pyplot as plt
 
-plt.figure()
-plt.plot(
-    selected_frames,
-    gcnr_all["targets"],
-    label=group_names["targets"],
-    marker="o",
-    # linestyle="",
-)
-plt.plot(
-    selected_frames,
-    gcnr_all["diverging_images"],
-    label=group_names["diverging_images"],
-    marker="o",
-    # linestyle="",
-)
-plt.plot(
-    selected_frames,
-    gcnr_all["reconstructions"],
-    label=group_names["reconstructions"],
-    marker="o",
-    # linestyle="",
-)
-plt.xlabel("Frame Index")
-plt.ylabel("gCNR")
-plt.title("gCNR per Frame")
-plt.legend()
-plt.savefig("gcnr_per_frame.png", dpi=300, bbox_inches="tight")
+with plt.style.context("styles/ieee-tmi.mplstyle"):
+    fig = plt.figure()
+    markers = ["x", "o", "v", "s", "d", "+"]
+    ls = ["-", "--", ":", "-.", [5, [10, 3]], [0, [3, 1, 1, 1]]]
+    color = [
+        "tab:blue",
+        "tab:orange",
+        "tab:green",
+        "tab:red",
+        "tab:purple",
+        "tab:brown",
+    ]
+    for i, (k, gcnr) in enumerate(
+        sort_by_names(relative_gcnr, group_names.keys()).items()
+    ):
+        plt.plot(
+            selected_frames,
+            gcnr,
+            linestyle="",
+            alpha=0.5,
+            color=color[i % len(color)],
+            marker=markers[i % len(markers)],
+        )
+        # smooth gcnr line
+        plt.plot(
+            selected_frames,
+            np.convolve(gcnr, np.ones(5) / 5, mode="same"),
+            linestyle=ls[i % len(ls)],
+            color=color[i % len(color)],
+            # no marker
+            marker="",
+        )
+        # empty line just for legend
+        plt.plot(
+            [],
+            [],
+            label=group_names[k],
+            linestyle=ls[i % len(ls)],
+            color=color[i % len(color)],
+            marker=markers[i % len(markers)],
+        )
 
-zea.log.info(f"Saved gCNR plot as {zea.log.yellow('gcnr_per_frame.png')}")
+    plt.xlabel("Frame index [-]")
+    plt.ylabel("Relative gCNR [-]")
+    # plt.title("gCNR per Frame")
+    fig.legend(
+        loc="outside upper center",
+        ncol=2,
+        frameon=False,
+    )
+    plt.grid()
+    plt.savefig("output/gcnr_per_frame.png")
+    plt.savefig("output/gcnr_per_frame.pdf")
+
+zea.log.info(f"Saved gCNR plot as {zea.log.yellow('output/gcnr_per_frame.png')}")
