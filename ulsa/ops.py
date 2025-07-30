@@ -5,6 +5,7 @@ import numpy as np
 from keras import ops
 
 import zea.ops
+from zea.utils import translate
 
 
 def wavelet_denoise_rf(rf_signal, wavelet="db4", level=4, threshold_factor=0.5):
@@ -53,6 +54,88 @@ def wavelet_denoise_full(data, axis, **kwargs):
     """
     # Apply wavelet denoising along the specified axis
     return np.apply_along_axis(lambda x: wavelet_denoise_rf(x, **kwargs), axis, data)
+
+
+class GetAutoDynamicRange(zea.ops.Operation):
+    def __init__(self, low_pct=18, high_pct=95):
+        super().__init__()
+        self.low_pct = low_pct
+        self.high_pct = high_pct
+
+    def call(self, dynamic_range=None, **kwargs):
+        data = kwargs[self.key]
+
+        vmin = dynamic_range[0] if dynamic_range else None
+        vmax = dynamic_range[1] if dynamic_range else None
+
+        if vmin is None:
+            vmin = ops.quantile(data, self.low_pct / 100)
+        if vmax is None:
+            vmax = ops.quantile(data, self.high_pct / 100)
+
+        vmin_db = 20 * ops.log10(vmin)
+        vmax_db = 20 * ops.log10(vmax)
+        dynamic_range = [vmin_db, vmax_db]
+        return {"dynamic_range": dynamic_range}
+
+
+class TranslateDynamicRange(zea.ops.Operation):
+    """Translate data from one range to another."""
+
+    def __init__(self, range_to, **kwargs):
+        super().__init__(**kwargs)
+        self.range_to = range_to
+
+    def call(self, dynamic_range=None, **kwargs):
+        data = kwargs[self.key]
+        translated_data = translate(data, dynamic_range, self.range_to)
+        return {self.output_key: translated_data}
+
+
+class ExpandDims(zea.ops.Operation):
+    """Expand dimensions of the input data."""
+
+    def __init__(self, axis=-1, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        expanded_data = ops.expand_dims(data, axis=self.axis)
+        return {self.output_key: expanded_data}
+
+
+class Squeeze(zea.ops.Operation):
+    """Squeeze dimensions of the input data."""
+
+    def __init__(self, axis=-1, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        squeezed_data = ops.squeeze(data, axis=self.axis)
+        return {self.output_key: squeezed_data}
+
+
+class Resize(zea.ops.Operation):
+    """Resize the input data to a specified shape."""
+
+    def __init__(self, size, interpolation="bilinear", antialias=True, **kwargs):
+        super().__init__(**kwargs)
+        self.size = size
+        self.interpolation = interpolation
+        self.antialias = antialias
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        resized_data = ops.image.resize(
+            data,
+            size=self.size,
+            interpolation=self.interpolation,
+            antialias=self.antialias,
+        )
+        return {self.output_key: resized_data}
 
 
 class BM3DDenoiser(zea.ops.Operation):
@@ -305,6 +388,32 @@ class HistogramMatching(zea.ops.Operation):
         matched_image = exposure.match_histograms(image, self.reference_image)
 
         return {self.output_key: matched_image, "dynamic_range": self.dynamic_range}
+
+
+def match_histogram_roi(src, target, src_roi):
+    """
+    Match the histogram of src to target, using only the ROI in src to compute the mapping,
+    but apply the mapping to the entire src image. Works for float images.
+    """
+    # Get sorted unique values and their counts from the ROI of the source image
+    src_values, src_counts = np.unique(src_roi.ravel(), return_counts=True)
+    # Get sorted unique values and their counts from the entire target image
+    target_values, target_counts = np.unique(target.ravel(), return_counts=True)
+
+    # Compute the cumulative distribution function (CDF) for the ROI of the source
+    src_cdf = np.cumsum(src_counts).astype(np.float64)
+    src_cdf /= src_cdf[-1]
+    # Compute the CDF for the target image
+    target_cdf = np.cumsum(target_counts).astype(np.float64)
+    target_cdf /= target_cdf[-1]
+
+    # Interpolate to find the target values that correspond to the quantiles of the source ROI
+    interp_t_values = np.interp(src_cdf, target_cdf, target_values)
+
+    # Map all pixels in the source image to the new values using linear interpolation
+    matched = np.interp(src.ravel(), src_values, interp_t_values)
+    # Reshape to the original image shape and cast to the original dtype
+    return matched.reshape(src.shape).astype(src.dtype)
 
 
 class HistogramMatchingForModel(HistogramMatching):
