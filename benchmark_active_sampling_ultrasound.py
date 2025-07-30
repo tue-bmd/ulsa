@@ -413,11 +413,13 @@ def benchmark(
 
     return (
         all_metrics_results,
-        downstream_task.output_type(),
+        downstream_task.output_type() if downstream_task is not None else None,
         {
             f"{downstream_task.output_type()}_targets": targets_dst,
             f"{downstream_task.output_type()}_reconstructions": reconstructions_dst,
-        },
+        }  
+        if downstream_task is not None
+        else {},
         recovered_circle_kwargs,
         results,  # last result of loop
         agent,
