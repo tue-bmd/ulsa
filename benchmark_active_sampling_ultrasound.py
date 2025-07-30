@@ -99,14 +99,14 @@ from active_sampling_temporal import (
     run_active_sampling,
 )
 from ulsa.agent import reset_agent_state, setup_agent
-from ulsa.io_utils import make_save_dir
-from ulsa.metrics import Metrics
 from ulsa.downstream_task import (
     DownstreamTask,
-    downstream_task_registry,
     EchoNetLVHSegmentation,
-    compute_dice_score
+    compute_dice_score,
+    downstream_task_registry,
 )
+from ulsa.io_utils import make_save_dir
+from ulsa.metrics import Metrics
 from zea import Config, Dataset, init_device, log, set_data_paths
 from zea.config import Config
 from zea.data.augmentations import RandomCircleInclusion
@@ -307,7 +307,9 @@ def benchmark(
         )
 
     if agent_config.downstream_task is not None:
-        downstream_task = downstream_task_registry[agent_config.downstream_task](batch_size = agent_config.diffusion_inference.batch_size)
+        downstream_task = downstream_task_registry[agent_config.downstream_task](
+            batch_size=agent_config.diffusion_inference.batch_size
+        )
     else:
         downstream_task = None
 
@@ -319,12 +321,8 @@ def benchmark(
     all_metrics_results = []
     for i, file_index in enumerate(file_indices):
         file = dataset[file_index]
-        target_sequence, scan, probe = preload_data(
-            file,
-            n_frames,
-            dataset.key,
-            dynamic_range
-        )
+        target_sequence, scan, probe = preload_data(file, n_frames, dataset.key)
+        scan.dynamic_range = dynamic_range
 
         if circle_augmentation is not None:
             seed, seed_1 = jax.random.split(seed)
@@ -347,11 +345,18 @@ def benchmark(
             probe,
             hard_project=agent_config.diffusion_inference.hard_project,
             verbose=False,
-            post_pipeline=post_pipeline
+            post_pipeline=post_pipeline,
         )
 
-        target_sequence_preprocessed = zea.utils.translate(target_sequence[..., None], dynamic_range, (-1, 1))
-        downstream_task, targets_dst, reconstructions_dst, _ = apply_downstream_task(downstream_task, agent_config, target_sequence_preprocessed, results.belief_distributions)
+        target_sequence_preprocessed = zea.utils.translate(
+            target_sequence[..., None], dynamic_range, (-1, 1)
+        )
+        downstream_task, targets_dst, reconstructions_dst, _ = apply_downstream_task(
+            downstream_task,
+            agent_config,
+            target_sequence_preprocessed,
+            results.belief_distributions,
+        )
 
         denormalized = results.to_uint8(agent.input_range)
         metrics_results = metrics.eval_metrics(
@@ -560,7 +565,7 @@ def run_benchmark(
         )
         all_metrics_results = out[0]
         agent = out[-1]
-        del agent # for garbage collection
+        del agent  # for garbage collection
 
     return sweep_save_dir, all_metrics_results
 
@@ -590,7 +595,9 @@ def extract_sweep_data(
         config_path = os.path.join(run_path, "config.yaml")
         metrics_path = os.path.join(run_path, "metrics.npz")
         filepath_yaml = os.path.join(run_path, "target_filepath.yaml")
-        if not all(os.path.exists(p) for p in [config_path, metrics_path, filepath_yaml]):
+        if not all(
+            os.path.exists(p) for p in [config_path, metrics_path, filepath_yaml]
+        ):
             continue
 
         config = Config.from_yaml(config_path)
@@ -598,7 +605,10 @@ def extract_sweep_data(
         target_file = Config.from_yaml(filepath_yaml)["target_filepath"]
 
         # Optional file filter
-        if include_only_these_files is not None and target_file not in include_only_these_files:
+        if (
+            include_only_these_files is not None
+            and target_file not in include_only_these_files
+        ):
             continue
 
         x_value = get_config_value(config, x_axis_key)
@@ -606,18 +616,23 @@ def extract_sweep_data(
             log.warning(f"Skipping {run_path} due to missing x_axis_key: {x_axis_key}.")
             continue
 
-        selection_strategy = config.get("action_selection", {}).get("selection_strategy")
+        selection_strategy = config.get("action_selection", {}).get(
+            "selection_strategy"
+        )
         if selection_strategy is None:
             log.warning(f"Skipping {run_path} due to missing selection_strategy.")
             continue
 
-        if strategies_to_plot is not None and selection_strategy not in strategies_to_plot:
+        if (
+            strategies_to_plot is not None
+            and selection_strategy not in strategies_to_plot
+        ):
             continue
 
         # Extract masks and images for comparison and plotting
         if (
-            ("segmentation_mask_targets" in metrics
-            and "segmentation_mask_reconstructions" in metrics) 
+            "segmentation_mask_targets" in metrics
+            and "segmentation_mask_reconstructions" in metrics
         ):
             # TODO: converting to an array is slow here -- maybe faster way to do it?
             gt_masks = np.array(metrics[f"segmentation_mask_targets"])
@@ -626,21 +641,39 @@ def extract_sweep_data(
                 dice_score = compute_dice_score(pred_masks, gt_masks)
                 results["dice"][selection_strategy][x_value].append(np.mean(dice_score))
             elif "heatmap_center_mse" in keys_to_extract:
-                measurement_type = "LVPW" # TODO: hard coded for now
-                gt_bottom_coords, gt_top_coords = EchoNetLVHSegmentation.outputs_to_coordinates(gt_masks, measurement_type)
-                pred_bottom_coords, pred_top_coords = EchoNetLVHSegmentation.outputs_to_coordinates(pred_masks, measurement_type)
-                bottom_mean_euclidean_distance = ops.mean([
-                    ops.sqrt(ops.sum((gt_bottom_coords[i] - pred_bottom_coords[i])**2))
-                    for i in range(len(gt_bottom_coords))
-                ])
-                top_mean_euclidean_distance = ops.mean([
-                    ops.sqrt(ops.sum((gt_top_coords[i] - pred_top_coords[i])**2))
-                    for i in range(len(gt_top_coords))
-                ])
+                measurement_type = "LVPW"  # TODO: hard coded for now
+                gt_bottom_coords, gt_top_coords = (
+                    EchoNetLVHSegmentation.outputs_to_coordinates(
+                        gt_masks, measurement_type
+                    )
+                )
+                pred_bottom_coords, pred_top_coords = (
+                    EchoNetLVHSegmentation.outputs_to_coordinates(
+                        pred_masks, measurement_type
+                    )
+                )
+                bottom_mean_euclidean_distance = ops.mean(
+                    [
+                        ops.sqrt(
+                            ops.sum((gt_bottom_coords[i] - pred_bottom_coords[i]) ** 2)
+                        )
+                        for i in range(len(gt_bottom_coords))
+                    ]
+                )
+                top_mean_euclidean_distance = ops.mean(
+                    [
+                        ops.sqrt(ops.sum((gt_top_coords[i] - pred_top_coords[i]) ** 2))
+                        for i in range(len(gt_top_coords))
+                    ]
+                )
                 # NOTE: currently taking the mean over both points, but could report both
-                results["heatmap_center_mse"][selection_strategy][x_value].append(float((bottom_mean_euclidean_distance + top_mean_euclidean_distance) / 2))
+                results["heatmap_center_mse"][selection_strategy][x_value].append(
+                    float(
+                        (bottom_mean_euclidean_distance + top_mean_euclidean_distance)
+                        / 2
+                    )
+                )
             # TODO: implement earth mover distance / mse for logits
-
 
             # Store masks and images for plotting
             results["masks"][selection_strategy][x_value].append(

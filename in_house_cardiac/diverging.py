@@ -14,8 +14,7 @@ import scipy.signal
 from keras import ops
 from tqdm import tqdm
 
-from active_sampling_temporal import preload_data
-from ulsa.ops import FirFilter, LowPassFilter, WaveletDenoise
+from active_sampling_temporal import make_pipeline, preload_data
 from zea.display import scan_convert_2d
 from zea.utils import save_to_gif, translate
 
@@ -23,41 +22,15 @@ from zea.utils import save_to_gif, translate
 def diverging_waves(
     target_sequence,
     n_frames,
-    dynamic_range=[-70, -30],
+    dynamic_range,
     grid_width=90,
     resize_height=112,
 ):
-    pipeline = zea.Pipeline(
-        [
-            FirFilter(axis=-3, filter_key="bandpass_rf"),
-            WaveletDenoise(),  # optional
-            zea.ops.Demodulate(),
-            LowPassFilter(complex_channels=True, axis=-2),  # optional
-            zea.ops.Downsample(2),  # optional
-            zea.ops.PatchedGrid(
-                [
-                    zea.ops.TOFCorrection(),
-                    # zea.ops.PfieldWeighting(),  # optional
-                    zea.ops.DelayAndSum(),
-                ]
-            ),
-            zea.ops.EnvelopeDetect(),
-            zea.ops.Normalize(),
-            zea.ops.LogCompress(),
-            zea.ops.Lambda(lambda x: ops.expand_dims(x, axis=-1)),
-            zea.ops.Lambda(
-                ops.image.resize,
-                {
-                    "size": (resize_height, grid_width),
-                    "interpolation": "bilinear",
-                    "antialias": True,
-                },
-            ),
-            zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)),
-        ],
-        with_batch_dim=False,
-        jit_options="ops",
+    shape = (resize_height, grid_width)
+    pipeline = make_pipeline(
+        "data/raw_data", dynamic_range, dynamic_range, [*shape, 1], shape
     )
+    pipeline.append(zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)))
 
     with zea.File(target_sequence) as file:
         raw_data_sequence, scan, probe = preload_data(
@@ -76,7 +49,6 @@ def diverging_waves(
     scan.polar_limits = list(np.deg2rad([-45, 45]))
     scan.grid_size_x = grid_width
     scan.dynamic_range = dynamic_range
-    scan.fill_value = float(scan.dynamic_range[0])
     params = pipeline.prepare_parameters(
         scan=scan,
         bandwidth=2e6,
@@ -88,27 +60,29 @@ def diverging_waves(
         output = pipeline(data=raw_data, **params)
         image = output.pop("data")
         params["maxval"] = output.pop("maxval")
-        image, _ = scan_convert_2d(
-            image,
-            rho_range=(0, image.shape[0]),
-            theta_range=scan.theta_range,
-            resolution=0.1,
-            fill_value=np.nan,
-            order=0,
-        )
         images.append(ops.convert_to_numpy(image))
     images = np.stack(images, axis=0)
 
-    return images
+    return images, scan
 
 
 if __name__ == "__main__":
     dynamic_range = [-70, -30]
-    images = diverging_waves(
+    images, scan = diverging_waves(
         "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5",
+        n_frames=None,
         dynamic_range=dynamic_range,
     )
-    np.save("output/diverging.npz", images=images, dynamic_range=dynamic_range)
+
+    images, _ = scan_convert_2d(
+        images,
+        rho_range=(0, images.shape[-2]),
+        theta_range=scan.theta_range,
+        resolution=0.1,
+        fill_value=np.nan,
+        order=0,
+    )
+    np.savez("output/diverging.npz", images=images, dynamic_range=dynamic_range)
 
     _images = translate(images, dynamic_range, (0, 255))
     _images = np.clip(_images, 0, 255).astype(np.uint8)

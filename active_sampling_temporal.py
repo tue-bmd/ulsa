@@ -122,6 +122,7 @@ from ulsa.pfield import (
     select_transmits,
     update_scan_for_polar_grid,
 )
+from ulsa.pipeline import make_pipeline
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
 from zea.tensor_ops import batched_map, func_with_one_batch_dim
@@ -248,7 +249,7 @@ def run_active_sampling(
     probe: Probe = None,
     hard_project=False,
     verbose=True,
-    post_pipeline=None,
+    post_pipeline: Pipeline = None,
     pfield: np.ndarray = None,
 ) -> AgentResults:
     if verbose:
@@ -325,6 +326,7 @@ def run_active_sampling(
             return measurements, target, pipeline_state, target_pipeline_state
 
     else:
+        params = pipeline.prepare_parameters(dynamic_range=scan.dynamic_range)
 
         def acquire(
             full_data,
@@ -333,7 +335,7 @@ def run_active_sampling(
             pipeline_state: dict,
             target_pipeline_state: dict,
         ):
-            target = pipeline(data=full_data, **pipeline_state)["data"]
+            target = pipeline(data=full_data, **params, **pipeline_state)["data"]
             return target * mask, target, {}, {}
 
     def perception_action_step(agent_state: AgentState, target_data):
@@ -439,99 +441,10 @@ def fix_paths(agent_config, data_paths=None):
     return agent_config
 
 
-def make_pipeline(
-    data_type,
-    dynamic_range,
-    input_range,
-    input_shape,
-    action_selection_shape,
-    jit_options="ops",
-) -> Pipeline:
-    expand_dims = zea.ops.Lambda(ops.expand_dims, {"axis": -1})
-    # Not using zea.ops.Normalize because that also clips the data and we might not want
-    # to do that for image data, e.g. the legacy echonet data (which has values outside the range).
-    # Also zea.ops.Normalize is used in the default pipeline, so we can't reuse it.
-    normalize = zea.ops.Lambda(
-        translate,
-        {"range_from": dynamic_range, "range_to": input_range},
-    )
-
-    if data_type not in ["data/image", "data/image_3D"]:
-        pipeline = zea.Pipeline(
-            [
-                FirFilter(axis=-3, filter_key="bandpass_rf"),
-                WaveletDenoise(),  # optional
-                zea.ops.Demodulate(),
-                LowPassFilter(complex_channels=True, axis=-2),  # optional
-                zea.ops.Downsample(2),  # optional
-                zea.ops.PatchedGrid(
-                    [
-                        zea.ops.TOFCorrection(),
-                        # zea.ops.PfieldWeighting(),  # optional
-                        zea.ops.DelayAndSum(),
-                    ]
-                ),
-                zea.ops.EnvelopeDetect(),
-                zea.ops.Normalize(),
-                zea.ops.LogCompress(),
-                expand_dims,
-                zea.ops.Lambda(
-                    ops.image.resize,
-                    {
-                        "size": action_selection_shape,
-                        "interpolation": "bilinear",
-                        "antialias": True,
-                    },
-                ),
-                normalize,
-                zea.ops.Clip(*input_range),
-                zea.ops.Pad(
-                    input_shape[:-1],
-                    axis=(-3, -2),
-                    pad_kwargs=dict(mode="symmetric"),
-                    # fail_on_bigger_shape=False,
-                ),
-            ],
-            with_batch_dim=False,
-            jit_options=jit_options,
-        )
-    elif data_type == "data/image":
-        pipeline = Pipeline(
-            [
-                normalize,
-                expand_dims,
-                zea.ops.Lambda(
-                    ops.image.resize,
-                    {
-                        "size": action_selection_shape,
-                        "interpolation": "bilinear",
-                        "antialias": False,
-                    },
-                ),
-            ],
-            jit_options=jit_options,
-            with_batch_dim=False,
-        )
-    elif data_type == "data/image_3D":
-        pipeline = Pipeline(
-            [normalize, expand_dims], jit_options="pipeline", with_batch_dim=False
-        )
-        # transpose so that azimuth dimension is on the outside, like a batch.
-        # then we simply apply the 2d DM along all azimuthal angles
-        pipeline.append(zea.ops.Transpose((1, 0, 2, 3)))
-        # we do cropping rather than resizing to maintain elevation focusing
-        pipeline.append(
-            zea.ops.Lambda(keras.layers.CenterCrop(*action_selection_shape))
-        )
-
-    return pipeline
-
-
 def preload_data(
     file: File,
     n_frames: int,  # if there are less than n_frames, it will load all frames
     data_type="data/image",
-    dynamic_range=(-70, -28),
     type="focused",  # 'focused' or 'diverging'
 ):
     # Get scan and probe from the file
@@ -548,7 +461,7 @@ def preload_data(
     # TODO: kind of hacky way to update the scan for the cardiac dataset
     if "cardiac" in str(file.path):
         select_transmits(scan, type=type)
-        update_scan_for_polar_grid(scan, dynamic_range=dynamic_range)
+        update_scan_for_polar_grid(scan)
 
     # slice(None) means all frames.
     if data_type in ["data/raw_data"]:
@@ -612,9 +525,8 @@ def active_sampling_single_file(
     dataset_path = target_sequence.format(data_root=data_root)
     with File(dataset_path) as file:
         n_frames = agent_config.io_config.get("frame_cutoff", "all")
-        validation_sample_frames, scan, probe = preload_data(
-            file, n_frames, data_type, dynamic_range
-        )
+        validation_sample_frames, scan, probe = preload_data(file, n_frames, data_type)
+        scan.dynamic_range = dynamic_range
 
     if getattr(scan, "theta_range", None) is not None:
         theta_range_deg = np.rad2deg(scan.theta_range)
