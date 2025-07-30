@@ -66,11 +66,6 @@ def parse_args():
         default=None,
     )
     parser.add_argument(
-        "--append_save_dir",
-        type=str,
-        default=None,
-    )
-    parser.add_argument(
         "--n_actions",
         type=int,
         nargs="+",
@@ -85,10 +80,7 @@ if __name__ == "__main__":
     keras.mixed_precision.set_global_policy("float32")  # echonet-dynamic uses float32
 
     TARGET_DIR = data_paths.data_root / "USBMD_datasets" / "echonet" / "val"
-    SAVE_DIR = data_paths.output / "ULSA_benchmarks" / "echonet"
-
-    if args.append_save_dir is not None:
-        SAVE_DIR = SAVE_DIR / args.append_save_dir
+    SAVE_DIR = Path("/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/echonet")
 
     ulsa_agent_config = Config.from_yaml(Path("/ulsa/configs/echonet_3_frames.yaml"))
 
@@ -101,7 +93,7 @@ if __name__ == "__main__":
             "action_selection.n_actions": args.n_actions,
             "action_selection.selection_strategy": [
                 "equispaced",
-                "greedy_entropy",
+                "greedy_variance"
                 "uniform_random",
             ],
             "diffusion_inference.batch_size": [4],
