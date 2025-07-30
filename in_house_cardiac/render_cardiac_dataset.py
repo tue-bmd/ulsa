@@ -15,32 +15,15 @@ from keras import ops
 from tqdm import tqdm
 
 from active_sampling_temporal import preload_data
-from ulsa.ops import FirFilter, LowPassFilter, WaveletDenoise, lines_rx_apo
+from ulsa.ops import (
+    FirFilter,
+    GetAutoDynamicRange,
+    LowPassFilter,
+    WaveletDenoise,
+    lines_rx_apo,
+)
 from zea.display import compute_scan_convert_2d_coordinates, scan_convert_2d
 from zea.utils import translate
-
-
-class GetAutoDynamicRange(zea.ops.Operation):
-    def __init__(self, low_pct=18, high_pct=95):
-        super().__init__()
-        self.low_pct = low_pct
-        self.high_pct = high_pct
-
-    def call(self, dynamic_range=None, **kwargs):
-        data = kwargs[self.key]
-
-        vmin = dynamic_range[0] if dynamic_range else None
-        vmax = dynamic_range[1] if dynamic_range else None
-
-        if vmin is None:
-            vmin = ops.quantile(data, self.low_pct / 100)
-        if vmax is None:
-            vmax = ops.quantile(data, self.high_pct / 100)
-
-        vmin_db = 20 * ops.log10(vmin)
-        vmax_db = 20 * ops.log10(vmax)
-        dynamic_range = [vmin_db, vmax_db]
-        return {"dynamic_range": dynamic_range}
 
 
 def focused_waves(target_sequence, n_frames, resize_height=112):
@@ -93,7 +76,7 @@ def focused_waves(target_sequence, n_frames, resize_height=112):
         fs=scan.sampling_frequency,
     )
     scan.polar_limits = list(np.deg2rad([-45, 45]))
-    scan.dynamic_range = None
+    scan.dynamic_range = None  # for auto-dynamic range
     rx_apo = lines_rx_apo(scan.n_tx, scan.grid_size_z, scan.grid_size_x)
     params = pipeline.prepare_parameters(
         scan=scan,
