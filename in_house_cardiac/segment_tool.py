@@ -150,7 +150,7 @@ def main():
         else:
             add_shape_from_mask(axs, interpolated_masks[0], alpha=0.5)
 
-        filestem = Path(file.parent.stem + "_" + f"{file.stem}_{title}_annotations.gif")
+        filestem = Path(file.parent / f"{file.stem}_{title}_annotations.gif")
         np.save(filestem.with_suffix(".npy"), interpolated_masks)
         print(f"Succesfully saved interpolated masks to {filestem.with_suffix('.npy')}")
 
