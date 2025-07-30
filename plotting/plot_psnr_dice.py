@@ -26,6 +26,7 @@ from plotting.plot_utils import ViolinPlotter, natural_sort
 
 DATA_ROOT = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data"
 DATA_FOLDER = Path(DATA_ROOT) / "Wessel/output/lud/ULSA_benchmarks"
+# DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_benchmarks/echonet"
 
 STRATEGY_COLORS = {
     "downstream_propagation_summed": "#d62728",  # Red
@@ -38,6 +39,7 @@ STRATEGY_NAMES = {
     "downstream_propagation_summed": "Measurement Information Gain",
     # "greedy_entropy": "Tissue Information Gain",
     "greedy_entropy": "Active Perception",
+    "greedy_variance": "Active Perception",
     "uniform_random": "Random",
     "equispaced": "Equispaced",
 }
@@ -50,7 +52,8 @@ STRATEGY_CANONICAL_MAP = {
 
 STRATEGIES_TO_PLOT = [
     # "downstream_propagation_summed",
-    "greedy_entropy",
+    # "greedy_entropy",
+    "greedy_variance",
     "uniform_random",
     "equispaced",
     # Add/remove as needed
@@ -69,33 +72,50 @@ AXIS_LABEL_MAP = {
 }
 
 
+def mask_has_too_many_blobs(mask_sequence, max_blobs=1, max_bad_frames=5):
+    """
+    Returns True if the mask sequence has more than max_blobs in more than max_bad_frames.
+    mask_sequence: np.ndarray or list, shape (T, H, W) or (T, H, W, 1) or list of (H, W)
+    """
+    if isinstance(mask_sequence, np.ndarray):
+        if mask_sequence.ndim == 4 and mask_sequence.shape[-1] == 1:
+            mask_sequence = [mask_sequence[t, ..., 0] for t in range(mask_sequence.shape[0])]
+        elif mask_sequence.ndim == 3:
+            mask_sequence = [mask_sequence[t] for t in range(mask_sequence.shape[0])]
+        else:
+            mask_sequence = [mask_sequence]
+    bad_frame_count = 0
+    for mask in mask_sequence:
+        mask_arr = np.squeeze(mask)
+        labeled, num_blobs = scipy.ndimage.label(mask_arr > 0)
+        if num_blobs > max_blobs:
+            bad_frame_count += 1
+    return bad_frame_count > max_bad_frames
+
+
 def extract_sweep_data(
     sweep_dir: str,
     keys_to_extract=["mse", "psnr"],
     x_axis_key="action_selection.n_actions",
     strategies_to_plot=None,
-    gt_masks=None,
     include_only_these_files=None,
     ef_lookup=None,
+    max_blobs=1,
+    max_bad_frames=5,
 ):
-    """Can be used to load all the metrics from the run_benchmark function."""
-    sweep_details_path = os.path.join(sweep_dir, "sweep_details.yaml")
-    if not os.path.exists(sweep_details_path):
-        raise FileNotFoundError(f"Missing sweep_details.yaml in {sweep_dir}")
+    """Load all the metrics from the run_benchmark function, using in-file ground truth masks."""
 
     results = []
+    unique_files_skipped = set({})
 
     # Loop over runs in the sweep directory
     for run_dir in sorted(os.listdir(sweep_dir)):
-        # Check if run_dir is a directory
         run_path = os.path.join(sweep_dir, run_dir)
         if not os.path.isdir(run_path):
             continue
 
-        # Print run directory being processed in place
         print(f"Processing run: {run_dir}", end="\r")
 
-        # Check for required files
         config_path = os.path.join(run_path, "config.yaml")
         metrics_path = os.path.join(run_path, "metrics.npz")
         filepath_yaml = os.path.join(run_path, "target_filepath.yaml")
@@ -104,30 +124,25 @@ def extract_sweep_data(
         ):
             continue
 
-        # Load the config, metrics, and target file path
         config = Config.from_yaml(config_path)
         metrics = np.load(metrics_path, allow_pickle=True)
         target_file = Config.from_yaml(filepath_yaml)["target_filepath"]
 
-        # Hack to get snellius results to work locally
         target_file = str(target_file).replace(
             "/projects/0/prjs0966/data", "/mnt/z/Ultrasound-BMd/data"
         )
 
-        # Filter by include_only_these_files if specified
         if (
             include_only_these_files is not None
             and target_file not in include_only_these_files
         ):
             continue
 
-        # Check if the x-axis key exists in the config
         x_value = get_config_value(config, x_axis_key)
         if x_value is None:
             log.warning(f"Skipping {run_path} due to missing x_axis_key: {x_axis_key}.")
             continue
 
-        # Check if the selection strategy is in the config
         selection_strategy = config.get("action_selection", {}).get(
             "selection_strategy"
         )
@@ -137,44 +152,34 @@ def extract_sweep_data(
             )
             continue
 
-        # Skip if the selection strategy is not in the specified strategies
-        # This saves time by not processing runs that are not needed
         if (
             strategies_to_plot is not None
             and selection_strategy not in strategies_to_plot
         ):
             continue
 
-        # Get EF value
         filename = Path(target_file).stem
-        if ef_lookup is not None:
-            if filename not in ef_lookup:
-                log.warning(f"No EF data found for {filename}")
-            ef_value = ef_lookup[filename]
-        else:
-            ef_value = None
+        ef_value = ef_lookup[filename] if ef_lookup is not None and filename in ef_lookup else None
 
-        # Compute DICE if ground truths available
-        if gt_masks is not None and target_file in gt_masks:
-            pred_masks = metrics["segmentation_mask"]
-            gt_sequence = gt_masks[target_file]
-            pred_masks = np.array(pred_masks)
-            gt_masks_array = np.array(gt_sequence["masks"])
-            gt_masks_array = np.squeeze(gt_masks_array, axis=1)
-            dice_score = compute_dice_score(pred_masks, gt_masks_array)
-            mean_dice = np.mean(dice_score)
+        # Use in-file ground truth and predicted masks for DICE
+        if "segmentation_mask_targets" in metrics and "segmentation_mask_reconstructions" in metrics:
+            gt_masks = np.array(metrics["segmentation_mask_targets"])
+            # Only keep if gt_masks pass the blob filter
+            if mask_has_too_many_blobs(gt_masks, max_blobs=max_blobs, max_bad_frames=max_bad_frames):
+                mean_dice = None
+                log.info(f"Skipped file {target_file} since segmentation mask had too many blobs.")
+                unique_files_skipped.add(target_file)
+            else:
+                pred_masks = np.array(metrics["segmentation_mask_reconstructions"])
+                dice_score = compute_dice_score(pred_masks, gt_masks)
+                mean_dice = np.mean(dice_score)
         else:
             mean_dice = None
 
-            # Store mean DICE over patient frames
-            # results["dice"][selection_strategy][x_value].append(mean_dice)
-
-        # Add other metrics
         metric_results = {}
         for metric_name in keys_to_extract:
             if metric_name not in metrics:
-                continue  # Skip if metric not found
-
+                continue
             metric_values = metrics[metric_name]
             if isinstance(metric_values, np.ndarray) and metric_values.size > 0:
                 sequence_means = np.mean(metric_values, axis=-1)
@@ -192,6 +197,7 @@ def extract_sweep_data(
             }
         )
 
+    log.info(f"Skipped a total of {len(unique_files_skipped)} files due to poor segmentation masks.")
     return pd.DataFrame(results)
 
 
@@ -228,49 +234,6 @@ def get_ground_truth_masks(fully_observed_path):
         gt_masks[target_file] = sequence_data
 
     return gt_masks
-
-
-def filter_gt_masks_by_blobs(gt_masks, max_blobs=1, max_bad_frames=5, verbose=True):
-    """
-    Remove ground truth sequences where the number of blobs in the mask exceeds max_blobs
-    for more than max_bad_frames frames.
-
-    Args:
-        gt_masks (dict): Mapping from target_filepath to sequence_data.
-        max_blobs (int): Maximum allowed blobs per frame.
-        max_bad_frames (int): Maximum allowed frames exceeding max_blobs.
-        verbose (bool): Print filtered files and summary.
-
-    Returns:
-        filtered_gt_masks (dict): Filtered gt_masks.
-    """
-    filtered_gt_masks = {}
-    filtered_out = []
-
-    for target_file, sequence_data in gt_masks.items():
-        masks = sequence_data["masks"]  # List of (1, H, W, 1) arrays
-        bad_frame_count = 0
-        for mask in masks:
-            mask_arr = np.squeeze(mask)  # (H, W)
-            # Count connected components (blobs)
-            labeled, num_blobs = scipy.ndimage.label(mask_arr > 0)
-            if num_blobs > max_blobs:
-                bad_frame_count += 1
-        if bad_frame_count > max_bad_frames:
-            filtered_out.append((target_file, bad_frame_count))
-        else:
-            filtered_gt_masks[target_file] = sequence_data
-
-    if verbose:
-        print(
-            f"\nFiltered out {len(filtered_out)} ground truth sequences due to excessive blobs:"
-        )
-        for target_file, bad_count in filtered_out:
-            print(f"  {target_file} (bad frames: {bad_count})")
-        print(f"Remaining ground truth sequences: {len(filtered_gt_masks)}")
-
-    return filtered_gt_masks
-
 
 def get_axis_label(key):
     """Get friendly label for axis keys."""
@@ -339,21 +302,13 @@ if __name__ == "__main__":
         print(f"Loading existing combined results from {str(TEMP_FILE)}")
         combined_results = pd.read_pickle(TEMP_FILE)
     else:
-        FULLY_OBSERVED_PATH = DATA_FOLDER / "fully_observed_echonet_seg"
         SUBSAMPLED_PATHS = [
             DATA_FOLDER / "sharding_sweep_2025-05-30_08-56-07",
             DATA_FOLDER / "sharding_sweep_2025-06-04_13-52-43",
         ]
 
-        # Get ground truth masks from fully observed runs
-        gt_masks = get_ground_truth_masks(FULLY_OBSERVED_PATH)
-
-        # Filter ground truth masks by blobs
-        gt_masks = filter_gt_masks_by_blobs(gt_masks, max_blobs=1, max_bad_frames=2)
-
         combined_results = extract_and_combine_sweep_data(
             SUBSAMPLED_PATHS,
-            gt_masks=gt_masks,
             keys_to_extract=["mse", "psnr", "dice"],
             x_axis_key=args.x_axis,
         )
@@ -376,7 +331,7 @@ if __name__ == "__main__":
         save_path=f"./echonet_{metric_name}_violin_plot.pdf",
         x_label_values=x_values,
         metric_name=formatted_metric_name,
-        groups_to_plot=["greedy_entropy", "uniform_random", "equispaced"],
+        groups_to_plot=STRATEGIES_TO_PLOT,
         ylim=[0.58, 1.02],
     )
 
