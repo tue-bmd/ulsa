@@ -185,6 +185,8 @@ class GreedyEntropyUnivariateGaussian(GreedyEntropy):
     def sample(self, particles):
         """Sample the action using the greedy entropy method with univariate Gaussian assumption.
         See 'Entropy' here: https://en.wikipedia.org/wiki/Normal_distribution
+        NOTE: this is designed for line-based subsampling, i.e. where self.img_height = |A^\ell|
+            - See `derivations/pixelwise_entropy.md` for more details.
 
         Args:
             particles (Tensor): Particles of shape (batch_size, n_particles, height, width)
@@ -194,7 +196,7 @@ class GreedyEntropyUnivariateGaussian(GreedyEntropy):
                 - Newly selected lines as k-hot vectors, shaped (batch_size, n_possible_actions)
                 - Masks of shape (batch_size, img_height, img_width)
         """
-        pixelwise_variance = 0.5*ops.log(2 * np.pi * np.e * ops.var(particles, axis=1)) # [batch_size, height, width]
+        pixelwise_variance = 0.5*ops.log(((2 * np.pi * np.e)**self.img_height) * ops.var(particles, axis=1)) # [batch_size, height, width]
         # NOTE: we compute the linewise variance as the sum of pixelwise variances. 
         # Since we're using variance as our entropy, we have that H(X_1, X_2, ...) = H(X_1) + H(X_2) + ...
         linewise_variance = ops.sum(pixelwise_variance, axis=1) # [batch_size, width]
