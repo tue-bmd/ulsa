@@ -1,155 +1,147 @@
 """
 This script makes a figure with the target, reconstruction, and measurements
 for the in-house cardiac dataset.
+
+# diverging_dynamic_range = [-70, -30]
 """
 
 import sys
 
 import zea
 
-sys.path.append("/ulsa")  # for relative imports
+if __name__ == "__main__":
+    zea.init_device(allow_preallocate=False)
+    sys.path.append("/ulsa")
 
-zea.init_device(allow_preallocate=False)
+from pathlib import Path
 
 import keras
 import matplotlib.pyplot as plt
 import numpy as np
 
-from active_sampling_temporal import active_sampling_single_file
-from in_house_cardiac.cardiac_scan import cardiac_scan
-from ulsa.io_utils import postprocess_agent_results, side_by_side_gif
-
-MAKE_GIF = True
-FRAME_IDX = 24
-FRAME_CUTOFF = 39
-DROP_FIRST_N_FRAMES = 2  # drop first 2 frames to avoid artifacts (from gif only!)
-
-override_config = dict(io_config=dict(frame_cutoff=FRAME_CUTOFF))
-target_sequence = (
-    "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"
-)
-results, _, _, _, _, agent, agent_config, _ = active_sampling_single_file(
-    "configs/cardiac_112_3_frames.yaml",
-    target_sequence=target_sequence,
-    override_config=override_config,
-)
-image_range = agent.input_range
-
-no_measurement_color = "gray"
-if no_measurement_color == "white":
-    no_measurement_color = image_range[1]
-elif no_measurement_color == "black":
-    no_measurement_color = image_range[0]
-elif no_measurement_color == "gray":
-    no_measurement_color = (image_range[0] + image_range[1]) / 2
-elif no_measurement_color == "transparent":
-    no_measurement_color = np.nan
-else:
-    raise ValueError(f"Unknown no_measurement_color: {no_measurement_color}")
-
-squeezed_results = results.squeeze(-1)
-targets = squeezed_results.target_imgs
-reconstructions = squeezed_results.reconstructions
-measurements = keras.ops.where(
-    squeezed_results.masks > 0,
-    squeezed_results.measurements,
-    no_measurement_color,
-)
-io_config = agent_config.io_config
-scan_convert_order = io_config.get("plot_frames_for_presentation_kwargs", {}).get(
-    "scan_convert_order", 0
-)
-scan_convert_resolution = 0.1
-
-targets = postprocess_agent_results(
-    targets,
-    io_config,
-    scan_convert_order,
-    image_range,
-    scan_convert_resolution=scan_convert_resolution,
-    fill_value="transparent",
-)
-reconstructions = postprocess_agent_results(
-    reconstructions,
-    io_config,
-    scan_convert_order,
-    image_range,
-    scan_convert_resolution=scan_convert_resolution,
-    reconstruction_sharpness_std=io_config.get("reconstruction_sharpness_std", 0.0),
-    fill_value="transparent",
-)
-measurements = postprocess_agent_results(
-    measurements,
-    io_config,
-    scan_convert_order=0,  # always 0 for masks!
-    image_range=image_range,
-    scan_convert_resolution=scan_convert_resolution,
-    fill_value="transparent",
-)
-
-diverging_dynamic_range = [-70, -30]
-diverging_images, diverging_scan = cardiac_scan(
-    target_sequence, FRAME_CUTOFF, type="diverging"
-)
-# diverging_dynamic_range = diverging_scan.dynamic_range
-
-diverging_images = postprocess_agent_results(
-    diverging_images,
-    io_config,
-    scan_convert_order,
-    diverging_dynamic_range,
-    scan_convert_resolution=scan_convert_resolution,
-    fill_value="transparent",
-)
-diverging_images = zea.utils.translate(
-    diverging_images, diverging_dynamic_range, image_range
-)
+from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_side_gif
 
 
-exts = ["png", "pdf"]
-with plt.style.context("styles/ieee-tmi.mplstyle"):
-    kwargs = {
-        "vmin": image_range[0],
-        "vmax": image_range[1],
-        "cmap": "gray",
-        "interpolation": "nearest",
-    }
-    fig, axs = plt.subplots(2, 2, figsize=(3.5, 2.8))
-    axs = axs.flatten()
-    axs[0].imshow(targets[FRAME_IDX], **kwargs)
-    axs[0].set_title("Focused (90)")
+def plot_from_npz(
+    path,
+    save_path,
+    exts=(".png", ".pdf"),
+    gif=True,
+    gif_fps=8,
+    context=None,
+    frame_idx=24,
+):
+    save_path = Path(save_path)
+    results = np.load(path, allow_pickle=True)
 
-    axs[1].imshow(measurements[FRAME_IDX], **kwargs)
-    axs[1].set_title("Acquisitions (11/90)")
+    focused = results["focused"]
+    focused_dynamic_range = results["focused_dynamic_range"]
 
-    axs[3].imshow(reconstructions[FRAME_IDX], **kwargs)
-    axs[3].set_title("Reconstruction (11/90)")
+    diverging = results["diverging"]
+    diverging_dynamic_range = results["diverging_dynamic_range"]
 
-    axs[2].imshow(diverging_images[FRAME_IDX], **kwargs)
-    axs[2].set_title("Diverging (11)")
+    reconstructions = results["reconstructions"]
+    reconstruction_range = results["reconstruction_range"]
 
-    for ax in axs:
-        ax.axis("off")
+    measurements = results["measurements"]
+    masks = results["masks"]
 
-    for ext in exts:
-        path = f"output/in_house_cardiac.{ext}"
-        plt.savefig(path)
-        zea.log.info(f"Saved cardiac reconstruction plot to {zea.log.yellow(path)}")
-
-for fps in [5, 30]:
-    side_by_side_gif(
-        f"output/in_house_cardiac_{fps}.gif",
-        targets[DROP_FIRST_N_FRAMES:],
-        reconstructions[DROP_FIRST_N_FRAMES:],
-        diverging_images[DROP_FIRST_N_FRAMES:],
-        vmin=image_range[0],
-        vmax=image_range[1],
-        labels=[
-            "Focused (90)",
-            "Reconstruction (11/90)",
-            "Diverging (11)",
-        ],
-        fps=fps,
-        context="styles/darkmode.mplstyle",
+    measurements = keras.ops.where(
+        masks > 0, measurements, color_to_value(reconstruction_range, "gray")
     )
-print("Done.")
+
+    io_config = zea.Config(
+        scan_convert=True,
+        scan_conversion_angles=np.rad2deg(results["theta_range"]),
+    )
+
+    focused = postprocess_agent_results(
+        focused,
+        io_config,
+        scan_convert_order=0,
+        image_range=focused_dynamic_range,
+        fill_value="transparent",
+    )
+    diverging = postprocess_agent_results(
+        diverging,
+        io_config,
+        scan_convert_order=0,
+        image_range=diverging_dynamic_range,
+        fill_value="transparent",
+    )
+    reconstructions = postprocess_agent_results(
+        reconstructions,
+        io_config,
+        scan_convert_order=0,
+        image_range=reconstruction_range,
+        reconstruction_sharpness_std=0.04,
+        fill_value="transparent",
+    )
+    measurements = postprocess_agent_results(
+        measurements,
+        io_config,
+        scan_convert_order=0,
+        image_range=reconstruction_range,
+        fill_value="transparent",
+    )
+
+    if context is None:
+        context = "styles/darkmode.mplstyle"
+
+    if gif:
+        side_by_side_gif(
+            save_path.with_suffix(".gif"),
+            focused,
+            reconstructions,
+            diverging,
+            labels=[
+                "Focused (90)",
+                "Reconstruction (11/90)",
+                "Diverging (11)",
+            ],
+            context=context,
+            fps=gif_fps,
+        )
+
+    with plt.style.context(context):
+        kwargs = {
+            "vmin": 0,
+            "vmax": 255,
+            "cmap": "gray",
+            "interpolation": "nearest",
+        }
+        fig, axs = plt.subplots(2, 2, figsize=(3.5, 2.8))
+        axs = axs.flatten()
+        axs[0].imshow(focused[frame_idx], **kwargs)
+        axs[0].set_title("Focused (90)")
+
+        axs[1].imshow(measurements[frame_idx], **kwargs)
+        axs[1].set_title("Acquisitions (11/90)")
+
+        axs[3].imshow(reconstructions[frame_idx], **kwargs)
+        axs[3].set_title("Reconstruction (11/90)")
+
+        axs[2].imshow(diverging[frame_idx], **kwargs)
+        axs[2].set_title("Diverging (11)")
+
+        for ax in axs:
+            ax.axis("off")
+
+        for ext in exts:
+            plt.savefig(save_path.with_suffix(ext))
+            zea.log.info(
+                f"Saved cardiac reconstruction plot to {zea.log.yellow(save_path.with_suffix(ext))}"
+            )
+
+
+if __name__ == "__main__":
+    PLOT_NPZ_PATH = (
+        "/mnt/z/usbmd/Wessel/eval_in_house_cardiac/20240701_P1_A4CH_0001_results.npz"
+    )
+
+    plot_from_npz(
+        PLOT_NPZ_PATH,
+        "output/in_house_cardiac.png",
+        context="styles/ieee-tmi.mplstyle",
+        frame_idx=24,
+    )

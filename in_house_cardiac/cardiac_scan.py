@@ -77,7 +77,7 @@ def cardiac_scan(
         images.append(ops.convert_to_numpy(image))
     images = np.stack(images, axis=0)
 
-    pipeline.timer.print(drop_first=2)
+    # pipeline.timer.print(drop_first=2)
 
     scan.dynamic_range = params["dynamic_range"]
     return images, scan

@@ -204,6 +204,7 @@ def side_by_side_gif(
                 vmin=vmin,
                 vmax=vmax,
                 interpolation=interpolation[i],
+                animated=True,
             )
             if labels[i] is not None:
                 axes[i].set_title(labels[i])
@@ -346,6 +347,23 @@ def gaussian_sharpness(data, std=0.025, image_range=(-1, 1)):
     return data
 
 
+def color_to_value(image_range, color="gray"):
+    color = color.lower()
+
+    if color == "white":
+        return image_range[1]
+    elif color == "black":
+        return image_range[0]
+    elif color == "gray":
+        return (image_range[0] + image_range[1]) / 2
+    elif color == "transparent":
+        return np.nan
+    else:
+        raise ValueError(
+            f"Unknown color of type str: {color}. Use 'black', 'white', 'gray', or 'transparent'."
+        )
+
+
 def postprocess_agent_results(
     data,
     io_config,
@@ -357,6 +375,8 @@ def postprocess_agent_results(
     fill_value="black",
     to_uint8=True,
 ):
+    """Postprocess agent results for visualization.
+    Always return images in range [0, 255]."""
     # Cast to float32 because scan conversion is weird for float16
     data = ops.cast(data, "float32")
 
@@ -369,18 +389,8 @@ def postprocess_agent_results(
     data = gaussian_sharpness(data, reconstruction_sharpness_std, image_range)
 
     if isinstance(fill_value, str):
-        if fill_value == "black":
-            fill_value = image_range[0]
-        elif fill_value == "white":
-            fill_value = image_range[1]
-        elif fill_value == "transparent":
-            to_uint8 = False
-            fill_value = np.nan
-        else:
-            raise ValueError(
-                f"Unknown fill_value: {fill_value}. Use 'black', 'white', or 'transparent' "
-                "or a numeric value."
-            )
+        to_uint8 = fill_value.lower() != "transparent"
+        fill_value = color_to_value(image_range, fill_value)
 
     if io_config.scan_convert:
         data = _scan_convert(
@@ -392,8 +402,9 @@ def postprocess_agent_results(
         )
 
     # To uint8
+    data = map_range(data, image_range, (0, 255))
     if to_uint8:
-        data = map_range(data, image_range, (0, 255)).astype(np.uint8)
+        data = data.astype(np.uint8)
 
     return data
 
