@@ -517,6 +517,13 @@ def setup_agent(
         action_selection, pre_action, post_action
     )
 
+    if jit_mode is None:
+        print(
+            "JIT is off, this is useful for debugging but slow for general use! "
+            "Cosider setting jit_mode to 'posterior_sample' such that atleast "
+            "the diffusion model is JIT compiled."
+        )
+
     if jit_mode == "posterior_sample":
         posterior_sample = jit(posterior_sample)
 

@@ -550,8 +550,7 @@ def active_sampling_single_file(
         agent_config,
         seed=jax.random.PRNGKey(seed),
         pfield=pfield,
-        # jit_mode="recover",
-        jit_mode=None,
+        jit_mode="recover",
     )
 
     pipeline = make_pipeline(
