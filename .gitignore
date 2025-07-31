@@ -6,5 +6,6 @@ users.yaml
 *.gif
 .vscode
 *.pdf
+!derivations/*.pdf
 *.npy
 *.pkl

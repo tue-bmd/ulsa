@@ -186,7 +186,7 @@ class GreedyEntropyUnivariateGaussian(GreedyEntropy):
         """Sample the action using the greedy entropy method with univariate Gaussian assumption.
         See 'Entropy' here: https://en.wikipedia.org/wiki/Normal_distribution
         NOTE: this is designed for line-based subsampling, i.e. where self.img_height = |A^\ell|
-            - See `derivations/pixelwise_entropy.md` for more details.
+            - See `derivations/Pixelwise_Gaussian_Entropy.pdf` for more details.
 
         Args:
             particles (Tensor): Particles of shape (batch_size, n_particles, height, width)
