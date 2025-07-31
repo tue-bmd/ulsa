@@ -14,30 +14,34 @@ import scipy.signal
 from keras import ops
 from tqdm import tqdm
 
-from active_sampling_temporal import make_pipeline, preload_data
+import ulsa.ops
+from active_sampling_temporal import preload_data
+from ulsa.pipeline import make_pipeline
 from zea.display import scan_convert_2d
 from zea.utils import save_to_gif, translate
 
 
-def diverging_waves(
+def cardiac_scan(
     target_sequence,
     n_frames,
-    dynamic_range,
     grid_width=90,
     resize_height=112,
+    type="focused",  # "focused" or "diverging"
 ):
     shape = (resize_height, grid_width)
     pipeline = make_pipeline(
-        "data/raw_data", dynamic_range, dynamic_range, [*shape, 1], shape
+        "data/raw_data",
+        None,
+        shape,
+        shape,
+        jit_options="ops",
+        timed=True,
     )
     pipeline.append(zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)))
 
     with zea.File(target_sequence) as file:
-        raw_data_sequence, scan, probe = preload_data(
-            file,
-            n_frames,
-            data_type="data/raw_data",
-            type="diverging",
+        raw_data_sequence, scan, _ = preload_data(
+            file, n_frames, data_type="data/raw_data", type=type
         )
 
     bandpass_rf = scipy.signal.firwin(
@@ -48,11 +52,20 @@ def diverging_waves(
     )
     scan.polar_limits = list(np.deg2rad([-45, 45]))
     scan.grid_size_x = grid_width
-    scan.dynamic_range = dynamic_range
+    scan.dynamic_range = None  # for auto-dynamic range
+
+    if type == "focused":
+        kwargs = {
+            "rx_apo": ulsa.ops.lines_rx_apo(
+                scan.n_tx, scan.grid_size_z, scan.grid_size_x
+            )
+        }
+    else:
+        kwargs = {}
+
+    # TODO: fix minval to 0?
     params = pipeline.prepare_parameters(
-        scan=scan,
-        bandwidth=2e6,
-        bandpass_rf=bandpass_rf,
+        scan=scan, bandwidth=2e6, bandpass_rf=bandpass_rf, **kwargs
     )
 
     images = []
@@ -60,19 +73,24 @@ def diverging_waves(
         output = pipeline(data=raw_data, **params)
         image = output.pop("data")
         params["maxval"] = output.pop("maxval")
+        params["dynamic_range"] = output.pop("dynamic_range")
         images.append(ops.convert_to_numpy(image))
     images = np.stack(images, axis=0)
 
+    pipeline.timer.print(drop_first=2)
+
+    scan.dynamic_range = params["dynamic_range"]
     return images, scan
 
 
 if __name__ == "__main__":
-    dynamic_range = [-70, -30]
-    images, scan = diverging_waves(
+    type = "focused"  # or "focused"
+    images, scan = cardiac_scan(
         "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5",
         n_frames=None,
-        dynamic_range=dynamic_range,
+        type=type,
     )
+    dynamic_range = scan.dynamic_range
 
     images, _ = scan_convert_2d(
         images,
@@ -82,12 +100,12 @@ if __name__ == "__main__":
         fill_value=np.nan,
         order=0,
     )
-    np.savez("output/diverging.npz", images=images, dynamic_range=dynamic_range)
+    np.savez(f"output/{type}.npz", images=images, dynamic_range=dynamic_range)
 
     _images = translate(images, dynamic_range, (0, 255))
     _images = np.clip(_images, 0, 255).astype(np.uint8)
-    save_to_gif(_images, "output/diverging.gif", fps=30)
+    save_to_gif(_images, f"output/{type}.gif", fps=30)
     plt.imshow(images[24], cmap="gray", vmin=dynamic_range[0], vmax=dynamic_range[1])
     plt.axis("off")
-    plt.savefig("output/diverging.png", dpi=300, bbox_inches="tight")
-    zea.log.info("Saved diverging frame to output/diverging.png")
+    plt.savefig(f"output/{type}.png", dpi=300, bbox_inches="tight")
+    zea.log.info(f"Saved frames to output/{type}.png")

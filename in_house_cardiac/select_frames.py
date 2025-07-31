@@ -1,3 +1,10 @@
+"""This script allows users to select frames from a video or gif file interactively.
+It displays each frame and allows the user to accept or skip it.
+
+Selected frames indices are saved as a numpy array.
+Selected frames are also saved as a video file.
+"""
+
 from pathlib import Path
 
 import matplotlib.pyplot as plt

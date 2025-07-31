@@ -278,7 +278,6 @@ def benchmark(
     jit_options = None if jit_mode == "off" else "pipeline"
     pipeline = make_pipeline(
         dataset.key,
-        dynamic_range,
         agent.input_range,
         agent.input_shape,
         agent_config.action_selection.shape,
@@ -422,7 +421,7 @@ def benchmark(
         {
             f"{downstream_task.output_type()}_targets": targets_dst,
             f"{downstream_task.output_type()}_reconstructions": reconstructions_dst,
-        }  
+        }
         if downstream_task is not None
         else {},
         recovered_circle_kwargs,

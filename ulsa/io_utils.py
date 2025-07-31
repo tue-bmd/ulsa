@@ -332,6 +332,20 @@ def first_frames_for_slides(
         plt.close()
 
 
+def gaussian_sharpness(data, std=0.025, image_range=(-1, 1)):
+    """Apply Gaussian noise to the data to simulate sharpness."""
+    if std > 0:
+        total_image_range = image_range[1] - image_range[0]
+        std *= total_image_range
+        noised_data = data + keras.random.normal(
+            data.shape,
+            stddev=std,
+            dtype=data.dtype,
+        )
+        data = ops.where(data > image_range[0], noised_data, data)
+    return data
+
+
 def postprocess_agent_results(
     data,
     io_config,
@@ -352,15 +366,7 @@ def postprocess_agent_results(
 
     # Add some noise (mainly for reconstructions)
     # Scaled based on the image range
-    if reconstruction_sharpness_std > 0:
-        total_image_range = image_range[1] - image_range[0]
-        reconstruction_sharpness_std *= total_image_range
-        noised_data = data + keras.random.normal(
-            data.shape,
-            stddev=reconstruction_sharpness_std,
-            dtype=data.dtype,
-        )
-        data = ops.where(data > image_range[0], noised_data, data)
+    data = gaussian_sharpness(data, reconstruction_sharpness_std, image_range)
 
     if isinstance(fill_value, str):
         if fill_value == "black":
@@ -391,12 +397,13 @@ def postprocess_agent_results(
 
     return data
 
+
 def postprocess_heatmap(
     heatmap,
     io_config,
     scan_convert_order=0,
     scan_convert_resolution=0.1,
-    cmap="viridis"
+    cmap="viridis",
 ):
     heatmap = _scan_convert(
         heatmap,
@@ -527,6 +534,7 @@ def plot_frames_for_presentation(
         labels=[f"Density over {window_size} frames", "Reconstruction"],
     )
 
+
 def plot_downstream_task_beliefs(
     save_dir,
     belief_distribution,
@@ -548,8 +556,12 @@ def plot_downstream_task_beliefs(
     """
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
-    target_with_mask = downstream_task.postprocess_for_visualization(target[None, ...], target_dst[None, ...])
-    beliefs_with_mask = downstream_task.postprocess_for_visualization(belief_distribution, beliefs_dst)
+    target_with_mask = downstream_task.postprocess_for_visualization(
+        target[None, ...], target_dst[None, ...]
+    )
+    beliefs_with_mask = downstream_task.postprocess_for_visualization(
+        belief_distribution, beliefs_dst
+    )
 
     # Prepare mask agreement: sum of beliefs_dst masks
     mask_agreement = ops.sum(beliefs_dst, axis=0)
@@ -560,13 +572,17 @@ def plot_downstream_task_beliefs(
     grid_nrows = int(np.ceil(n_beliefs / grid_ncols))
 
     with plt.style.context(context):
-        fig = plt.figure(figsize=(4 + 6 + 2, 6), dpi=dpi)  # wider grid, smaller mask agreement
-        gs = gridspec.GridSpec(
-            1, 3, width_ratios=[1, 2, 0.7], wspace=0.0
-        )
+        fig = plt.figure(
+            figsize=(4 + 6 + 2, 6), dpi=dpi
+        )  # wider grid, smaller mask agreement
+        gs = gridspec.GridSpec(1, 3, width_ratios=[1, 2, 0.7], wspace=0.0)
         # Left: target_with_mask
         ax0 = fig.add_subplot(gs[0, 0])
-        ax0.imshow(np.squeeze(target_with_mask), cmap="gray", interpolation=interpolation_matplotlib)
+        ax0.imshow(
+            np.squeeze(target_with_mask),
+            cmap="gray",
+            interpolation=interpolation_matplotlib,
+        )
         ax0.set_title("Target", fontsize=12)
         ax0.axis("off")
 
@@ -578,16 +594,27 @@ def plot_downstream_task_beliefs(
             row = idx // grid_ncols
             col = idx % grid_ncols
             ax = fig.add_subplot(grid_gs[row, col])
-            ax.imshow(np.squeeze(belief_img), cmap="gray", interpolation=interpolation_matplotlib)
+            ax.imshow(
+                np.squeeze(belief_img),
+                cmap="gray",
+                interpolation=interpolation_matplotlib,
+            )
             ax.axis("off")
         # Add a title above the grid
         fig.text(
-            0.525, 0.9, "Beliefs", ha="center", va="top", fontsize=12,
+            0.525,
+            0.9,
+            "Beliefs",
+            ha="center",
+            va="top",
+            fontsize=12,
         )
 
         # Right: mask agreement (smaller)
         ax2 = fig.add_subplot(gs[0, 2])
-        im = ax2.imshow(mask_agreement, cmap="viridis", interpolation=interpolation_matplotlib)
+        im = ax2.imshow(
+            mask_agreement, cmap="viridis", interpolation=interpolation_matplotlib
+        )
         ax2.set_title("Mask Agreement", fontsize=12)
         ax2.axis("off")
         plt.colorbar(im, ax=ax2, fraction=0.046, pad=0.04, shrink=0.7)
@@ -622,8 +649,12 @@ def plot_downstream_task_output_for_presentation(
     save_dir.mkdir(parents=True, exist_ok=True)
     num_frames = targets.shape[0]
     # expects RGB image output
-    targets_with_mask = downstream_task.postprocess_for_visualization(targets, targets_dst)
-    reconstructions_with_mask = downstream_task.postprocess_for_visualization(reconstructions, reconstructions_dst)
+    targets_with_mask = downstream_task.postprocess_for_visualization(
+        targets, targets_dst
+    )
+    reconstructions_with_mask = downstream_task.postprocess_for_visualization(
+        reconstructions, reconstructions_dst
+    )
 
     # TODO: maybe check if DST output is same size as measurements etc and if not then resize?
 
@@ -638,16 +669,35 @@ def plot_downstream_task_output_for_presentation(
 
     # rescale DST outputs to get correct aspect ratio
     aspect_ratio = ops.shape(measurements)[2] / ops.shape(measurements)[1]
-    new_shape = (ops.shape(targets_with_mask)[1], int(ops.shape(targets_with_mask)[1]*aspect_ratio))
-    targets_with_mask = ops.image.resize(targets_with_mask, new_shape, interpolation="nearest")
-    reconstructions_with_mask = ops.image.resize(reconstructions_with_mask, new_shape, interpolation="nearest")
+    new_shape = (
+        ops.shape(targets_with_mask)[1],
+        int(ops.shape(targets_with_mask)[1] * aspect_ratio),
+    )
+    targets_with_mask = ops.image.resize(
+        targets_with_mask, new_shape, interpolation="nearest"
+    )
+    reconstructions_with_mask = ops.image.resize(
+        reconstructions_with_mask, new_shape, interpolation="nearest"
+    )
 
     # apply log for visualization
     saliency_maps = postprocess_heatmap(saliency_maps, io_config, cmap="magma_r")
     posterior_std = postprocess_heatmap(posterior_std, io_config, cmap="magma_r")
 
-    arrays = [targets_with_mask, measurements, reconstructions_with_mask, posterior_std, saliency_maps]
-    labels = ["Targets", "Measurements", "Reconstructions", "STD[X | Y]", "DST Saliency"]
+    arrays = [
+        targets_with_mask,
+        measurements,
+        reconstructions_with_mask,
+        posterior_std,
+        saliency_maps,
+    ]
+    labels = [
+        "Targets",
+        "Measurements",
+        "Reconstructions",
+        "STD[X | Y]",
+        "DST Saliency",
+    ]
 
     # Make gif
     side_by_side_gif(
@@ -729,7 +779,9 @@ def plot_belief_distribution_for_presentation(
         fig_grid.suptitle("Belief Distribution (Scan Converted)", fontsize=18)
         plt.tight_layout()
         fig_grid.savefig(
-            save_dir / f"belief_distribution_grid_{frame_idx}.png", dpi=dpi, transparent=True
+            save_dir / f"belief_distribution_grid_{frame_idx}.png",
+            dpi=dpi,
+            transparent=True,
         )
         plt.close(fig_grid)
         log.info(log.yellow(save_dir / f"belief_distribution_grid_{frame_idx}.png"))
@@ -756,7 +808,9 @@ def plot_belief_distribution_for_presentation(
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, shrink=0.6)
         plt.tight_layout()
         fig_var.savefig(
-            save_dir / f"belief_distribution_variance_{frame_idx}.png", dpi=dpi, transparent=True
+            save_dir / f"belief_distribution_variance_{frame_idx}.png",
+            dpi=dpi,
+            transparent=True,
         )
         plt.close(fig_var)
         log.info(log.yellow(save_dir / f"belief_distribution_variance_{frame_idx}.png"))
@@ -810,7 +864,9 @@ def plot_belief_distribution_for_presentation(
         ax.set_title("Mask t", fontsize=18)
         ax.axis("off")
         plt.tight_layout()
-        fig_meas.savefig(save_dir / f"selected_next_t_{frame_idx}.png", dpi=dpi, transparent=True)
+        fig_meas.savefig(
+            save_dir / f"selected_next_t_{frame_idx}.png", dpi=dpi, transparent=True
+        )
         plt.close(fig_meas)
         log.info(log.yellow(save_dir / f"selected_next_t_{frame_idx}.png"))
 

@@ -290,6 +290,21 @@ def run_active_sampling(
             pipeline_state: dict,
             target_pipeline_state: dict,
         ):
+            # Run pipeline with full data
+            output = pipeline(
+                data=full_data, **(target_pipeline_params | target_pipeline_state)
+            )
+            target = output["data"]
+
+            # We use the same maxval & dynamic range for target and measurements.
+            # This is based on the first frame of the target sequence and should not change
+            # afterwards. You could predetermine it, so it is fine to use the target sequence
+            # for it here.
+            maxval = output["maxval"]
+            dynamic_range = output["dynamic_range"]
+            pipeline_state = {"maxval": maxval, "dynamic_range": dynamic_range}
+            target_pipeline_state = {"maxval": maxval, "dynamic_range": dynamic_range}
+
             # Select transmits
             transmits = k_hot_to_indices(selected_lines, n_actions)
             transmits = ops.squeeze(transmits, 0)
@@ -309,19 +324,6 @@ def run_active_sampling(
             # Run pipeline with selected lines
             output = pipeline(data=selected_data, **(base_params | params))
             measurements = output["data"]
-
-            # Run pipeline with full data
-            output = pipeline(
-                data=full_data, **(target_pipeline_params | target_pipeline_state)
-            )
-            target = output["data"]
-
-            # We use the same maxval for target and measurements. This is based on the first frame
-            # of the target sequence and should not change afterwards. You could predetermine it,
-            # so it is fine to use the target sequence for it here.
-            maxval = output["maxval"]
-            pipeline_state = {"maxval": maxval}
-            target_pipeline_state = {"maxval": maxval}
 
             return measurements, target, pipeline_state, target_pipeline_state
 
@@ -485,7 +487,7 @@ def active_sampling_single_file(
     agent_config: Config,
     target_sequence: str | Path = None,
     data_type: str = None,
-    image_range: tuple = None,
+    image_range: tuple = "unset",  # Set to None for auto-dynamic range
     seed: int = 42,
     override_config=None,
 ):
@@ -513,7 +515,7 @@ def active_sampling_single_file(
                 "No data_type provided and not found in agent_config.data."
             )
 
-    if image_range is None:
+    if image_range == "unset":
         try:
             image_range = agent_config.data.image_range
         except:
@@ -554,9 +556,8 @@ def active_sampling_single_file(
 
     pipeline = make_pipeline(
         data_type=data_type,
-        dynamic_range=dynamic_range,
-        input_range=agent.input_range,
-        input_shape=agent.input_shape,
+        output_range=agent.input_range,
+        output_shape=agent.input_shape,
         action_selection_shape=agent_config.action_selection.shape,
     )
 

@@ -1,3 +1,8 @@
+"""
+This script is an adaptation of zea.tools.selection_tool and is used to segment
+the in-house cardiac dataset interactively.
+"""
+
 if __name__ == "__main__":
     import os
 

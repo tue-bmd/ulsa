@@ -11,26 +11,24 @@ sys.path.append("/ulsa")  # for relative imports
 
 zea.init_device(allow_preallocate=False)
 
-from pathlib import Path
-
 import keras
 import matplotlib.pyplot as plt
 import numpy as np
 
 from active_sampling_temporal import active_sampling_single_file
-from in_house_cardiac.diverging import diverging_waves
+from in_house_cardiac.cardiac_scan import cardiac_scan
 from ulsa.io_utils import postprocess_agent_results, side_by_side_gif
 
 MAKE_GIF = True
 FRAME_IDX = 24
-FRAME_CUTOFF = 100
+FRAME_CUTOFF = 39
 DROP_FIRST_N_FRAMES = 2  # drop first 2 frames to avoid artifacts (from gif only!)
 
 override_config = dict(io_config=dict(frame_cutoff=FRAME_CUTOFF))
 target_sequence = (
     "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"
 )
-results, _, _, _, agent, agent_config, _ = active_sampling_single_file(
+results, _, _, _, _, agent, agent_config, _ = active_sampling_single_file(
     "configs/cardiac_112_3_frames.yaml",
     target_sequence=target_sequence,
     override_config=override_config,
@@ -90,8 +88,21 @@ measurements = postprocess_agent_results(
 )
 
 diverging_dynamic_range = [-70, -30]
-diverging_images = diverging_waves(
-    target_sequence, FRAME_CUTOFF, diverging_dynamic_range
+diverging_images, diverging_scan = cardiac_scan(
+    target_sequence, FRAME_CUTOFF, type="diverging"
+)
+# diverging_dynamic_range = diverging_scan.dynamic_range
+
+diverging_images = postprocess_agent_results(
+    diverging_images,
+    io_config,
+    scan_convert_order,
+    diverging_dynamic_range,
+    scan_convert_resolution=scan_convert_resolution,
+    fill_value="transparent",
+)
+diverging_images = zea.utils.translate(
+    diverging_images, diverging_dynamic_range, image_range
 )
 
 
@@ -114,13 +125,7 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
     axs[3].imshow(reconstructions[FRAME_IDX], **kwargs)
     axs[3].set_title("Reconstruction (11/90)")
 
-    axs[2].imshow(
-        diverging_images[FRAME_IDX],
-        cmap="gray",
-        vmin=diverging_dynamic_range[0],
-        vmax=diverging_dynamic_range[1],
-        interpolation="nearest",
-    )
+    axs[2].imshow(diverging_images[FRAME_IDX], **kwargs)
     axs[2].set_title("Diverging (11)")
 
     for ax in axs:
@@ -131,15 +136,12 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
         plt.savefig(path)
         zea.log.info(f"Saved cardiac reconstruction plot to {zea.log.yellow(path)}")
 
-_diverging_images = zea.utils.translate(
-    np.stack(diverging_images), diverging_dynamic_range, image_range
-)
 for fps in [5, 30]:
     side_by_side_gif(
         f"output/in_house_cardiac_{fps}.gif",
         targets[DROP_FIRST_N_FRAMES:],
         reconstructions[DROP_FIRST_N_FRAMES:],
-        _diverging_images[DROP_FIRST_N_FRAMES:],
+        diverging_images[DROP_FIRST_N_FRAMES:],
         vmin=image_range[0],
         vmax=image_range[1],
         labels=[

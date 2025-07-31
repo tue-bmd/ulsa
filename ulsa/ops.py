@@ -1,11 +1,31 @@
 from pathlib import Path
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 from keras import ops
 
 import zea.ops
 from zea.utils import translate
+
+NOISE_ESTIMATION_NORMALIZER = (
+    0.6745  # Used for robust noise estimation from median absolute deviation
+)
+
+
+def soft_threshold(data, value, substitute=0):
+    magnitude = ops.absolute(data)
+
+    # divide by zero okay as np.inf values get clipped, so ignore warning.
+    thresholded = 1 - value / magnitude
+    ops.clip(thresholded, 0, None)
+    thresholded = data * thresholded
+
+    if substitute == 0:
+        return thresholded
+    else:
+        cond = ops.less(magnitude, value)
+        return ops.where(cond, substitute, thresholded)
 
 
 def wavelet_denoise_rf(rf_signal, wavelet="db4", level=4, threshold_factor=0.5):
@@ -21,23 +41,31 @@ def wavelet_denoise_rf(rf_signal, wavelet="db4", level=4, threshold_factor=0.5):
     Returns:
     - Denoised RF signal
     """
-    import pywt  # pip install PyWavelets
+    import jaxwt as jwt  # pip install jaxwt
+    # import pywt  # pip install PyWavelets
+
+    rf_signal = rf_signal[None]  # add batch dimension
 
     # Decompose
-    coeffs = pywt.wavedec(rf_signal, wavelet, level=level)
+    coeffs = jwt.wavedec(rf_signal, wavelet, level=level)
 
     # Estimate noise from the detail coefficients at the highest level
-    sigma = np.median(np.abs(coeffs[-1])) / 0.6745
-    threshold = threshold_factor * sigma * np.sqrt(2 * np.log(len(rf_signal)))
+    sigma = ops.median(ops.abs(coeffs[-1])) / NOISE_ESTIMATION_NORMALIZER
+    threshold = threshold_factor * sigma * ops.sqrt(2 * ops.log(rf_signal.shape[-1]))
 
-    # Threshold detail coefficients
+    # Threshold detail coefficients in parallel using jax.vmap
     new_coeffs = [coeffs[0]]  # Keep approximation unaltered
-    for c in coeffs[1:]:
-        new_c = pywt.threshold(c, threshold, mode="soft")  # or 'hard'
-        new_coeffs.append(new_c)
+
+    def threshold_fn(c):
+        return soft_threshold(c, threshold)
+
+    # Use jax.vmap to parallelize over the list of detail coefficients
+    new_coeffs += list(jax.tree.map(threshold_fn, coeffs[1:]))
 
     # Reconstruct signal
-    return pywt.waverec(new_coeffs, wavelet)
+    out = jwt.waverec(new_coeffs, wavelet)
+
+    return ops.squeeze(out, axis=0)  # remove batch dimension
 
 
 def wavelet_denoise_full(data, axis, **kwargs):
@@ -53,34 +81,46 @@ def wavelet_denoise_full(data, axis, **kwargs):
     - Denoised data
     """
     # Apply wavelet denoising along the specified axis
-    return np.apply_along_axis(lambda x: wavelet_denoise_rf(x, **kwargs), axis, data)
+    return apply_along_axis(lambda x: wavelet_denoise_rf(x, **kwargs), axis, data)
 
 
 class GetAutoDynamicRange(zea.ops.Operation):
-    def __init__(self, low_pct=18, high_pct=95):
-        super().__init__()
+    """Compute dynamic range based on percentiles of the input data.
+    Only works when dynamic range is not already set in the parameters."""
+
+    def __init__(self, low_pct=18, high_pct=95, exclude_zeros=True, **kwargs):
+        super().__init__(input_data_type=zea.ops.DataTypes.ENVELOPE_DATA, **kwargs)
         self.low_pct = low_pct
         self.high_pct = high_pct
+        self.exclude_zeros = exclude_zeros
 
     def call(self, dynamic_range=None, **kwargs):
         data = kwargs[self.key]
 
-        vmin = dynamic_range[0] if dynamic_range else None
-        vmax = dynamic_range[1] if dynamic_range else None
+        if dynamic_range is not None:
+            vmin, vmax = dynamic_range[0], dynamic_range[1]
+        else:
+            vmin, vmax = None, None
+
+        # Exclude zeros, useful for active scan-line selection :)
+        if self.exclude_zeros:
+            data = jnp.where(data != 0, data, jnp.nan)
 
         if vmin is None:
-            vmin = ops.quantile(data, self.low_pct / 100)
+            vmin = jnp.nanquantile(data, self.low_pct / 100)
+            vmin = 20 * ops.log10(vmin)
         if vmax is None:
-            vmax = ops.quantile(data, self.high_pct / 100)
+            vmax = jnp.nanquantile(data, self.high_pct / 100)
+            vmax = 20 * ops.log10(vmax)
 
-        vmin_db = 20 * ops.log10(vmin)
-        vmax_db = 20 * ops.log10(vmax)
-        dynamic_range = [vmin_db, vmax_db]
-        return {"dynamic_range": dynamic_range}
+        return {"dynamic_range": [vmin, vmax]}
 
 
 class TranslateDynamicRange(zea.ops.Operation):
-    """Translate data from one range to another."""
+    """Translate data from one range to another.
+
+    Can be disabled by setting `range_to=None`.
+    """
 
     def __init__(self, range_to, **kwargs):
         super().__init__(**kwargs)
@@ -88,8 +128,9 @@ class TranslateDynamicRange(zea.ops.Operation):
 
     def call(self, dynamic_range=None, **kwargs):
         data = kwargs[self.key]
-        translated_data = translate(data, dynamic_range, self.range_to)
-        return {self.output_key: translated_data}
+        if self.range_to is not None:
+            data = translate(data, dynamic_range, self.range_to)
+        return {self.output_key: data}
 
 
 class ExpandDims(zea.ops.Operation):
@@ -180,8 +221,8 @@ class Sharpen(zea.ops.Operation):
 
 
 class WaveletDenoise(zea.ops.Operation):
-    def __init__(self, wavelet="db4", level=4, threshold_factor=0.1, axis=-3):
-        super().__init__(jittable=False)
+    def __init__(self, wavelet="db4", level=4, threshold_factor=0.1, axis=-3, **kwargs):
+        super().__init__(**kwargs)
         self.wavelet = wavelet
         self.level = level
         self.threshold_factor = threshold_factor
@@ -390,13 +431,14 @@ class HistogramMatching(zea.ops.Operation):
         return {self.output_key: matched_image, "dynamic_range": self.dynamic_range}
 
 
-def match_histogram_roi(src, target, src_roi):
+def match_histogram_fn(src, target):
     """
-    Match the histogram of src to target, using only the ROI in src to compute the mapping,
-    but apply the mapping to the entire src image. Works for float images.
+    Return a function that matches the histogram of src to target. Can be used to compute a
+    matching based on a region of interest (ROI) in the source image, and apply it to the
+    entire source image.
     """
     # Get sorted unique values and their counts from the ROI of the source image
-    src_values, src_counts = np.unique(src_roi.ravel(), return_counts=True)
+    src_values, src_counts = np.unique(src.ravel(), return_counts=True)
     # Get sorted unique values and their counts from the entire target image
     target_values, target_counts = np.unique(target.ravel(), return_counts=True)
 
@@ -410,10 +452,14 @@ def match_histogram_roi(src, target, src_roi):
     # Interpolate to find the target values that correspond to the quantiles of the source ROI
     interp_t_values = np.interp(src_cdf, target_cdf, target_values)
 
-    # Map all pixels in the source image to the new values using linear interpolation
-    matched = np.interp(src.ravel(), src_values, interp_t_values)
-    # Reshape to the original image shape and cast to the original dtype
-    return matched.reshape(src.shape).astype(src.dtype)
+    def _match_histogram(src):
+        """Match histogram of src to target using the computed mapping."""
+        # Map all pixels in the source image to the new values using linear interpolation
+        matched = np.interp(src.ravel(), src_values, interp_t_values)
+        # Reshape to the original image shape and cast to the original dtype
+        return matched.reshape(src.shape).astype(src.dtype)
+
+    return _match_histogram
 
 
 class HistogramMatchingForModel(HistogramMatching):

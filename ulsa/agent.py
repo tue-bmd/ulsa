@@ -12,7 +12,7 @@ from rich.table import Table
 import zea
 from ulsa.buffer import FrameBuffer, lifo_shift
 from ulsa.pfield import lines_to_pfield
-from ulsa.selection import DownstreamTaskSelection, GreedyVariance, GreedyEntropyFixed
+from ulsa.selection import DownstreamTaskSelection, GreedyEntropyFixed, GreedyVariance
 from zea.agent.selection import (
     CovarianceSamplingLines,
     EquispacedLines,
@@ -136,7 +136,9 @@ class AgentState:
 def get_initial_action_selection_fn(
     action_selector: LinesActionModel, initial_selection_strategy="uniform_random"
 ):
-    if isinstance(action_selector, (GreedyEntropy, CovarianceSamplingLines, GreedyEntropyFixed)):
+    if isinstance(
+        action_selector, (GreedyEntropy, CovarianceSamplingLines, GreedyEntropyFixed)
+    ):
         selector_class: MaskActionModel = action_selection_registry[
             initial_selection_strategy
         ]
@@ -172,9 +174,11 @@ def action_selection_wrapper(action_selector: LinesActionModel):
         def action_selection(particles, current_lines, seed):
             return action_selector.sample(particles=particles), None
     elif isinstance(action_selector, GreedyEntropyFixed):
+
         def action_selection(particles, current_lines, seed):
             return action_selector.sample(particles=particles), None
     elif isinstance(action_selector, GreedyVariance):
+
         def action_selection(particles, current_lines, seed):
             return action_selector.sample(particles=particles), None
     elif isinstance(action_selector, EquispacedLines):
@@ -322,7 +326,7 @@ def setup_agent(
     seed,
     batch_size=None,
     pfield=None,
-    jit_mode="recover",
+    jit_mode="recover",  # recover or posterior_sample
     model=None,
 ) -> Tuple[Agent, AgentState]:
     """

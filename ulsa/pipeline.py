@@ -22,6 +22,7 @@ def beamforming() -> list:
         ),
         zea.ops.EnvelopeDetect(),
         zea.ops.Normalize(),
+        ulsa.ops.GetAutoDynamicRange(),
         ulsa.ops.LogCompressNoClip(),
     ]
 
@@ -39,39 +40,44 @@ def resize(action_selection_shape: tuple, input_shape: tuple) -> list:
 
 def make_pipeline(
     data_type,
-    input_range,
-    input_shape,
+    output_range,  # disable by setting to None
+    output_shape,
     action_selection_shape,
     jit_options="ops",
     with_batch_dim=False,
+    **kwargs,
 ) -> Pipeline:
-    if data_type not in ["data/image", "data/image_3D"]:
+    if data_type == "data/raw_data":
         pipeline = zea.Pipeline(
             [
                 *beamforming(),
                 ulsa.ops.ExpandDims(axis=-1),
-                ulsa.ops.TranslateDynamicRange(input_range),
-                *resize(action_selection_shape, input_shape),
-                zea.ops.Clip(*input_range),  # for resize and log compress clip
+                ulsa.ops.TranslateDynamicRange(output_range),
+                *resize(action_selection_shape, output_shape),
+                zea.ops.Clip(
+                    *(output_range if output_range else [])
+                ),  # for resize and dynamic range clipping
             ],
             with_batch_dim=with_batch_dim,
             jit_options=jit_options,
+            **kwargs,
         )
     elif data_type == "data/image":
         pipeline = Pipeline(
             [
                 ulsa.ops.ExpandDims(axis=-1),
-                ulsa.ops.TranslateDynamicRange(input_range),
-                *resize(action_selection_shape, input_shape),
+                ulsa.ops.TranslateDynamicRange(output_range),
+                *resize(action_selection_shape, output_shape),
             ],
             with_batch_dim=with_batch_dim,
             jit_options=jit_options,
+            **kwargs,
         )
     elif data_type == "data/image_3D":
         pipeline = Pipeline(
             [
                 ulsa.ops.ExpandDims(axis=-1),
-                ulsa.ops.TranslateDynamicRange(input_range),
+                ulsa.ops.TranslateDynamicRange(output_range),
                 # transpose so that azimuth dimension is on the outside, like a batch.
                 # then we simply apply the 2d DM along all azimuthal angles
                 zea.ops.Transpose((1, 0, 2, 3)),
@@ -80,6 +86,11 @@ def make_pipeline(
             ],
             with_batch_dim=with_batch_dim,
             jit_options=jit_options,
+            **kwargs,
+        )
+    else:
+        raise NotImplementedError(
+            f"Data type {data_type} not implemented in make_pipeline."
         )
 
     return pipeline
