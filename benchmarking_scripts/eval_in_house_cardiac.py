@@ -99,7 +99,7 @@ def eval_in_house_data(
     if not visualize:
         return
 
-    plot_from_npz(save_path, save_path)
+    plot_from_npz(save_path, save_path, gif_fps=fps)
 
 
 def main():
@@ -110,12 +110,11 @@ def main():
     folder = Path(args.folder)
     files = list(folder.glob(args.pattern))
     n_frames = args.n_frames  # all frames if None
-    frame_idx = args.frame_idx  # example frame index to visualize
 
     override_config = dict(io_config=dict(frame_cutoff=n_frames))
 
     for file in files:
-        eval_in_house_data(file, save_dir, n_frames, frame_idx, override_config)
+        eval_in_house_data(file, save_dir, n_frames, override_config)
 
 
 if __name__ == "__main__":
