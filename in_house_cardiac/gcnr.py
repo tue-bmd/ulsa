@@ -218,12 +218,13 @@ def main():
             metric_name="gCNR",
             context="styles/ieee-tmi.mplstyle",
         )
-        plot_gcnr_over_time(
-            selected_frames,
-            _gcnr,
-            group_names,
-            f"output/{key}_over_time{ext}",
-        )
+        with plt.style.context("styles/ieee-tmi.mplstyle"):
+            plot_gcnr_over_time(
+                selected_frames,
+                _gcnr,
+                group_names,
+                f"output/{key}_over_time{ext}",
+            )
 
 
 if __name__ == "__main__":
