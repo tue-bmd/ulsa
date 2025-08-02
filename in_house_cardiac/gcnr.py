@@ -164,7 +164,9 @@ def main():
     DATA_ROOT = Path("/mnt/z/usbmd/Wessel/eval_in_house_cardiac/")
     SAVE_DIR = Path("output/gcnr")
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
-    subjects = sorted(["20240701_P1_A4CH_0001", "20240710_P7_A4CH_0000"])
+    subjects = sorted(
+        ["20240701_P1_A4CH_0001", "20240710_P7_A4CH_0000", "20241021_P9_A4CH_0000"]
+    )
     group_names = {
         "reconstructions": "Active Perception",
         "focused": "Focused",
@@ -189,7 +191,10 @@ def main():
 
         if vf.exists():
             valve_masks = np.load(vf) > 0
-            selected_frames = np.load(sf)[:-1]  # Exclude last frame
+            if sf.exists():
+                selected_frames = np.load(sf)[:-1]  # Exclude last frame
+            else:
+                selected_frames = np.arange(valve_masks.shape[0])
             selected_frames_all[subject_name] = selected_frames
             assert len(selected_frames) == valve_masks.shape[0], (
                 "Number of selected frames must match the number of valve masks."
