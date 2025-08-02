@@ -6,6 +6,7 @@ Selected frames are also saved as a video file.
 """
 
 from pathlib import Path
+from tkinter.filedialog import askdirectory
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -54,9 +55,7 @@ def ask_for_video():
 
 def ask_for_save_path():
     print("Select a folder to save the selected frames.")
-    save_path = filename_from_window_dialog(
-        "Choose folder to save selected frames", mode="directory"
-    )
+    save_path = askdirectory(title="Choose folder to save selected frames")
     if not save_path:
         raise ValueError("No save path selected.")
     return Path(save_path)
