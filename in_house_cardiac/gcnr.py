@@ -83,6 +83,14 @@ def swap_layer(d: dict):
     return merged
 
 
+def filter_empty(d: dict):
+    new_dict = {}
+    for k, v in d.items():
+        if v != {}:
+            new_dict[k] = v
+    return new_dict
+
+
 def sort_by_names(combined_results, names):
     """Sort combined results by strategy names."""
     return {k: combined_results[k] for k in names if k in combined_results}
@@ -156,7 +164,7 @@ def main():
     DATA_ROOT = Path("/mnt/z/usbmd/Wessel/eval_in_house_cardiac/")
     SAVE_DIR = Path("output/gcnr")
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
-    subjects = sorted(["20240701_P1_A4CH_0001"])
+    subjects = sorted(["20240701_P1_A4CH_0001", "20240710_P7_A4CH_0000"])
     group_names = {
         "reconstructions": "Active Perception",
         "focused": "Focused",
@@ -177,14 +185,16 @@ def main():
         rf = DATA_ROOT / f"{subject}_results.npz"
         white_masks = np.load(wf) > 0
         black_masks = np.load(bf) > 0
-        valve_masks = np.load(vf) > 0
-        selected_frames = np.load(sf)[:-1]  # Exclude last frame
-        selected_frames_all[subject_name] = selected_frames
         results = np.load(rf, allow_pickle=True)
 
-        assert len(selected_frames) == valve_masks.shape[0], (
-            "Number of selected frames must match the number of valve masks."
-        )
+        if vf.exists():
+            valve_masks = np.load(vf) > 0
+            selected_frames = np.load(sf)[:-1]  # Exclude last frame
+            selected_frames_all[subject_name] = selected_frames
+            assert len(selected_frames) == valve_masks.shape[0], (
+                "Number of selected frames must match the number of valve masks."
+            )
+
         assert (
             white_masks.shape[1:] == black_masks.shape[1:] == valve_masks.shape[1:]
         ), "White, black, and valve masks must have the same shape."
@@ -202,9 +212,10 @@ def main():
                 order=0,
             )
 
-            gcnr_valve_results[type] = gcnr_valve(
-                images, black_masks, valve_masks, selected_frames
-            )
+            if vf.exists():
+                gcnr_valve_results[type] = gcnr_valve(
+                    images, black_masks, valve_masks, selected_frames
+                )
             gcnr_results[type] = gcnr_per_frame(images, black_masks, white_masks)
 
         # Store results relative to the focused reconstruction
@@ -222,6 +233,8 @@ def main():
         gcnr_all[subject_name] = gcnr_relative
         gcnr_valve_all[subject_name] = gcnr_valve_relative
 
+    gcnr_valve_all = filter_empty(gcnr_valve_all)
+
     # Violin plot & over time plot
     violin = ViolinPlotter(group_names, xlabel="Subjects")
     for ext, (_gcnr, key) in product(
@@ -237,6 +250,8 @@ def main():
         with plt.style.context("styles/ieee-tmi.mplstyle"):
             for i, subject in enumerate(subjects):
                 subject_name = write_roman(i + 1)
+                if subject_name not in _gcnr:
+                    continue
                 plot_gcnr_over_time(
                     selected_frames_all[subject_name] if key == "gcnr_valve" else None,
                     _gcnr[subject_name],
