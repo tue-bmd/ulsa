@@ -69,17 +69,18 @@ def gcnr_valve(images, blacks, valve, selected_frames):
     images = images[selected_frames]
     blacks = blacks[selected_frames]
 
-    print("gCNR for targets:")
     gcnr = gcnr_per_frame(images, blacks, valve)
-    print(np.mean(gcnr))
     return gcnr
 
 
-def add_layer_to_dict(one_layer: dict, key):
-    two_layer = {}
-    for k, v in one_layer.items():
-        two_layer[k] = {key: v}
-    return two_layer
+def swap_layer(d: dict):
+    merged = {}
+    labels = d.keys()
+    ex_key = next(iter(d))
+    keys_one_deep = d[ex_key].keys()  # subjects
+    for key in keys_one_deep:
+        merged[key] = {label: d[key] for label, d in zip(labels, d.values())}
+    return merged
 
 
 def sort_by_names(combined_results, names):
@@ -111,7 +112,7 @@ def plot_gcnr_over_time(
         sort_by_names(relative_gcnr, group_names.keys()).items()
     ):
         plt.plot(
-            selected_frames,
+            selected_frames if selected_frames is not None else np.arange(len(gcnr)),
             gcnr,
             linestyle="",
             alpha=alpha,
@@ -120,7 +121,7 @@ def plot_gcnr_over_time(
         )
         # smooth gcnr line
         plt.plot(
-            selected_frames,
+            selected_frames if selected_frames is not None else np.arange(len(gcnr)),
             np.convolve(gcnr, np.ones(smoothness) / smoothness, mode="same"),
             linestyle=ls[i % len(ls)],
             color=color[i % len(color)],
@@ -151,9 +152,11 @@ def plot_gcnr_over_time(
 
 
 def main():
-    ANNOTATIONS_ROOT = Path("/mnt/z/usbmd/Wessel/cardiac_annotations/")
+    ANNOTATIONS_ROOT = Path("/mnt/z/usbmd/Wessel/cardiac_annotations_2/")
     DATA_ROOT = Path("/mnt/z/usbmd/Wessel/eval_in_house_cardiac/")
-    subjects = ["20240701_P1_A4CH_0001"]
+    SAVE_DIR = Path("output/gcnr")
+    SAVE_DIR.mkdir(parents=True, exist_ok=True)
+    subjects = sorted(["20240701_P1_A4CH_0001"])
     group_names = {
         "reconstructions": "Active Perception",
         "focused": "Focused",
@@ -163,6 +166,7 @@ def main():
 
     gcnr_valve_all = {}
     gcnr_all = {}
+    selected_frames_all = {}
     for i, subject in enumerate(subjects):
         # Load annotations and results
         subject_name = write_roman(i + 1)
@@ -175,16 +179,28 @@ def main():
         black_masks = np.load(bf) > 0
         valve_masks = np.load(vf) > 0
         selected_frames = np.load(sf)[:-1]  # Exclude last frame
+        selected_frames_all[subject_name] = selected_frames
         results = np.load(rf, allow_pickle=True)
 
-        if not (white_masks.shape == black_masks.shape == valve_masks.shape):
-            raise ValueError("Masks must have the same shape.")
+        assert len(selected_frames) == valve_masks.shape[0], (
+            "Number of selected frames must match the number of valve masks."
+        )
+        assert (
+            white_masks.shape[1:] == black_masks.shape[1:] == valve_masks.shape[1:]
+        ), "White, black, and valve masks must have the same shape."
 
         # Calculate gCNR for each reconstruction type
         gcnr_valve_results = {}
         gcnr_results = {}
         for type in group_names.keys():
             images = results[type]
+            images, _ = zea.display.scan_convert_2d(
+                images,
+                (0, images.shape[1]),
+                theta_range=results["theta_range"],
+                resolution=0.1,
+                order=0,
+            )
 
             gcnr_valve_results[type] = gcnr_valve(
                 images, black_masks, valve_masks, selected_frames
@@ -212,19 +228,21 @@ def main():
         [".png", ".pdf"], zip([gcnr_all, gcnr_valve_all], ["gcnr", "gcnr_valve"])
     ):
         violin.plot(
-            sort_by_names(_gcnr, group_names.keys()),
-            f"output/{key}_violin{ext}",
-            x_label_values=["I"],
+            sort_by_names(swap_layer(_gcnr), group_names.keys()),
+            SAVE_DIR / f"{key}_violin{ext}",
+            x_label_values=_gcnr.keys(),
             metric_name="gCNR",
             context="styles/ieee-tmi.mplstyle",
         )
         with plt.style.context("styles/ieee-tmi.mplstyle"):
-            plot_gcnr_over_time(
-                selected_frames,
-                _gcnr,
-                group_names,
-                f"output/{key}_over_time{ext}",
-            )
+            for i, subject in enumerate(subjects):
+                subject_name = write_roman(i + 1)
+                plot_gcnr_over_time(
+                    selected_frames_all[subject_name] if key == "gcnr_valve" else None,
+                    _gcnr[subject_name],
+                    group_names,
+                    SAVE_DIR / f"{subject}_{key}_over_time{ext}",
+                )
 
 
 if __name__ == "__main__":
