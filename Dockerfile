@@ -12,7 +12,7 @@ RUN apt-get update && \
 # Install tf2jax (and reinstall the right keras version)
 RUN KERAS_VER=$(python3 -c "import keras; print(keras.__version__)") \
     && pip install --no-cache-dir tf2jax==0.3.6 \
-    && pip install --no-cache-dir "keras==$KERAS_VER" pandas
+    && pip install --no-cache-dir "keras==$KERAS_VER" pandas jaxwt
 
 COPY . /ulsa
 WORKDIR /ulsa
