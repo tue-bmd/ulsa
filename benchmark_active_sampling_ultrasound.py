@@ -459,10 +459,10 @@ def get_shard_indices(shard_index, num_shards, *lengths):
         List[Tuple[int, ...]]: List of index tuples for this shard.
     """
 
-    all_indices = product(*(range(n) for n in lengths))
+    all_indices = list(product(*(range(n) for n in lengths)))
 
     if shard_index is None or num_shards is None:
-        return list(all_indices)
+        return all_indices
 
     assert num_shards > 0 and shard_index < num_shards, (
         "num_shards must be > 0 and shard_index must be < num_shards"
