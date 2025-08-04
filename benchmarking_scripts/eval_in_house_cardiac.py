@@ -46,15 +46,23 @@ def parse_args():
 
 
 def eval_in_house_data(
-    file, save_dir, n_frames, override_config, visualize=True, fps=8
+    file,
+    save_dir,
+    n_frames,
+    override_config,
+    visualize=True,
+    fps=8,
+    image_range=None,  # auto-dynamic range
 ):
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
     zea.log.info(f"Processing {file.stem}...")
     # Run active sampling on focused waves
     results, _, _, _, _, agent, _, _ = active_sampling_single_file(
         "configs/cardiac_112_3_frames.yaml",
         target_sequence=str(file),
         override_config=override_config,
-        image_range=None,  # auto-dynamic range
+        image_range=image_range,
     )
 
     # Unpack results
@@ -97,9 +105,11 @@ def eval_in_house_data(
     )
 
     if not visualize:
-        return
+        return save_path
 
     plot_from_npz(save_path, save_path, gif_fps=fps)
+
+    return save_path
 
 
 def main():
