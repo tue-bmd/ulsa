@@ -15,6 +15,7 @@ sbatch --time=05:00:00 launch/snellius_entry.sh python benchmarking_scripts/eval
 Snellius (sharding):
 
 (make sure that the number of shards is actually needed for the sweep)
+(assume ≈2 minutes of startup time per shard)
 
 e.g.
 
@@ -29,6 +30,15 @@ sbatch --time=00:14:00 --array=0-499 \
     --output=slurm/slurm-%A_%a.out launch/snellius_sharded.sh \
     python benchmarking_scripts/eval_echonet_dynamic.py \
     --save_dir "/path/to/sharding_sweep_$(date +"%Y-%m-%d_%H-%M-%S")" --num_shards 500
+```
+
+> [!TIP]
+> Test one or two shards before starting all (to see if the code works and the time is sufficient).
+
+```bash
+sbatch --time=00:14:00 --array=0,1 \
+    --output=slurm/slurm-%A_%a.out launch/snellius_sharded.sh \
+    python benchmarking_scripts/eval_echonet_dynamic.py ...
 ```
 """
 
