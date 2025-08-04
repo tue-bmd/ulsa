@@ -3,8 +3,8 @@ action_selection:
   n_actions: 8
   shape: [400, 48]
   selection_strategy: "uniform_random"
-  # kwargs:
-  #   average_across_batch: true
+  kwargs:
+    average_across_batch: false
   
 downstream_task: null
 is_3d: true # maybe more elegant way to handle this

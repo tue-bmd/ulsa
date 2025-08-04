@@ -82,7 +82,9 @@ def make_pipeline(
                 # then we simply apply the 2d DM along all azimuthal angles
                 zea.ops.Transpose((1, 0, 2, 3)),
                 # we do cropping rather than resizing to maintain elevation focusing
-                keras.layers.CenterCrop(*action_selection_shape),
+                zea.ops.Lambda(
+                    keras.layers.CenterCrop(*action_selection_shape),
+                ),
             ],
             with_batch_dim=with_batch_dim,
             jit_options=jit_options,

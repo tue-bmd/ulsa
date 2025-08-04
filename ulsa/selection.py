@@ -255,22 +255,26 @@ class GreedyEntropyUnivariateGaussian(GreedyEntropy):
                 - Newly selected lines as k-hot vectors, shaped (batch_size, n_possible_actions)
                 - Masks of shape (batch_size, img_height, img_width)
         """
-        pixelwise_variance = 0.5 * ops.log(
-            ((2 * np.pi * np.e) ** self.img_height) * ops.var(particles, axis=1)
+        # NOTE: we don't really need this constant offset since we take the argmax, and
+        # |A^l| doesn't change across l, but we keep it here for completeness.
+        constant_offset = self.img_height * 0.5 * ops.log(2 * np.pi * np.e)
+        pixelwise_variance = ops.var(particles, axis=1)
+        pixelwise_entropy = constant_offset + 0.5 * ops.log(
+            pixelwise_variance
         )  # [batch_size, height, width]
         # NOTE: we compute the linewise variance as the sum of pixelwise variances.
         # Since we're using variance as our entropy, we have that H(X_1, X_2, ...) = H(X_1) + H(X_2) + ...
-        linewise_variance = ops.sum(pixelwise_variance, axis=1)  # [batch_size, width]
+        linewise_entropy = ops.sum(pixelwise_entropy, axis=1)  # [batch_size, width]
         if self.average_across_batch:
-            linewise_variance = ops.mean(
-                linewise_variance, axis=1
+            linewise_entropy = ops.mean(
+                linewise_entropy, axis=1
             )  # for 3d case [1, width]
 
         # Greedily select best line, reweight entropies, and repeat
         all_selected_lines = []
         for _ in range(self.n_actions):
-            max_contribution_line, linewise_variance = ops.vectorized_map(
-                self.select_line_and_reweight_entropy, linewise_variance
+            max_contribution_line, linewise_entropy = ops.vectorized_map(
+                self.select_line_and_reweight_entropy, linewise_entropy
             )
             all_selected_lines.append(max_contribution_line)
 
