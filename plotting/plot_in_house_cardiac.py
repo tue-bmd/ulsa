@@ -5,12 +5,14 @@ for the in-house cardiac dataset.
 # diverging_dynamic_range = [-70, -30]
 """
 
+import os
 import sys
 
 import zea
 
 if __name__ == "__main__":
-    zea.init_device(allow_preallocate=False)
+    os.environ["KERAS_BACKEND"] = "numpy"
+    zea.init_device("cpu")
     sys.path.append("/ulsa")
 
 from pathlib import Path
@@ -18,6 +20,7 @@ from pathlib import Path
 import keras
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import FancyArrowPatch
 
 from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_side_gif
 
@@ -123,6 +126,40 @@ def plot_from_npz(
 
         axs[2].imshow(diverging[frame_idx], **kwargs)
         axs[2].set_title("Diverging (11)")
+
+        # Arrow tip (x, y)
+        # larger y will be lower on the plot
+        # bigger x will be further right on the plot
+        x_tip, y_tip = 880, 650
+        length = 310
+        angle_deg = 20 + 90
+        import math
+
+        angle_rad = math.radians(angle_deg)
+
+        # Calculate tail position
+        x_tail = x_tip - length * math.cos(angle_rad)
+        y_tail = y_tip - length * math.sin(angle_rad)
+
+        arrow_kwargs = {
+            "color": "purple",
+            "arrowstyle": "->",
+            "mutation_scale": 15,
+            "linewidth": 3,
+        }
+
+        arrow = FancyArrowPatch(
+            (x_tail, y_tail),  # tail
+            (x_tip, y_tip),  # tip
+            **arrow_kwargs,
+        )
+        axs[2].add_patch(arrow)
+        arrow = FancyArrowPatch(
+            (x_tail, y_tail),  # tail
+            (x_tip, y_tip),  # tip
+            **arrow_kwargs,
+        )
+        axs[3].add_patch(arrow)
 
         for ax in axs:
             ax.axis("off")
