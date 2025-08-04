@@ -410,13 +410,11 @@ class GreedyEntropyFixed(LinesActionModel):
             Tensor: batch of entropies per line, of shape (batch, n_possible_actions)
         """
         n_particles = ops.shape(particles)[1]
-        gaussian_error_per_pixel_stacked = (
-            GreedyEntropy.compute_pairwise_pixel_gaussian_error(
-                particles,
-                self.stack_n_cols,
-                self.n_possible_actions,
-                self.entropy_sigma,
-            )
+        gaussian_error_per_pixel_stacked = self.compute_pairwise_pixel_gaussian_error(
+            particles,
+            self.stack_n_cols,
+            self.n_possible_actions,
+            self.entropy_sigma,
         )
         # sum out first dimension of (n_particles x n_particles) error matrix
         # [n_particles, batch, height, width]
