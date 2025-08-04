@@ -20,6 +20,7 @@ cat .env # check if .env is okay
 # Doc: https://apptainer.org/docs/user/main/cli/apptainer_exec.html
 # not binding home to avoid cache conflicts (hugginface, usbmd, etc...!)
 srun apptainer exec --env-file .env \
+                    --env ZEA_CACHE_DIR="$TMPDIR/$SLURM_ARRAY_TASK_ID" \
                     --no-home \
                     --cwd /ulsa/ \
                     --bind ~/ulsa/:/ulsa/ \
