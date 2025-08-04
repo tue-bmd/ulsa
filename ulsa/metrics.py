@@ -1,11 +1,9 @@
-"""Metric functions
-Author(s): Tristan Stevens
-"""
-
+import dm_pix as pix
 import keras
 import numpy as np
-import tensorflow as tf
 from keras import ops
+
+import zea
 from zea import log
 from zea.metrics import gcnr as generalized_contrast_to_noise_ratio
 from zea.models.lpips import LPIPS
@@ -53,83 +51,59 @@ def peak_signal_to_noise_ratio(y_true, y_pred, max_val=255, **kwargs):
     return psnr
 
 
-def structural_similarity_index(
-    y_true,
-    y_pred,
-    max_val=255,
-    filter_size=11,
-    filter_sigma=1.5,
-    k1=0.01,
-    k2=0.03,
-    **kwargs,
-):
-    """Gives the structural similiary index (SSIM) for two input tensors.
-    Args:
-        y_true (tensor): [None, height, width, channels]
-        y_pred (tensor): [None, height, width, channels]
-        max_val: The dynamic range of the images
-        filter_size: size of gaussian filter
-        filter_sigma: width of gaussian filter
-        k1, k2: ssim constants
-    Returns:
-        (float): structural similiary index between y_true and y_pred.
-
+def get_lpips(image_range, batch_size=128, clip=False):
     """
+    Get the Learned Perceptual Image Patch Similarity (LPIPS) metric.
 
-    def prepare_tensor(tensor):
-        """Need to convert tensor to numpy array and back to tensor for multi backend support"""
-        tensor = ops.convert_to_numpy(tensor)
-        tensor = tf.convert_to_tensor(tensor)
-        return tensor
-
-    y_true = prepare_tensor(y_true)
-    y_pred = prepare_tensor(y_pred)
-
-    score = tf.image.ssim(
-        y_true,
-        y_pred,
-        max_val=max_val,
-        filter_size=filter_size,
-        filter_sigma=filter_sigma,
-        k1=k1,
-        k2=k2,
-    )
-    return ops.convert_to_tensor(score)
-
-
-def get_learned_perceptual_image_patch_similarity(
-    image_range: tuple, image_shape: tuple, **kwargs
-):
-    """Gives the learned perceptual image patch similarity (LPIPS) for two input tensors.
     Args:
-        y_true (tensor): [None, height, width, channels]
-        y_pred (tensor): [None, height, width, channels]
+        image_range (list): The range of the images. Will be translated to [-1, 1] for LPIPS.
+        batch_size (int): The batch size for the LPIPS model.
+        clip (bool): Whether to clip the images to `image_range`.
+
     Returns:
-        (float): learned perceptual image patch similarity between y_true and y_pred.
-
+        The LPIPS metric function which can be used with [..., h, w, c] tensors in
+        the range `image_range`.
     """
-    assert len(image_shape) == 3, "Image shape must be (height, width, channels)"
-    assert len(image_range) == 2, "Image range must be (min, max)"
+    # Get the LPIPS model
+    _lpips = LPIPS.from_preset("lpips")
+    _lpips.trainable = False
+    _lpips.disable_checks = True
 
-    lpips_model = LPIPS.from_preset("lpips")
+    def unstack_lpips(imgs):
+        """Unstack the images and calculate the LPIPS metric."""
+        img1, img2 = ops.unstack(imgs, num=2, axis=-1)
+        return _lpips([img1, img2])
 
-    def learned_perceptual_image_patch_similarity(y_true, y_pred, **kwargs):
-        y_true = translate(y_true, image_range, [-1, 1])
-        y_pred = translate(y_pred, image_range, [-1, 1])
+    def lpips(img1, img2, **kwargs):
+        """
+        The LPIPS metric function.
+        Args:
+            img1 (tensor) with shape (..., h, w, c)
+            img2 (tensor) with shape (..., h, w, c)
+        Returns (float): The LPIPS metric between img1 and img2 with shape [...]
+        """
+        # clip and translate images to [-1, 1]
+        if clip:
+            img1 = ops.clip(img1, *image_range)
+            img2 = ops.clip(img2, *image_range)
+        img1 = translate(img1, image_range, [-1, 1])
+        img2 = translate(img2, image_range, [-1, 1])
 
-        lpips = lpips_model([y_true, y_pred])
+        imgs = ops.stack([img1, img2], axis=-1)
+        n_batch_dims = ops.ndim(img1) - 3
+        return zea.tensor_ops.func_with_one_batch_dim(
+            unstack_lpips, imgs, n_batch_dims, batch_size=batch_size
+        )
 
-        return lpips
-
-    return learned_perceptual_image_patch_similarity
+    return lpips
 
 
 METRIC_FUNCS = dict(
     mse=mean_squared_error,
     mae=mean_absolute_error,
     psnr=peak_signal_to_noise_ratio,
-    ssim=structural_similarity_index,
-    lpips=get_learned_perceptual_image_patch_similarity,
+    ssim=pix.ssim,
+    lpips=get_lpips,
     gcnr=generalized_contrast_to_noise_ratio,
 )
 
@@ -229,7 +203,10 @@ class Metrics:
             # initialize the metric function
             if METRIC_FUNCS[metric].__name__.startswith("get_"):
                 log.info(f"Initializing metric: {log.green(metric)}")
-                METRIC_FUNCS[metric] = METRIC_FUNCS[metric](self.image_range, **kwargs)
+                init_dict = kwargs.get(metric, {})
+                METRIC_FUNCS[metric] = METRIC_FUNCS[metric](
+                    image_range=self.image_range, **init_dict
+                )
 
         # link each metric to a bool which specifiec whether it is a
         # metric that should be minimized or not

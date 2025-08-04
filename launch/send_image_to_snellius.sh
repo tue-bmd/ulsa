@@ -6,6 +6,8 @@ TMP_IMAGE_SIF=/tmp/ulsa.sif
 SNELLIUS_USER=wvannierop
 SNELLIUS_ADDRESS=snellius.surf.nl
 
+# build docker image
+docker build . -t ulsa:latest
 # save docker image to file.
 docker save -o $TMP_IMAGE_TAR ulsa:latest
 # convert docker image to apptainer image

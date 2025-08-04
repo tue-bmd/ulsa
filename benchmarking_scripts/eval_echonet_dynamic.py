@@ -28,7 +28,7 @@ assume 200 shards -> 7.5min per shard
 sbatch --time=00:12:00 --array=0-199 \
     --output=slurm/slurm-%A_%a.out launch/snellius_sharded.sh \
     python benchmarking_scripts/eval_echonet_dynamic.py \
-    --append_save_dir "sharding_sweep_$(date +"%Y-%m-%d_%H-%M-%S")" --num_shards 200
+    --save_dir "/path/to/sharding_sweep_$(date +"%Y-%m-%d_%H-%M-%S")" --num_shards 200
 ```
 """
 
@@ -72,6 +72,12 @@ def parse_args():
         help="List of n_actions values to sweep over, e.g. --n_actions 4 7 14",
         default=[2, 4, 7, 14, 28],
     )
+    parser.add_argument(
+        "--save_dir",
+        type=str,
+        default="/mnt/z/usbmd/Wessel/eval_echonet_dynamic",
+        help="Directory to save the benchmark results.",
+    )
     return parser.parse_args()
 
 
@@ -79,10 +85,10 @@ if __name__ == "__main__":
     args = parse_args()
     keras.mixed_precision.set_global_policy("float32")  # echonet-dynamic uses float32
 
-    TARGET_DIR = data_paths.data_root / "USBMD_datasets" / "echonet" / "val"
-    SAVE_DIR = Path("/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/echonet")
+    TARGET_DIR = data_paths.data_root / "USBMD_datasets" / "echonet_legacy" / "val"
+    SAVE_DIR = Path(args.save_dir)
 
-    ulsa_agent_config = Config.from_yaml(Path("/ulsa/configs/echonet_3_frames.yaml"))
+    ulsa_agent_config = Config.from_yaml("/ulsa/configs/echonet_3_frames.yaml")
 
     # 41 hours
     sweep_save_dir, all_metrics_results = run_benchmark(
@@ -93,7 +99,8 @@ if __name__ == "__main__":
             "action_selection.n_actions": args.n_actions,
             "action_selection.selection_strategy": [
                 "equispaced",
-                "greedy_variance"
+                "greedy_variance",
+                "greedy_entropy_univariate_gaussian",
                 "uniform_random",
             ],
             "diffusion_inference.batch_size": [4],
@@ -113,7 +120,7 @@ if __name__ == "__main__":
         sweep_params={
             "action_selection.n_actions": args.n_actions,
             "action_selection.selection_strategy": ["covariance"],
-            "action_selection.kwargs": [{"n_masks": 100000}],  # 1e5
+            "action_selection.kwargs": [{"n_masks": int(1e5)}],
             "diffusion_inference.batch_size": [4],
             "downstream_task": ["echonet_segmentation"],  # just runs additionally
         },

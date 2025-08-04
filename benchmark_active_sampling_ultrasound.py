@@ -299,9 +299,7 @@ def benchmark(
 
     if metrics is None:
         metrics = Metrics(
-            # ssim can cause OOMs with 3d data...
-            # TODO: batchify ssim metric
-            metrics=["mae", "mse", "psnr"],  # , "ssim"],
+            metrics=["mae", "mse", "psnr", "ssim", "lpips"],
             image_range=[0, 255],
         )
 
@@ -411,7 +409,7 @@ def benchmark(
                 ),
             )
             log.info(
-                f"Saved results for target {i}/{len(file_indices)} (file index: {file_index}) "
+                f"Saved results for target {i + 1}/{len(file_indices)} (file index: {file_index}) "
                 + f"at {log.yellow(outpath)}"
             )
 
@@ -487,6 +485,7 @@ def run_benchmark(
     num_shards=None,
     shard_index=None,
     validate_dataset=True,
+    debug_sweep=False,
 ):
     """
     Run benchmarking for ultrasound line-scanning agents.
@@ -551,7 +550,16 @@ def run_benchmark(
     # if the benchmark is complete later
 
     for sweep_idx, file_indices in indices_per_iterable.items():
+        zea.log.info(
+            f":: Running sweep index: {sweep_idx + 1} / {len(indices_per_iterable)} ::"
+        )
         sweep_config = sweep_configs[sweep_idx]
+
+        if debug_sweep:
+            log.warning("DEBUGGING SWEEP!")
+            limit_n_frames = 4
+            file_indices = file_indices[:2]  # only run on first 2 files
+
         out = benchmark(
             sweep_config,
             dataset,
