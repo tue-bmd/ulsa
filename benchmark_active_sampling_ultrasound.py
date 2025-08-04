@@ -450,9 +450,6 @@ def get_shard_indices(shard_index, num_shards, *lengths):
     Returns the indices of the Cartesian product of the iterables assigned to the given shard.
     Each index is a tuple of indices (one per iterable).
 
-    This function will group the indices by the first iterable and assign blocks to
-    shards in a round-robin fashion.
-
     Args:
         shard_index (int): Index of the current shard (0-based).
         num_shards (int): Total number of shards.
@@ -462,10 +459,10 @@ def get_shard_indices(shard_index, num_shards, *lengths):
         List[Tuple[int, ...]]: List of index tuples for this shard.
     """
 
-    all_indices = list(product(*(range(n) for n in lengths)))
+    all_indices = product(*(range(n) for n in lengths))
 
     if shard_index is None or num_shards is None:
-        return all_indices
+        return list(all_indices)
 
     assert num_shards > 0 and shard_index < num_shards, (
         "num_shards must be > 0 and shard_index must be < num_shards"
@@ -473,17 +470,12 @@ def get_shard_indices(shard_index, num_shards, *lengths):
 
     log.info(f"Sharding: {num_shards} shards, current shard index: {shard_index}")
 
-    # Group indices by the first iterable
-    grouped = defaultdict(list)
-    for idxs in all_indices:
-        grouped[idxs[0]].append(idxs)
-
-    # Assign blocks to shards in round-robin fashion
-    blocks = list(grouped.values())
-    result = []
-    for i, block in enumerate(blocks):
-        if i % num_shards == shard_index:
-            result.extend(block)
+    # Calculate the chunk size for each shard
+    # Use ceiling division to ensure all indices are covered
+    chunk_size = (len(all_indices) + num_shards - 1) // num_shards  # Ceiling division
+    start = shard_index * chunk_size
+    end = min(start + chunk_size, len(all_indices))
+    result = all_indices[start:end]
 
     assert len(result) > 0, (
         f"No indices found for shard {shard_index} with {num_shards} shards and lengths {lengths}. "
