@@ -21,6 +21,8 @@ cat .env # check if .env is okay
 # not binding home to avoid cache conflicts (hugginface, usbmd, etc...!)
 srun apptainer exec --env-file .env \
                     --env ZEA_CACHE_DIR="$TMPDIR/$SLURM_ARRAY_TASK_ID" \
+                    --env HF_HOME="$TMPDIR/$SLURM_ARRAY_TASK_ID/huggingface_home" \
+                    --env MPLCONFIGDIR="$TMPDIR/$SLURM_ARRAY_TASK_ID/matplotlib" \
                     --no-home \
                     --cwd /ulsa/ \
                     --bind ~/ulsa/:/ulsa/ \
