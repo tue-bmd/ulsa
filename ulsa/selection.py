@@ -504,3 +504,17 @@ class GreedyEntropyFixed(LinesActionModel):
             axis=0,
         )
         return selected_lines_k_hot, self.lines_to_im_size(selected_lines_k_hot)
+
+
+def selector_from_name(name: str, **kwargs) -> LinesActionModel:
+    """Get the action selection model from its name."""
+    assert name in action_selection_registry, f"Unknown action selection model: {name}"
+
+    # Override zea defaults
+    if name == "covariance":
+        assert "covariance" in action_selection_registry, (
+            "Covariance sampling is not registered."
+        )
+        kwargs["n_masks"] = int(1e5)
+
+    return action_selection_registry[name](**kwargs)
