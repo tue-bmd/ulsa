@@ -78,6 +78,37 @@ def parse_args():
         default="/mnt/z/usbmd/Wessel/eval_echonet_dynamic",
         help="Directory to save the benchmark results.",
     )
+    parser.add_argument(
+        "--limit_n_frames",
+        type=int,
+        default=100,
+        help="Number of frames to use per patient for the benchmark.",
+    )
+    parser.add_argument(
+        "--limit_n_samples",
+        type=int,
+        default=None,
+        help="Number of samples to use for the benchmark. If None, all samples are used.",
+    )
+    parser.add_argument(
+        "--selection_strategy",
+        type=str,
+        nargs="+",
+        help="List of selection strategies to sweep over, e.g. --selection_strategy equispaced greedy_variance",
+        default=[
+            "equispaced",
+            "greedy_variance",
+            "greedy_entropy_univariate_gaussian",
+            "uniform_random",
+            "covariance",
+        ],
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="val",
+        help="Dataset split to use for the benchmark, e.g. 'train', 'val', 'test'.",
+    )
     return parser.parse_args()
 
 
@@ -85,16 +116,14 @@ if __name__ == "__main__":
     args = parse_args()
     keras.mixed_precision.set_global_policy("float32")  # echonet-dynamic uses float32
 
-    TARGET_DIR = data_paths.data_root / "USBMD_datasets" / "echonet_legacy" / "val"
-    SAVE_DIR = Path(args.save_dir)
+    TARGET_DIR = data_paths.data_root / "USBMD_datasets" / "echonet_legacy" / args.split
 
     ulsa_agent_config = Config.from_yaml("/ulsa/configs/echonet_3_frames.yaml")
 
-    # 41 hours
     sweep_save_dir, all_metrics_results = run_benchmark(
         agent_config=ulsa_agent_config,
         target_dir=TARGET_DIR,
-        save_dir=SAVE_DIR,
+        save_dir=Path(args.save_dir),
         sweep_params={
             "action_selection.n_actions": args.n_actions,
             "action_selection.selection_strategy": [
@@ -106,28 +135,9 @@ if __name__ == "__main__":
             "diffusion_inference.batch_size": [4],
             "downstream_task": ["echonet_segmentation"],  # just runs additionally
         },
-        limit_n_samples=None,  # set to None to use all samples
-        limit_n_frames=100,  # makes sure every patient is equally represented
+        limit_n_samples=args.limit_n_samples,  # set to None to use all samples
+        limit_n_frames=args.limit_n_frames,  # makes sure every patient is equally represented
         num_shards=args.num_shards,
         shard_index=args.shard_index,
     )
-
-    # 21 hours
-    sweep_save_dir, all_metrics_results = run_benchmark(
-        agent_config=ulsa_agent_config,
-        target_dir=TARGET_DIR,
-        save_dir=SAVE_DIR,
-        sweep_params={
-            "action_selection.n_actions": args.n_actions,
-            "action_selection.selection_strategy": ["covariance"],
-            "action_selection.kwargs": [{"n_masks": int(1e5)}],
-            "diffusion_inference.batch_size": [4],
-            "downstream_task": ["echonet_segmentation"],  # just runs additionally
-        },
-        limit_n_samples=None,  # set to None to use all samples
-        limit_n_frames=100,  # makes sure every patient is equally represented
-        num_shards=args.num_shards,
-        shard_index=args.shard_index,
-    )
-
     print("Benchmark completed successfully: ", sweep_save_dir)

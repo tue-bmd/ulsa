@@ -12,19 +12,22 @@ from rich.table import Table
 import zea
 from ulsa.buffer import FrameBuffer, lifo_shift
 from ulsa.pfield import lines_to_pfield
-from ulsa.selection import DownstreamTaskSelection, GreedyEntropyFixed, GreedyVariance
+from ulsa.selection import (
+    DownstreamTaskSelection,
+    GreedyEntropyFixed,
+    GreedyVariance,
+    selector_from_name,
+)
 from zea.agent.selection import (
     CovarianceSamplingLines,
     EquispacedLines,
     GreedyEntropy,
     LinesActionModel,
-    MaskActionModel,
     UniformRandomLines,
 )
 from zea.backend import jit
 from zea.config import Config
 from zea.internal.operators import Operator, operator_registry
-from zea.internal.registry import action_selection_registry
 from zea.models.diffusion import DiffusionModel
 from zea.tensor_ops import split_seed
 from zea.utils import translate
@@ -139,10 +142,8 @@ def get_initial_action_selection_fn(
     if isinstance(
         action_selector, (GreedyEntropy, CovarianceSamplingLines, GreedyEntropyFixed)
     ):
-        selector_class: MaskActionModel = action_selection_registry[
-            initial_selection_strategy
-        ]
-        initial_selector = selector_class(
+        initial_selector = selector_from_name(
+            initial_selection_strategy,
             n_actions=action_selector.n_actions,
             n_possible_actions=action_selector.n_possible_actions,
             img_width=action_selector.img_width,
@@ -461,10 +462,8 @@ def setup_agent(
         img_height, img_width, _ = model.input_shape
         agent_config.action_selection.shape = (img_height, img_width)
 
-    action_selection_class: MaskActionModel = action_selection_registry[
-        agent_config.action_selection.selection_strategy
-    ]
-    action_selector = action_selection_class(
+    action_selector = selector_from_name(
+        agent_config.action_selection.selection_strategy,
         n_actions=agent_config.action_selection.n_actions,
         n_possible_actions=agent_config.action_selection.n_possible_actions,
         img_height=img_height,
