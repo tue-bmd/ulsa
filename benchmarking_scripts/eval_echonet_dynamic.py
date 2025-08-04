@@ -92,7 +92,7 @@ def parse_args():
     )
     parser.add_argument(
         "--selection_strategy",
-        type=int,
+        type=str,
         nargs="+",
         help="List of selection strategies to sweep over, e.g. --selection_strategy equispaced greedy_variance",
         default=[
