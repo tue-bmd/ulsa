@@ -17,6 +17,8 @@ import zea
 sys.path.append("/ulsa")
 from plotting.plot_utils import ViolinPlotter
 
+METRIC_LABEL = "Relative gCNR [-]"
+
 
 def filter_dict_of_arrays(d: dict, condition):
     return {k: condition(v) for k, v in d.items()}
@@ -160,7 +162,7 @@ def plot_gcnr_over_time(
 
     if not fig_was_given:
         plt.xlabel("Frame index [-]")
-        plt.ylabel("Relative gCNR [-]")
+        plt.ylabel(METRIC_LABEL)
         # plt.title("gCNR per Frame")
         fig.legend(
             loc="outside upper center",
@@ -179,9 +181,12 @@ def main():
     DATA_ROOT = Path("/mnt/z/usbmd/Wessel/eval_in_house_cardiac/")
     SAVE_DIR = Path("output/gcnr")
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
-    subjects = sorted(
-        ["20240701_P1_A4CH_0001", "20240710_P7_A4CH_0000", "20241021_P9_A4CH_0000"]
-    )
+    subjects = [
+        "20240701_P1_A4CH_0001",
+        "20241021_P9_A4CH_0000",
+        "20240710_P7_A4CH_0000",
+    ]
+
     group_names = {
         "reconstructions": "Active Perception",
         "focused": "Focused",
@@ -291,7 +296,7 @@ def main():
             sort_by_names(swap_layer(_gcnr), group_names.keys()),
             SAVE_DIR / f"{key}_violin{ext}",
             x_label_values=_gcnr.keys(),
-            metric_name="gCNR",
+            metric_name=METRIC_LABEL,
             context="styles/ieee-tmi.mplstyle",
         )
         with plt.style.context("styles/ieee-tmi.mplstyle"):
@@ -314,6 +319,14 @@ def main():
         "reconstructions": 20,
         "diverging": 10,
     }
+    title_kwargs = {
+        "y": 1.0,
+        "pad": -10,
+        "fontsize": 8,
+        "alpha": 0.7,
+        "loc": "left",
+        "x": 0.03,
+    }
     with plt.style.context("styles/ieee-tmi.mplstyle"):
         fig, axs = plt.subplots(2, 1, sharex=True)
         plt.sca(axs[0])
@@ -331,10 +344,11 @@ def main():
             zorder=zorder,
         )
         plt.grid()
+        plt.title("Subject I", **title_kwargs)
         plt.sca(axs[1])
-        _sel_frames = selected_frames_all["III"][selected_frames_all["III"] < 100]
+        _sel_frames = selected_frames_all["II"][selected_frames_all["II"] < 100]
         _gcnr = filter_dict_of_arrays(
-            gcnr_valve_all["III"], lambda x: x[selected_frames_all["III"] < 100]
+            gcnr_valve_all["II"], lambda x: x[selected_frames_all["II"] < 100]
         )
         fig = plot_gcnr_over_time(
             _sel_frames,
@@ -346,8 +360,9 @@ def main():
             zorder=zorder,
         )
         plt.xlabel("Frame index [-]")
-        fig.supylabel("Relative gCNR [-]")
+        fig.supylabel(METRIC_LABEL)
         plt.grid()
+        plt.title("Subject II", **title_kwargs)
         h, l = axs[0].get_legend_handles_labels()
         fig.legend(
             h,
