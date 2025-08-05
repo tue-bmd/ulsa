@@ -14,7 +14,6 @@ from ulsa.buffer import FrameBuffer, lifo_shift
 from ulsa.pfield import lines_to_pfield
 from ulsa.selection import (
     DownstreamTaskSelection,
-    GreedyEntropyFixed,
     GreedyVariance,
     selector_from_name,
 )
@@ -139,9 +138,7 @@ class AgentState:
 def get_initial_action_selection_fn(
     action_selector: LinesActionModel, initial_selection_strategy="uniform_random"
 ):
-    if isinstance(
-        action_selector, (GreedyEntropy, CovarianceSamplingLines, GreedyEntropyFixed)
-    ):
+    if isinstance(action_selector, (GreedyEntropy, CovarianceSamplingLines)):
         initial_selector = selector_from_name(
             initial_selection_strategy,
             n_actions=action_selector.n_actions,
@@ -174,10 +171,7 @@ def action_selection_wrapper(action_selector: LinesActionModel):
 
         def action_selection(particles, current_lines, seed):
             return action_selector.sample(particles=particles), None
-    elif isinstance(action_selector, GreedyEntropyFixed):
 
-        def action_selection(particles, current_lines, seed):
-            return action_selector.sample(particles=particles), None
     elif isinstance(action_selector, GreedyVariance):
 
         def action_selection(particles, current_lines, seed):
