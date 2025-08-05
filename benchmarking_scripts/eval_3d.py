@@ -47,7 +47,7 @@ if __name__ == "__main__":
         save_dir=SAVE_DIR,
         sweep_params={
             "action_selection.n_actions": [3, 6, 12],
-            "action_selection.selection_strategy": ["greedy_entropy_fixed"],
+            "action_selection.selection_strategy": ["greedy_entropy"],
             "action_selection.kwargs": [{"average_across_batch": True}],
             "diffusion_inference.batch_size": [4],
         },
