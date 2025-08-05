@@ -307,6 +307,7 @@ class GreedyEntropyFixed(LinesActionModel):
         std_dev: float = 1,
         num_lines_to_update: int = 5,
         entropy_sigma: float = 1.0,
+        average_across_batch: bool = False,
     ):
         """Initialize the GreedyEntropy action selection model.
 
@@ -342,6 +343,7 @@ class GreedyEntropyFixed(LinesActionModel):
         )
         self.upside_down_gaussian = upside_down_gaussian(points_to_evaluate)
         self.entropy_sigma = entropy_sigma
+        self.average_across_batch = average_across_batch
 
     @staticmethod
     def compute_pairwise_pixel_gaussian_error(
@@ -494,6 +496,10 @@ class GreedyEntropyFixed(LinesActionModel):
 
         pixelwise_entropy = self.compute_pixelwise_entropy(particles)
         linewise_entropy = ops.sum(pixelwise_entropy, axis=1)
+        if self.average_across_batch:
+            linewise_entropy = ops.mean(
+                linewise_entropy, axis=1
+            )  # for 3d case [1, width]
 
         # Greedily select best line, reweight entropies, and repeat
         all_selected_lines = []

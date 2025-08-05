@@ -37,7 +37,7 @@ if __name__ == "__main__":
     if args.save_dir is not None:
         SAVE_DIR = args.save_dir
     else:
-        SAVE_DIR = data_paths.output / "ULSA_benchmarks" / "3d_debug"
+        SAVE_DIR = data_paths.output / "ULSA_benchmarks" / "3d"
 
     ulsa_agent_config = Config.from_yaml(Path("/ulsa/configs/elevation_3d.yaml"))
 
@@ -47,9 +47,7 @@ if __name__ == "__main__":
         save_dir=SAVE_DIR,
         sweep_params={
             "action_selection.n_actions": [3, 6, 12],
-            "action_selection.selection_strategy": [
-                "greedy_entropy_univariate_gaussian"
-            ],
+            "action_selection.selection_strategy": ["greedy_entropy_fixed"],
             "action_selection.kwargs": [{"average_across_batch": True}],
             "diffusion_inference.batch_size": [4],
         },
