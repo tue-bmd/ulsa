@@ -585,18 +585,23 @@ def active_sampling_single_file(
     else:
         downstream_task = None
 
-    # Load downstream task model and apply to targets and reconstructions for comparison
-    targets_normalized = zea.utils.translate(
-        validation_sample_frames, range_from=dynamic_range, range_to=(-1, 1)
-    )
-    downstream_task, targets_dst, reconstructions_dst, beliefs_dst = (
-        apply_downstream_task(
-            downstream_task,
-            agent_config,
-            targets_normalized[..., None],
-            results.belief_distributions,
+    if downstream_task is not None:
+        # Load downstream task model and apply to targets and reconstructions for comparison
+        targets_normalized = zea.utils.translate(
+            validation_sample_frames, range_from=dynamic_range, range_to=(-1, 1)
         )
-    )
+        downstream_task, targets_dst, reconstructions_dst, beliefs_dst = (
+            apply_downstream_task(
+                downstream_task,
+                agent_config,
+                targets_normalized[..., None],
+                results.belief_distributions,
+            )
+        )
+    else:
+        targets_dst = None
+        reconstructions_dst = None
+        beliefs_dst = None
 
     return (
         results,

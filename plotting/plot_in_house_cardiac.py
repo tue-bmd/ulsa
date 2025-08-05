@@ -36,15 +36,19 @@ def plot_from_npz(
     context=None,
     frame_idx=24,
     arrow=None,
+    diverging_dynamic_range=None,
+    focused_dynamic_range=None,
 ):
     save_path = Path(save_path)
     results = np.load(path, allow_pickle=True)
 
     focused = results["focused"]
-    focused_dynamic_range = results["focused_dynamic_range"]
+    if focused_dynamic_range is None:
+        focused_dynamic_range = results["focused_dynamic_range"]
 
     diverging = results["diverging"]
-    diverging_dynamic_range = results["diverging_dynamic_range"]
+    if diverging_dynamic_range is None:
+        diverging_dynamic_range = results["diverging_dynamic_range"]
 
     reconstructions = results["reconstructions"]
     reconstruction_range = results["reconstruction_range"]
