@@ -13,7 +13,7 @@ import numpy as np
 
 from active_sampling_temporal import active_sampling_single_file
 from in_house_cardiac.cardiac_scan import cardiac_scan
-from plotting.plot_in_house_cardiac import plot_from_npz
+from plotting.plot_in_house_cardiac import get_arrow, plot_from_npz
 
 
 def parse_args():
@@ -46,15 +46,25 @@ def parse_args():
 
 
 def eval_in_house_data(
-    file, save_dir, n_frames, override_config, visualize=True, fps=8
+    file,
+    save_dir,
+    n_frames,
+    override_config,
+    visualize=True,
+    fps=8,
+    image_range=None,  # auto-dynamic range
+    seed=42,
 ):
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
     zea.log.info(f"Processing {file.stem}...")
     # Run active sampling on focused waves
     results, _, _, _, _, agent, _, _ = active_sampling_single_file(
         "configs/cardiac_112_3_frames.yaml",
         target_sequence=str(file),
         override_config=override_config,
-        image_range=None,  # auto-dynamic range
+        image_range=image_range,
+        seed=seed,
     )
 
     # Unpack results
@@ -97,9 +107,11 @@ def eval_in_house_data(
     )
 
     if not visualize:
-        return
+        return save_path
 
     plot_from_npz(save_path, save_path, gif_fps=fps)
+
+    return save_path
 
 
 def main():
@@ -117,16 +129,30 @@ def main():
         eval_in_house_data(file, save_dir, n_frames, override_config)
 
 
+def run_single_example():
+    path = eval_in_house_data(
+        Path(
+            "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"
+        ),
+        Path("/mnt/z/usbmd/Wessel/ulsa_paper_plots"),
+        n_frames=None,
+        override_config=dict(io_config=dict(frame_cutoff=None)),
+        visualize=False,
+        image_range=[-65, -20],
+        seed=0,
+    )
+    plot_from_npz(
+        path,
+        "output/in_house_cardiac.png",
+        gif=False,
+        context="styles/ieee-tmi.mplstyle",
+        diverging_dynamic_range=[-70, -30],
+        focused_dynamic_range=[-68, -20],
+        arrow=get_arrow(),
+    )
+
+
 if __name__ == "__main__":
     main()  # run all a4ch
 
-    # eval_in_house_data(
-    #     Path(
-    #         "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"
-    #     ),
-    #     Path("/mnt/z/usbmd/Wessel/eval_in_house_cardiac"),
-    #     n_frames=None,
-    #     override_config=dict(io_config=dict(frame_cutoff=None)),
-    #     visualize=True,
-    #     fps=8,
-    # )
+    # run_single_example()

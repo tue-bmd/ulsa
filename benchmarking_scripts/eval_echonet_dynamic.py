@@ -19,17 +19,18 @@ Snellius (sharding):
 
 e.g.
 
-500 files, 25 sweep entries, 100 frames = 1,250,000 frames
+500 files, 15 sweep entries, 100 frames = 750,000 frames
 assume 2 fps
-625,000 s ≈ 11,000 min
-assume 500 shards -> 22 min per shard
+375,000 s ≈ 6,250 min
+assume 750 shards -> 9 min per shard
 
 
 ```bash
-sbatch --time=00:30:00 --array=0-499 \
+sbatch --time=00:15:00 --array=0-749 \
     --output=slurm/slurm-%A_%a.out launch/snellius_sharded.sh \
     python benchmarking_scripts/eval_echonet_dynamic.py \
-    --save_dir "/path/to/sharding_sweep_$(date +"%Y-%m-%d_%H-%M-%S")" --num_shards 500
+    --save_dir "/path/to/sharding_sweep_$(date +"%Y-%m-%d_%H-%M-%S")" --num_shards 750 \
+    --split val
 ```
 
 > [!TIP]
@@ -107,10 +108,8 @@ def parse_args():
         help="List of selection strategies to sweep over, e.g. --selection_strategy equispaced greedy_variance",
         default=[
             "equispaced",
-            "greedy_variance",
-            "greedy_entropy_univariate_gaussian",
+            "greedy_entropy",
             "uniform_random",
-            "covariance",
         ],
     )
     parser.add_argument(

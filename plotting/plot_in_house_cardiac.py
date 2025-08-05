@@ -5,19 +5,24 @@ for the in-house cardiac dataset.
 # diverging_dynamic_range = [-70, -30]
 """
 
+import os
 import sys
 
 import zea
 
 if __name__ == "__main__":
-    zea.init_device(allow_preallocate=False)
+    os.environ["KERAS_BACKEND"] = "jax"
+    zea.init_device()
     sys.path.append("/ulsa")
 
+import copy
+import math
 from pathlib import Path
 
 import keras
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import FancyArrowPatch
 
 from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_side_gif
 
@@ -30,15 +35,20 @@ def plot_from_npz(
     gif_fps=8,
     context=None,
     frame_idx=24,
+    arrow=None,
+    diverging_dynamic_range=None,
+    focused_dynamic_range=None,
 ):
     save_path = Path(save_path)
     results = np.load(path, allow_pickle=True)
 
     focused = results["focused"]
-    focused_dynamic_range = results["focused_dynamic_range"]
+    if focused_dynamic_range is None:
+        focused_dynamic_range = results["focused_dynamic_range"]
 
     diverging = results["diverging"]
-    diverging_dynamic_range = results["diverging_dynamic_range"]
+    if diverging_dynamic_range is None:
+        diverging_dynamic_range = results["diverging_dynamic_range"]
 
     reconstructions = results["reconstructions"]
     reconstruction_range = results["reconstruction_range"]
@@ -124,6 +134,10 @@ def plot_from_npz(
         axs[2].imshow(diverging[frame_idx], **kwargs)
         axs[2].set_title("Diverging (11)")
 
+        if arrow is not None:
+            axs[3].add_patch(copy.copy(arrow))
+            axs[2].add_patch(copy.copy(arrow))
+
         for ax in axs:
             ax.axis("off")
 
@@ -132,6 +146,39 @@ def plot_from_npz(
             zea.log.info(
                 f"Saved cardiac reconstruction plot to {zea.log.yellow(save_path.with_suffix(ext))}"
             )
+
+
+def get_arrow(
+    x_tip=880,
+    y_tip=650,
+    length=310,
+    angle_deg=20 + 90,
+):
+    """Create an arrow patch with the specified parameters.
+
+    # Arrow tip (x, y)
+    # larger y will be lower on the plot
+    # bigger x will be further right on the plot
+    """
+
+    angle_rad = math.radians(angle_deg)
+
+    # Calculate tail position
+    x_tail = x_tip - length * math.cos(angle_rad)
+    y_tail = y_tip - length * math.sin(angle_rad)
+
+    arrow_kwargs = {
+        "color": "purple",
+        "arrowstyle": "->",
+        "mutation_scale": 15,
+        "linewidth": 3,
+    }
+
+    return FancyArrowPatch(
+        (x_tail, y_tail),  # tail
+        (x_tip, y_tip),  # tip
+        **arrow_kwargs,
+    )
 
 
 if __name__ == "__main__":
@@ -144,4 +191,5 @@ if __name__ == "__main__":
         "output/in_house_cardiac.png",
         context="styles/ieee-tmi.mplstyle",
         frame_idx=24,
+        arrow=get_arrow(),
     )

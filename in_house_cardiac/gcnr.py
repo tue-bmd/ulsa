@@ -223,6 +223,33 @@ def main():
                 )
             gcnr_results[type] = gcnr_per_frame(images, black_masks, white_masks)
 
+            # DEBUG
+            # from matplotlib.animation import FuncAnimation
+            # from zea.tools.selection_tool import update_imshow_with_mask
+            # for mask_type in ["valve", "black", "white"]:
+            #     if mask_type == "valve" and not vf.exists():
+            #         continue
+            #     elif mask_type == "valve":
+            #         interpolated_masks = valve_masks
+            #         _images = images[selected_frames]
+            #     elif mask_type == "black":
+            #         interpolated_masks = black_masks
+            #         _images = images
+            #     elif mask_type == "white":
+            #         interpolated_masks = white_masks
+            #         _images = images
+            #     fig, axs = plt.subplots()
+            #     imshow_obj = axs.imshow(_images[0], cmap="gray")
+            #     ani = FuncAnimation(
+            #         fig,
+            #         update_imshow_with_mask,
+            #         frames=len(_images),
+            #         fargs=(axs, imshow_obj, _images, interpolated_masks, "lasso"),
+            #         interval=1000 / 10,  # 10 FPS
+            #     )
+            #     ani.save(f"{subjects[i]}_{type}_{mask_type}.gif", writer="pillow")
+            #     fig.close()
+
         # Store results relative to the focused reconstruction
         gcnr_relative = {}
         gcnr_valve_relative = {}

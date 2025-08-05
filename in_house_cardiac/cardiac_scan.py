@@ -29,14 +29,7 @@ def cardiac_scan(
     type="focused",  # "focused" or "diverging"
 ):
     shape = (resize_height, grid_width)
-    pipeline = make_pipeline(
-        "data/raw_data",
-        None,
-        shape,
-        shape,
-        jit_options="ops",
-        timed=True,
-    )
+    pipeline = make_pipeline("data/raw_data", None, shape, shape, jit_options="ops")
     pipeline.append(zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)))
 
     with zea.File(target_sequence) as file:
@@ -76,8 +69,6 @@ def cardiac_scan(
         params["dynamic_range"] = output.pop("dynamic_range")
         images.append(ops.convert_to_numpy(image))
     images = np.stack(images, axis=0)
-
-    # pipeline.timer.print(drop_first=2)
 
     scan.dynamic_range = params["dynamic_range"]
     return images, scan
