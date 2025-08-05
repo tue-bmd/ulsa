@@ -30,6 +30,11 @@
             "source": "/mnt/USBMD_datasets",
             "target": "/mnt/USBMD_datasets",
             "type": "bind"
+        },
+        {
+            "source": "/usr/local/share/fonts",
+            "target": "/usr/local/share/fonts",
+            "type": "bind"
         }
     ],
     "postCreateCommand": "echo 'force_color_prompt=yes\nif [ -n \"$force_color_prompt\" ]; then\n  if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then\n    PS1=\"\\${debian_chroot:+(\\$debian_chroot)}\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ \"\n  else\n    PS1=\"\\${debian_chroot:+(\\$debian_chroot)}\\u@\\h:\\w\\$ \"\n  fi\nfi' >> /root/.bashrc"
