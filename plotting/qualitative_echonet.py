@@ -13,9 +13,9 @@ from keras import ops
 
 sys.path.append("/ulsa")
 
+from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import postprocess_agent_results
 from zea import Config
-from zea.agent.selection import GreedyEntropy
 
 DATA_ROOT = "/mnt/z/prjs0966"
 DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
@@ -51,11 +51,6 @@ columns = [
 interpolation = "nearest"
 vmin = 0
 vmax = 255
-
-# TODO: hardcoded 112x112 and max val 255.0
-entropy_fn = GreedyEntropy(
-    N_ACTIONS, 112, 112, 112, entropy_sigma=255.0
-).compute_pixelwise_entropy
 
 io_config = Config(scan_convert=True, scan_conversion_angles=(-45, 45))
 scan_convert_order = 0
@@ -96,7 +91,7 @@ for p in range(N_PATIENTS):
     )
     belief_distributions = data["belief_distributions"][FRAME_IDX].squeeze(-1)
     entropy = ops.squeeze(
-        entropy_fn(belief_distributions[None].astype(np.float32)), axis=0
+        pixelwise_entropy(belief_distributions[None], entropy_sigma=255), axis=0
     )
     entropy = postprocess_agent_results(
         entropy,

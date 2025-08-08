@@ -15,8 +15,8 @@ import yaml
 from keras import ops
 
 from elevation_interpolation.tools import postprocess_3d_data
+from ulsa.entropy import pixelwise_entropy
 from zea import Config
-from zea.utils import translate
 from zea.visualize import plot_biplanes
 
 # Set reproducible seed
@@ -118,11 +118,7 @@ for p, run_dir in enumerate(patients):
     reconstruction = get_vol("reconstructions")
     target = get_vol("targets")
     belief_distributions = data["belief_distributions"][frame_idx].squeeze(-1)
-    variance = ops.var(belief_distributions, axis=0)
-    global_var_range = (np.min(variance), np.max(variance))
-    variance = translate(variance, global_var_range, (0, 255))
-    # Optionally clip for better visualization
-    variance = np.clip(variance, None, np.percentile(variance, 98.0))
+    entropy = pixelwise_entropy(belief_distributions[None], entropy_sigma=255)[0]
 
     # az, ax, el
     acquisitions = postprocess_fn(
@@ -133,10 +129,11 @@ for p, run_dir in enumerate(patients):
         reconstruction.astype(np.float32),
         scan_convert_kwargs={**scan_convert_kwargs, "order": 3},
     )[0]
-    variance = postprocess_fn(
-        variance.astype(np.float32),
+    entropy = postprocess_fn(
+        entropy.astype(np.float32),
         scan_convert_kwargs={**scan_convert_kwargs, "order": 1},
     )[0]
+    entropy = np.clip(entropy, None, np.nanpercentile(entropy, 99.5))
     target = postprocess_fn(
         target.astype(np.float32),
         scan_convert_kwargs={**scan_convert_kwargs, "order": 3},
@@ -146,14 +143,14 @@ for p, run_dir in enumerate(patients):
     # --> az, el, ax
     acquisitions = np.transpose(acquisitions, (0, 2, 1))
     reconstruction = np.transpose(reconstruction, (0, 2, 1))
-    variance = np.transpose(variance, (0, 2, 1))
+    entropy = np.transpose(entropy, (0, 2, 1))
     target = np.transpose(target, (0, 2, 1))
 
     # List of (volume, cmap, title)
     vols = [
         (acquisitions, "grey", "Acquisitions"),
         (reconstruction, "gray", "Reconstruction"),
-        (variance, "inferno", "Variance"),
+        (entropy, "inferno", "Entropy"),
         (target, "gray", "Target"),
     ]
 
