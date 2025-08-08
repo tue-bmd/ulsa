@@ -15,6 +15,7 @@ sys.path.append("/ulsa")
 
 from ulsa.io_utils import postprocess_agent_results
 from zea import Config
+from zea.agent.selection import GreedyEntropy
 
 DATA_ROOT = "/mnt/z/prjs0966"
 DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
@@ -22,6 +23,7 @@ N_PATIENTS = 3
 FIGSIZE = (3.5, 2.0 * N_PATIENTS / 3)  # single column
 # FIGSIZE = (7.16, 2.5 * N_PATIENTS / 2)  # two columns
 FRAME_IDX = 20
+N_ACTIONS = 7
 
 
 plt.style.use("styles/ieee-tmi.mplstyle")
@@ -35,7 +37,7 @@ while len(patients) < N_PATIENTS:
     agent_config = Config.from_yaml(run_dir / "config.yaml")
     if agent_config.action_selection.selection_strategy != "greedy_entropy":
         continue
-    if agent_config.action_selection.n_actions != 7:
+    if agent_config.action_selection.n_actions != N_ACTIONS:
         continue
     if (run_dir / "metrics.npz").exists():
         patients.append(run_dir)
@@ -43,12 +45,17 @@ while len(patients) < N_PATIENTS:
 columns = [
     "Acquisitions",
     "Reconstruction",
-    "Variance",
+    "Entropy",
     "Target",
 ]
 interpolation = "nearest"
 vmin = 0
 vmax = 255
+
+# TODO: hardcoded 112x112 and max val 255.0
+entropy_fn = GreedyEntropy(
+    N_ACTIONS, 112, 112, 112, entropy_sigma=255.0
+).compute_pixelwise_entropy
 
 io_config = Config(scan_convert=True, scan_conversion_angles=(-45, 45))
 scan_convert_order = 0
@@ -88,19 +95,21 @@ for p in range(N_PATIENTS):
         fill_value="white",
     )
     belief_distributions = data["belief_distributions"][FRAME_IDX].squeeze(-1)
-    variance = ops.var(belief_distributions, axis=0)
-    variance = postprocess_agent_results(
-        variance,
+    entropy = ops.squeeze(
+        entropy_fn(belief_distributions[None].astype(np.float32)), axis=0
+    )
+    entropy = postprocess_agent_results(
+        entropy,
         io_config=io_config,
         scan_convert_order=1,
-        image_range=[0, variance.max()],
+        image_range=[0, entropy.max()],
         fill_value="transparent",
     )
-    variance = np.clip(variance, None, np.nanpercentile(variance, 99))
+    entropy = np.clip(entropy, None, np.nanpercentile(entropy, 99.5))
 
     axs[p, 3].imshow(target, **imshow_kwargs)
     axs[p, 2].imshow(
-        variance,
+        entropy,
         cmap="inferno",
         vmin=0,
         interpolation=interpolation,
