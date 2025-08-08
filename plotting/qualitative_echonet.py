@@ -16,23 +16,17 @@ sys.path.append("/ulsa")
 from ulsa.io_utils import postprocess_agent_results
 from zea import Config
 
-DATA_ROOT = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data"
-DATA_FOLDER = Path(DATA_ROOT) / "Wessel/output/lud/ULSA_benchmarks"
+DATA_ROOT = "/mnt/z/prjs0966"
+DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
 N_PATIENTS = 3
 FIGSIZE = (3.5, 2.0 * N_PATIENTS / 3)  # single column
 # FIGSIZE = (7.16, 2.5 * N_PATIENTS / 2)  # two columns
 FRAME_IDX = 20
 
 
-def colorbar_contrast(data, q=99):
-    # the top 100-q % of the values are clipped to provide a better visualization of the image
-    percentile_value = np.percentile(data, q)
-    return np.clip(data, None, percentile_value)
-
-
 plt.style.use("styles/ieee-tmi.mplstyle")
 
-sweep_dir = DATA_FOLDER / "sweep_2025_05_28_095707_408964"
+sweep_dir = DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40"
 run_dirs = sweep_dir.glob("run_*")
 
 patients = []
@@ -95,22 +89,20 @@ for p in range(N_PATIENTS):
     )
     belief_distributions = data["belief_distributions"][FRAME_IDX].squeeze(-1)
     variance = ops.var(belief_distributions, axis=0)
-    variance = colorbar_contrast(variance, q=99.5)
-    max_variance = ops.max(variance)
     variance = postprocess_agent_results(
         variance,
         io_config=io_config,
         scan_convert_order=1,
-        image_range=[0, max_variance],
+        image_range=[0, variance.max()],
         fill_value="transparent",
     )
+    variance = np.clip(variance, None, np.nanpercentile(variance, 99))
 
     axs[p, 3].imshow(target, **imshow_kwargs)
     axs[p, 2].imshow(
         variance,
         cmap="inferno",
         vmin=0,
-        vmax=max_variance,
         interpolation=interpolation,
     )
     axs[p, 1].imshow(reconstruction, **imshow_kwargs)
