@@ -88,7 +88,13 @@ def plot_ef_psnr_correlation(df, save_path=None):
         ax_marg_x.hist(df[mask]["EF"], bins=15, alpha=0.5, density=True, color=color)
         kde_x = gaussian_kde(df[mask]["EF"])
         x_range = np.linspace(df[mask]["EF"].min(), df[mask]["EF"].max(), 100)
-        ax_marg_x.plot(x_range, kde_x(x_range), color=color, linewidth=1)
+        ax_marg_x.plot(
+            x_range,
+            kde_x(x_range),
+            color=color,
+            linewidth=1,
+            marker="",
+        )
         ax_marg_x.fill_between(x_range, kde_x(x_range), alpha=0.3, color=color)
 
         # Y-axis histogram and KDE
@@ -102,7 +108,13 @@ def plot_ef_psnr_correlation(df, save_path=None):
         )
         kde_y = gaussian_kde(df[mask]["psnr"])
         y_range = np.linspace(df["psnr"].min(), df["psnr"].max(), 100)
-        ax_marg_y.plot(kde_y(y_range), y_range, color=color, linewidth=1)
+        ax_marg_y.plot(
+            kde_y(y_range),
+            y_range,
+            color=color,
+            linewidth=1,
+            marker="",
+        )
         ax_marg_y.fill_betweenx(y_range, kde_y(y_range), alpha=0.3, color=color)
 
     # Customize plots
@@ -124,18 +136,18 @@ def plot_ef_psnr_correlation(df, save_path=None):
     ax_marg_y.set_xticks([])
 
     if save_path:
-        plt.savefig(save_path, bbox_inches="tight")
+        plt.savefig(save_path)
         print(f"Saved plot to {save_path}")
 
     plt.show()
 
 
 if __name__ == "__main__":
-    DATA_ROOT = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data"
-    DATA_FOLDER = Path(DATA_ROOT) / "Wessel/output/lud/ULSA_benchmarks"
+    DATA_ROOT = "/mnt/z/prjs0966"
+    DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
     SUBSAMPLED_PATHS = [
-        DATA_FOLDER / "sharding_sweep_2025-05-30_08-56-07",
-        DATA_FOLDER / "sharding_sweep_2025-06-04_13-52-43",
+        DATA_FOLDER / "sharding_sweep_2025-08-05_14-35-11",
+        DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
     ]
     EF_CSV_PATH = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/USBMD_datasets/_RAW/EchoNet-Dynamic/FileList.csv"
     SAVE_ROOT = "."
@@ -152,6 +164,7 @@ if __name__ == "__main__":
         results_df = extract_and_combine_sweep_data(
             SUBSAMPLED_PATHS, keys_to_extract=["psnr"], ef_lookup=ef_lookup
         )
+        results_df.to_pickle(TEMP_FILE)
 
     df = results_df[results_df["x_value"] == 14]
 
