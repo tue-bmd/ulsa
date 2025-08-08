@@ -1,8 +1,8 @@
 # Patient-Adaptive Focused Transmit Beamforming using Cognitive Ultrasound
 
-[Huggingface](https://huggingface.co/zeahub/ulsa)
+Find our model on [Huggingface](https://huggingface.co/zeahub/ulsa).
 
-## Setup
+## Setup code
 
 ```bash
 git submodule update --init --recursive
@@ -13,3 +13,15 @@ pip install keras==${KERAS_VER}
 cp .env.example .env
 touch users.yaml # edit!
 ```
+
+## Dataset
+
+- Download the [EchoNet-Dynamic dataset](https://echonet.github.io/dynamic/index.html#dataset).
+
+- [_Optionally_] Download the train / validation / test split we used for the [EchoNet-Dynamic dataset](https://huggingface.co/datasets/zeahub/echonet-dynamic).
+
+- Convert the dataset to the polar format:
+
+    ```bash
+    python -m zea.data.convert.echonet --source /path/to/echonet-dynamic --target /path/to/echonet-dynamic-polar --splits /path/to/splits
+    ```
