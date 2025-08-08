@@ -83,6 +83,11 @@ if __name__ == "__main__":
         x_label_values=x_values,
         metric_name=formatted_metric_name,
         order_by=None,
+        legend_kwargs={
+            "loc": "outside upper center",
+            "ncol": 3,
+            "frameon": False,
+        },
     )
 
     # Find global min/max for PSNR for consistent binning and ticks

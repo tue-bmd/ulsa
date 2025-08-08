@@ -101,15 +101,13 @@ class ViolinPlotter:
                 groups_to_plot,
                 **kwargs,
             )
-            if legend_kwargs == "default" and fig is not None:
+            if legend_kwargs == "default":
                 legend_kwargs = {
                     "loc": "outside upper center",
                     "ncol": 2,
                     "frameon": False,
                 }
-            else:
-                legend_kwargs = None
-            if legend_kwargs is not None:
+            if legend_kwargs is not None and fig is not None:
                 fig.legend(**legend_kwargs)
 
             if save_path is not None:
