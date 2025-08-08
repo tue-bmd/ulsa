@@ -29,7 +29,6 @@ class ViolinPlotter:
         legend_bbox=None,
         figsize: tuple = None,
         context: str = None,
-        legend_position: str = "top",  # "top" or "right"
         scatter_kwargs: dict = None,
         violin_kwargs: dict = None,
     ):
@@ -37,7 +36,6 @@ class ViolinPlotter:
         group_names: dict mapping group key to display name
         group_colors: dict mapping group key to color
         context: matplotlib style context (e.g., "styles/darkmode.mplstyle" or None)
-        legend_position: "top" or "right"
         """
         self.group_names = group_names or {}
         self._group_colors = group_colors
@@ -48,7 +46,6 @@ class ViolinPlotter:
         self.legend_bbox = legend_bbox
         self.figsize = figsize
         self.context = context
-        self.legend_position = legend_position
         if scatter_kwargs is None:
             scatter_kwargs = {
                 "alpha": 0.05,
@@ -79,19 +76,15 @@ class ViolinPlotter:
         metric_name=None,
         groups_to_plot=None,
         context=None,
-        legend_position=None,  # Allow override per plot
+        legend_kwargs="default",
         ax=None,
         **kwargs,
     ):
         """
         data_dict: dict[group][x_value] = list of metric values
         context: matplotlib style context (overrides self.context if provided)
-        legend_position: "top" or "right" (overrides self.legend_position if provided)
         """
         plot_context = context if context is not None else self.context
-        legend_position = (
-            legend_position if legend_position is not None else self.legend_position
-        )
         with (
             plt.style.context(plot_context)
             if plot_context is not None
@@ -108,17 +101,16 @@ class ViolinPlotter:
                 groups_to_plot,
                 **kwargs,
             )
-            if legend_position == "right" and fig is not None:
-                fig.legend(
-                    loc="outside center left",
-                    frameon=False,
-                )
-            elif legend_position == "top" and fig is not None:
-                fig.legend(
-                    loc="outside upper center",
-                    ncol=2,
-                    frameon=False,
-                )
+            if legend_kwargs == "default" and fig is not None:
+                legend_kwargs = {
+                    "loc": "outside upper center",
+                    "ncol": 2,
+                    "frameon": False,
+                }
+            else:
+                legend_kwargs = {}
+            if legend_kwargs is not None:
+                fig.legend(**legend_kwargs)
 
             if save_path is not None:
                 plt.savefig(save_path)

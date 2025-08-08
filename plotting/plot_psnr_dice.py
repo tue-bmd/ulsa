@@ -348,6 +348,11 @@ if __name__ == "__main__":
         metric_name=formatted_metric_name,
         groups_to_plot=STRATEGIES_TO_PLOT,
         ylim=[0.58, 1.02],
+        legend_kwargs={
+            "loc": "outside upper center",
+            "ncol": 3,
+            "frameon": False,
+        },
     )
 
     # PSNR plot
@@ -397,7 +402,7 @@ if __name__ == "__main__":
             x_label_values=x_values,
             metric_name=formatted_metric_name,
             ax=axs[0],
-            legend_position="skip",
+            legend_kwargs=None,
             order_by=order_by,
         )
         metric_name = "lpips"
@@ -409,7 +414,7 @@ if __name__ == "__main__":
             metric_name=formatted_metric_name,
             order_by=order_by,
             ax=axs[1],
-            legend_position="skip",
+            legend_kwargs=None,
         )
         h, l = axs[0].get_legend_handles_labels()
         fig.legend(
