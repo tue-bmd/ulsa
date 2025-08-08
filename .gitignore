@@ -1,5 +1,4 @@
 .env
-output
 users.yaml
 .cache
 *.png
@@ -9,3 +8,9 @@ users.yaml
 !derivations/*.pdf
 *.npy
 *.pkl
+
+# Ignore everything in the output directory
+output/*
+
+# But not this file
+!output/README.md
