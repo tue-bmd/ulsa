@@ -108,7 +108,7 @@ class ViolinPlotter:
                     "frameon": False,
                 }
             else:
-                legend_kwargs = {}
+                legend_kwargs = None
             if legend_kwargs is not None:
                 fig.legend(**legend_kwargs)
 
