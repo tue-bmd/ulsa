@@ -1,4 +1,4 @@
-# Inherit from usbmd base image
+# Inherit from zea base image
 FROM zeahub/all:latest
 
 # Install latex and fonts

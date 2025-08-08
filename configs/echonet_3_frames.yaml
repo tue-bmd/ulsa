@@ -9,7 +9,7 @@ downstream_task: "echonet_segmentation"
 
 diffusion_inference:
   # run_dir: "{output_dir}/ddim/2025_02_26_160545_ddim_train_echonet_112_3_frames/hub"
-  run_dir: hf://usbmd/ulsa
+  run_dir: hf://zeahub/ulsa
   num_steps: 500
   initial_step: 450 # [0, num_steps]
   batch_size: 4 # posterior samples
@@ -32,6 +32,6 @@ io_config:
   reconstruction_sharpness_std: 0.025
 
 data:
-  target_sequence: "{data_root}/USBMD_datasets/echonet/val/0X10A5FC19152B50A5.hdf5"
+  target_sequence: "{data_root}/USBMD_datasets/echonet_legacy/val/0X10A5FC19152B50A5.hdf5"
   data_type: data/image
   image_range: [-60, 0]
