@@ -29,7 +29,6 @@ class ViolinPlotter:
         legend_bbox=None,
         figsize: tuple = None,
         context: str = None,
-        legend_position: str = "top",  # "top" or "right"
         scatter_kwargs: dict = None,
         violin_kwargs: dict = None,
     ):
@@ -37,7 +36,6 @@ class ViolinPlotter:
         group_names: dict mapping group key to display name
         group_colors: dict mapping group key to color
         context: matplotlib style context (e.g., "styles/darkmode.mplstyle" or None)
-        legend_position: "top" or "right"
         """
         self.group_names = group_names or {}
         self._group_colors = group_colors
@@ -48,11 +46,10 @@ class ViolinPlotter:
         self.legend_bbox = legend_bbox
         self.figsize = figsize
         self.context = context
-        self.legend_position = legend_position
         if scatter_kwargs is None:
             scatter_kwargs = {
-                "s": 20,
-                "alpha": 0.2,
+                "alpha": 0.05,
+                "s": 7,
             }
         self.scatter_kwargs = scatter_kwargs
         self.violin_kwargs = violin_kwargs or {
@@ -79,34 +76,60 @@ class ViolinPlotter:
         metric_name=None,
         groups_to_plot=None,
         context=None,
-        legend_position=None,  # Allow override per plot
+        legend_kwargs="default",
+        ax=None,
         **kwargs,
     ):
         """
         data_dict: dict[group][x_value] = list of metric values
         context: matplotlib style context (overrides self.context if provided)
-        legend_position: "top" or "right" (overrides self.legend_position if provided)
         """
         plot_context = context if context is not None else self.context
-        legend_position = (
-            legend_position if legend_position is not None else self.legend_position
-        )
         with (
             plt.style.context(plot_context)
             if plot_context is not None
             else nullcontext()
         ):
+            fig = None
+            if ax is None:
+                fig, ax = plt.subplots(figsize=self.figsize)
             self._plot_core(
+                ax,
                 data_dict,
-                save_path,
                 x_label_values,
                 metric_name,
                 groups_to_plot,
-                legend_position,
                 **kwargs,
             )
+            if legend_kwargs == "default":
+                legend_kwargs = {
+                    "loc": "outside upper center",
+                    "ncol": 2,
+                    "frameon": False,
+                }
+            if legend_kwargs is not None and fig is not None:
+                fig.legend(**legend_kwargs)
 
-    def _order_groups_by_means(self, data_dict, groups_to_plot, all_x_values):
+            if save_path is not None:
+                plt.savefig(save_path)
+                plt.close()
+                log.info(f"Saved violin plot to {log.yellow(save_path)}")
+
+    def _order_groups_by_means(
+        self, data_dict, groups_to_plot, all_x_values, reverse=True
+    ):
+        """
+        Orders groups by their overall mean metric value across all x values.
+
+        Parameters:
+            data_dict (dict): Dictionary of the form data_dict[group][x_value] = list of metric values.
+            groups_to_plot (list): List of group keys to consider.
+            all_x_values (list): List of x values to aggregate over.
+            reverse (bool): If True, sort groups in descending order of mean (highest first).
+
+        Returns:
+            list: Sorted list of group keys by mean metric value.
+        """
         group_order = {}
         for group in groups_to_plot:
             all_values = []
@@ -134,23 +157,22 @@ class ViolinPlotter:
                 group_order[group] = np.mean(all_values)
 
         sorted_groups = sorted(
-            group_order.keys(), key=lambda x: group_order[x], reverse=True
+            group_order.keys(), key=lambda x: group_order[x], reverse=reverse
         )
         return sorted_groups
 
     def _plot_core(
         self,
+        ax: plt.Axes,
         data_dict,
-        save_path,
         x_label_values=None,
         metric_name=None,
         groups_to_plot=None,
-        legend_position="top",
         ylim=None,
-        order_by_means=True,
+        order_by="mean",
+        reverse_order=True,
+        width=0.5,
     ):
-        fig = plt.figure(figsize=self.figsize)
-
         # Collect and sort x values
         if x_label_values is None:
             all_x_values = set()
@@ -164,7 +186,6 @@ class ViolinPlotter:
         plot_positions = np.arange(len(all_x_values))
         x_value_to_pos = dict(zip(all_x_values, plot_positions))
 
-        width = 0.5
         if groups_to_plot is None:
             groups_to_plot = list(data_dict.keys())
         if len(groups_to_plot) == 2:
@@ -174,12 +195,18 @@ class ViolinPlotter:
             group_offset = np.linspace(-width / 2, width / 2, len(groups_to_plot))
 
         # Calculate group means and order them (optional)
-        if order_by_means:
+        if order_by == "mean":
             sorted_groups = self._order_groups_by_means(
-                data_dict, groups_to_plot, all_x_values
+                data_dict, groups_to_plot, all_x_values, reverse=reverse_order
             )
-        else:
+        elif order_by is None:
             sorted_groups = groups_to_plot
+        elif not isinstance(order_by, str):
+            sorted_groups = order_by
+        else:
+            raise ValueError(
+                f"Invalid order_by value: {order_by}. Must be 'mean', None, or a list of groups."
+            )
 
         # Plot violins in order
         for group_idx, group in enumerate(sorted_groups):
@@ -209,7 +236,7 @@ class ViolinPlotter:
 
             group_colors = self.get_group_colors(sorted_groups)
             if violin_data:
-                parts = plt.violinplot(
+                parts = ax.violinplot(
                     violin_data,
                     positions=violin_positions,
                     widths=width / 4,
@@ -233,14 +260,15 @@ class ViolinPlotter:
 
                 # Add scatter points with same color
                 for pos, data in zip(violin_positions, violin_data):
-                    plt.scatter(
+                    ax.scatter(
                         [pos] * len(data),
                         data,
                         color=group_color,
                         **self.scatter_kwargs,
                     )
 
-                plt.scatter(
+                # Add legend entry
+                ax.scatter(
                     [],
                     [],
                     color=group_color,
@@ -248,27 +276,14 @@ class ViolinPlotter:
                 )
 
         # Customize plot
-        plt.xlabel(self.xlabel)
-        plt.ylabel(self.ylabel if metric_name is None else metric_name)
-        if legend_position == "right":
-            fig.legend(
-                loc="outside center left",
-                frameon=False,
-            )
-        else:  # "top" or default
-            fig.legend(
-                loc="outside upper center",
-                ncol=2,
-                frameon=False,
-            )
-        plt.grid(True, alpha=0.3)
-        plt.xticks(plot_positions, [str(x) for x in all_x_values])
+        ax.set_xlabel(self.xlabel)
+        ax.set_ylabel(self.ylabel if metric_name is None else metric_name)
+        ax.grid()
+        ax.set_xticks(plot_positions, [str(x) for x in all_x_values])
         if ylim:
-            plt.ylim(ylim)
+            ax.set_ylim(ylim)
 
-        plt.savefig(save_path)
-        plt.close()
-        log.info(f"Saved violin plot to {log.yellow(save_path)}")
+        return ax
 
 
 class OverlappingHistogramPlotter:

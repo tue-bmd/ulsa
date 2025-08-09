@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument(
         "--agent_config",
         type=str,
-        default="configs/cardiac_112_3_frames.yaml",
+        default="configs/echonet_3_frames.yaml",
         help="Path to agent config yaml.",
     )
     parser.add_argument(

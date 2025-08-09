@@ -7,6 +7,7 @@ import os
 import sys
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd  # pip install pandas
 import scipy.ndimage
@@ -24,9 +25,12 @@ if __name__ == "__main__":
 from benchmark_active_sampling_ultrasound import compute_dice_score, get_config_value
 from plotting.plot_utils import ViolinPlotter, natural_sort
 
-DATA_ROOT = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data"
-DATA_FOLDER = Path(DATA_ROOT) / "Wessel/output/lud/ULSA_benchmarks"
-# DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_benchmarks/echonet"
+DATA_ROOT = "/mnt/z/prjs0966"
+DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
+SUBSAMPLED_PATHS = [
+    DATA_FOLDER / "sharding_sweep_2025-08-05_14-35-11",
+    DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
+]
 
 STRATEGY_COLORS = {
     "downstream_propagation_summed": "#d62728",  # Red
@@ -37,9 +41,7 @@ STRATEGY_COLORS = {
 
 STRATEGY_NAMES = {
     "downstream_propagation_summed": "Measurement Information Gain",
-    # "greedy_entropy": "Tissue Information Gain",
     "greedy_entropy": "Active Perception",
-    "greedy_variance": "Active Perception",
     "uniform_random": "Random",
     "equispaced": "Equispaced",
 }
@@ -52,17 +54,17 @@ STRATEGY_CANONICAL_MAP = {
 
 STRATEGIES_TO_PLOT = [
     # "downstream_propagation_summed",
-    # "greedy_entropy",
-    "greedy_variance",
+    "greedy_entropy",
     "uniform_random",
     "equispaced",
     # Add/remove as needed
 ]
 
 METRIC_NAMES = {
-    "dice": "DICE [-]",
-    "psnr": "PSNR [dB]",
-    "ssim": "SSIM [-]",
+    "dice": "DICE (→) [-]",
+    "psnr": "PSNR (→) [dB]",
+    "ssim": "SSIM (→) [-]",
+    "lpips": "LPIPS (←) [-]",
 }
 
 # Add this near the top of the file where other constants are defined
@@ -79,7 +81,9 @@ def mask_has_too_many_blobs(mask_sequence, max_blobs=1, max_bad_frames=5):
     """
     if isinstance(mask_sequence, np.ndarray):
         if mask_sequence.ndim == 4 and mask_sequence.shape[-1] == 1:
-            mask_sequence = [mask_sequence[t, ..., 0] for t in range(mask_sequence.shape[0])]
+            mask_sequence = [
+                mask_sequence[t, ..., 0] for t in range(mask_sequence.shape[0])
+            ]
         elif mask_sequence.ndim == 3:
             mask_sequence = [mask_sequence[t] for t in range(mask_sequence.shape[0])]
         else:
@@ -159,15 +163,26 @@ def extract_sweep_data(
             continue
 
         filename = Path(target_file).stem
-        ef_value = ef_lookup[filename] if ef_lookup is not None and filename in ef_lookup else None
+        ef_value = (
+            ef_lookup[filename]
+            if ef_lookup is not None and filename in ef_lookup
+            else None
+        )
 
         # Use in-file ground truth and predicted masks for DICE
-        if "segmentation_mask_targets" in metrics and "segmentation_mask_reconstructions" in metrics:
+        if (
+            "segmentation_mask_targets" in metrics
+            and "segmentation_mask_reconstructions" in metrics
+        ):
             gt_masks = np.array(metrics["segmentation_mask_targets"])
             # Only keep if gt_masks pass the blob filter
-            if mask_has_too_many_blobs(gt_masks, max_blobs=max_blobs, max_bad_frames=max_bad_frames):
+            if mask_has_too_many_blobs(
+                gt_masks, max_blobs=max_blobs, max_bad_frames=max_bad_frames
+            ):
                 mean_dice = None
-                log.info(f"Skipped file {target_file} since segmentation mask had too many blobs.")
+                log.info(
+                    f"Skipped file {target_file} since segmentation mask had too many blobs."
+                )
                 unique_files_skipped.add(target_file)
             else:
                 pred_masks = np.array(metrics["segmentation_mask_reconstructions"])
@@ -197,7 +212,9 @@ def extract_sweep_data(
             }
         )
 
-    log.info(f"Skipped a total of {len(unique_files_skipped)} files due to poor segmentation masks.")
+    log.info(
+        f"Skipped a total of {len(unique_files_skipped)} files due to poor segmentation masks."
+    )
     return pd.DataFrame(results)
 
 
@@ -235,6 +252,7 @@ def get_ground_truth_masks(fully_observed_path):
 
     return gt_masks
 
+
 def get_axis_label(key):
     """Get friendly label for axis keys."""
     base_key = key.split(".")[-1]
@@ -251,10 +269,12 @@ def extract_and_combine_sweep_data(sweep_dirs, *args, **kwargs):
 
     for sweep_dir in sweep_dirs:
         try:
-            combined_results.append(extract_sweep_data(sweep_dir, *args, **kwargs))
+            results = extract_sweep_data(sweep_dir, *args, **kwargs)
+            combined_results.append(results)
 
         except Exception as e:
             print(f"Failed to process {sweep_dir}: {e}")
+
     return pd.concat(combined_results, ignore_index=True)  # ignore_index?
 
 
@@ -302,14 +322,9 @@ if __name__ == "__main__":
         print(f"Loading existing combined results from {str(TEMP_FILE)}")
         combined_results = pd.read_pickle(TEMP_FILE)
     else:
-        SUBSAMPLED_PATHS = [
-            DATA_FOLDER / "sharding_sweep_2025-05-30_08-56-07",
-            DATA_FOLDER / "sharding_sweep_2025-06-04_13-52-43",
-        ]
-
         combined_results = extract_and_combine_sweep_data(
             SUBSAMPLED_PATHS,
-            keys_to_extract=["mse", "psnr", "dice"],
+            keys_to_extract=["mse", "psnr", "dice", "lpips", "ssim"],
             x_axis_key=args.x_axis,
         )
         combined_results.to_pickle(TEMP_FILE)
@@ -333,18 +348,88 @@ if __name__ == "__main__":
         metric_name=formatted_metric_name,
         groups_to_plot=STRATEGIES_TO_PLOT,
         ylim=[0.58, 1.02],
+        legend_kwargs={
+            "loc": "outside upper center",
+            "ncol": 3,
+            "frameon": False,
+        },
     )
 
     # PSNR plot
     metric_name = "psnr"
-    x_values = [7, 14, 28]
+    x_values = [4, 7, 14, 28]
     formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
-    plotter.plot(
-        df_to_dict(combined_results, metric_name),
-        save_path=f"./{metric_name}_violin_plot.pdf",
-        x_label_values=x_values,
-        metric_name=formatted_metric_name,
+    for ext in [".pdf", ".png"]:
+        plotter.plot(
+            df_to_dict(combined_results, metric_name),
+            save_path=f"./{metric_name}_violin_plot{ext}",
+            x_label_values=x_values,
+            metric_name=formatted_metric_name,
+        )
+
+    # LPIPS plot
+    metric_name = "lpips"
+    x_values = [4, 7, 14, 28]
+    formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+    for ext in [".pdf", ".png"]:
+        plotter.plot(
+            df_to_dict(combined_results, metric_name),
+            save_path=f"./{metric_name}_violin_plot{ext}",
+            x_label_values=x_values,
+            metric_name=formatted_metric_name,
+        )
+
+    # Combined LPIPS and PSNR
+    plotter = ViolinPlotter(
+        xlabel=get_axis_label(args.x_axis),
+        group_names=STRATEGY_NAMES,
+        legend_loc="top",
+        scatter_kwargs={"alpha": 0.01, "s": 4},
+        context="styles/ieee-tmi.mplstyle",
     )
+    plt.close("all")
+    x_values = [7, 14, 28]
+    with plt.style.context("styles/ieee-tmi.mplstyle"):
+        fig, axs = plt.subplots(1, 2)
+        metric_name = "psnr"
+        formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+        order_by = plotter._order_groups_by_means(
+            df_to_dict(combined_results, metric_name), STRATEGIES_TO_PLOT, x_values
+        )
+        plotter.plot(
+            df_to_dict(combined_results, metric_name),
+            save_path=None,
+            x_label_values=x_values,
+            metric_name=formatted_metric_name,
+            ax=axs[0],
+            legend_kwargs=None,
+            order_by=order_by,
+        )
+        metric_name = "lpips"
+        formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+        plotter.plot(
+            df_to_dict(combined_results, metric_name),
+            save_path=None,
+            x_label_values=x_values,
+            metric_name=formatted_metric_name,
+            order_by=order_by,
+            ax=axs[1],
+            legend_kwargs=None,
+        )
+        h, l = axs[0].get_legend_handles_labels()
+        fig.legend(
+            h,
+            l,
+            loc="outside upper center",
+            ncol=3,
+            frameon=False,
+        )
+        for ext in [".pdf", ".png"]:
+            save_path = f"./lpips_psnr_combined_violin_plot{ext}"
+            plt.savefig(save_path)
+            log.info(
+                f"Saved combined LPIPS and PSNR violin plot to {log.yellow(save_path)}"
+            )
 
     # Print results in a table format
     for metric_name in ["dice", "psnr"]:

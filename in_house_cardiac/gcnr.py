@@ -17,6 +17,12 @@ import zea
 sys.path.append("/ulsa")
 from plotting.plot_utils import ViolinPlotter
 
+METRIC_LABEL = "Relative gCNR [-]"
+
+
+def filter_dict_of_arrays(d: dict, condition):
+    return {k: condition(v) for k, v in d.items()}
+
 
 def write_roman(num):
     roman = OrderedDict()
@@ -101,11 +107,16 @@ def plot_gcnr_over_time(
     selected_frames: np.ndarray,
     relative_gcnr: dict,
     group_names: dict,
-    save_path: str,
+    save_path: str = None,
     smoothness: int = 5,
     alpha: float = 0.5,
+    markersize: int = 4,
+    fig=None,
+    zorder: dict = None,
 ):
-    fig = plt.figure()
+    fig_was_given = fig is not None
+    if not fig_was_given:
+        fig = plt.figure()
     markers = ["x", "o", "v", "s", "d", "+"]
     ls = ["-", "--", ":", "-.", [5, [10, 3]], [0, [3, 1, 1, 1]]]
     color = [
@@ -119,6 +130,7 @@ def plot_gcnr_over_time(
     for i, (k, gcnr) in enumerate(
         sort_by_names(relative_gcnr, group_names.keys()).items()
     ):
+        # Just the markers
         plt.plot(
             selected_frames if selected_frames is not None else np.arange(len(gcnr)),
             gcnr,
@@ -126,8 +138,9 @@ def plot_gcnr_over_time(
             alpha=alpha,
             color=color[i % len(color)],
             marker=markers[i % len(markers)],
+            markersize=markersize,
         )
-        # smooth gcnr line
+        # Smooth gcnr line
         plt.plot(
             selected_frames if selected_frames is not None else np.arange(len(gcnr)),
             np.convolve(gcnr, np.ones(smoothness) / smoothness, mode="same"),
@@ -135,8 +148,9 @@ def plot_gcnr_over_time(
             color=color[i % len(color)],
             # no marker
             marker="",
+            zorder=zorder[k] if zorder and k in zorder else None,
         )
-        # empty line just for legend
+        # Empty line just for legend
         plt.plot(
             [],
             [],
@@ -146,17 +160,20 @@ def plot_gcnr_over_time(
             marker=markers[i % len(markers)],
         )
 
-    plt.xlabel("Frame index [-]")
-    plt.ylabel("Relative gCNR [-]")
-    # plt.title("gCNR per Frame")
-    fig.legend(
-        loc="outside upper center",
-        ncol=2,
-        frameon=False,
-    )
-    plt.grid()
-    plt.savefig(save_path)
-    zea.log.info(f"Saved gCNR plot as {zea.log.yellow(save_path)}")
+    if not fig_was_given:
+        plt.xlabel("Frame index [-]")
+        plt.ylabel(METRIC_LABEL)
+        # plt.title("gCNR per Frame")
+        fig.legend(
+            loc="outside upper center",
+            ncol=2,
+            frameon=False,
+        )
+        plt.grid()
+    if save_path is not None:
+        plt.savefig(save_path)
+        zea.log.info(f"Saved gCNR plot as {zea.log.yellow(save_path)}")
+    return fig
 
 
 def main():
@@ -164,9 +181,12 @@ def main():
     DATA_ROOT = Path("/mnt/z/usbmd/Wessel/eval_in_house_cardiac/")
     SAVE_DIR = Path("output/gcnr")
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
-    subjects = sorted(
-        ["20240701_P1_A4CH_0001", "20240710_P7_A4CH_0000", "20241021_P9_A4CH_0000"]
-    )
+    subjects = [
+        "20240701_P1_A4CH_0001",
+        "20241021_P9_A4CH_0000",
+        "20240710_P7_A4CH_0000",
+    ]
+
     group_names = {
         "reconstructions": "Active Perception",
         "focused": "Focused",
@@ -267,7 +287,7 @@ def main():
 
     gcnr_valve_all = filter_empty(gcnr_valve_all)
 
-    # Violin plot & over time plot
+    # Violin plot & over time plot for all
     violin = ViolinPlotter(group_names, xlabel="Subjects")
     for ext, (_gcnr, key) in product(
         [".png", ".pdf"], zip([gcnr_all, gcnr_valve_all], ["gcnr", "gcnr_valve"])
@@ -276,7 +296,7 @@ def main():
             sort_by_names(swap_layer(_gcnr), group_names.keys()),
             SAVE_DIR / f"{key}_violin{ext}",
             x_label_values=_gcnr.keys(),
-            metric_name="gCNR",
+            metric_name=METRIC_LABEL,
             context="styles/ieee-tmi.mplstyle",
         )
         with plt.style.context("styles/ieee-tmi.mplstyle"):
@@ -290,6 +310,72 @@ def main():
                     group_names,
                     SAVE_DIR / f"{subject}_{key}_over_time{ext}",
                 )
+
+    # Plots for the paper
+    plt.close("all")
+    save_dir = SAVE_DIR / "paper_plots"
+    save_dir.mkdir(parents=True, exist_ok=True)
+    zorder = {
+        "reconstructions": 20,
+        "diverging": 10,
+    }
+    title_kwargs = {
+        "y": 1.0,
+        "pad": -10,
+        "fontsize": 8,
+        "alpha": 0.7,
+        "loc": "left",
+        "x": 0.03,
+    }
+    with plt.style.context("styles/ieee-tmi.mplstyle"):
+        fig, axs = plt.subplots(2, 1, sharex=True)
+        plt.sca(axs[0])
+        _sel_frames = selected_frames_all["I"][selected_frames_all["I"] < 100]
+        _gcnr = filter_dict_of_arrays(
+            gcnr_valve_all["I"], lambda x: x[selected_frames_all["I"] < 100]
+        )
+        fig = plot_gcnr_over_time(
+            _sel_frames,
+            _gcnr,
+            group_names,
+            fig=fig,
+            alpha=0.2,
+            markersize=3,
+            zorder=zorder,
+        )
+        plt.grid()
+        plt.title("Subject I", **title_kwargs)
+        plt.sca(axs[1])
+        _sel_frames = selected_frames_all["II"][selected_frames_all["II"] < 100]
+        _gcnr = filter_dict_of_arrays(
+            gcnr_valve_all["II"], lambda x: x[selected_frames_all["II"] < 100]
+        )
+        fig = plot_gcnr_over_time(
+            _sel_frames,
+            _gcnr,
+            group_names,
+            fig=fig,
+            alpha=0.2,
+            markersize=3,
+            zorder=zorder,
+        )
+        plt.xlabel("Frame index [-]")
+        fig.supylabel(METRIC_LABEL)
+        plt.grid()
+        plt.title("Subject II", **title_kwargs)
+        h, l = axs[0].get_legend_handles_labels()
+        fig.legend(
+            h,
+            l,
+            loc="outside upper center",
+            ncol=2,
+            frameon=False,
+        )
+        plt.savefig(save_dir / "gcnr_valve_over_time.png")
+        plt.savefig(save_dir / "gcnr_valve_over_time.pdf")
+        zea.log.info(
+            f"Saved gCNR valve over time plots to {zea.log.yellow(save_dir / 'gcnr_valve_over_time.png')}"
+        )
 
 
 if __name__ == "__main__":

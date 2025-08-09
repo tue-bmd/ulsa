@@ -179,30 +179,6 @@ class Resize(zea.ops.Operation):
         return {self.output_key: resized_data}
 
 
-class BM3DDenoiser(zea.ops.Operation):
-    """Block matching 3D denoiser."""
-
-    def __init__(self, sigma, stage="all_stages", **kwargs):
-        super().__init__(**kwargs, jittable=False)
-        import bm3d  # pip install bm3d
-
-        self.sigma = sigma
-        str_to_stage = {
-            "hard_thresholding": bm3d.BM3DStages.HARD_THRESHOLDING,
-            "all_stages": bm3d.BM3DStages.ALL_STAGES,
-        }
-
-        self.stage = str_to_stage[stage]
-
-    def call(self, **kwargs):
-        import bm3d  # pip install bm3d
-
-        image = kwargs[self.key]
-        denoised_image = bm3d.bm3d(image, self.sigma, stage_arg=self.stage)
-
-        return {self.output_key: denoised_image}
-
-
 class Sharpen(zea.ops.Operation):
     """Sharpen an image using unsharp masking."""
 
@@ -251,103 +227,6 @@ def apply_along_axis(func, axis, arr):
         func = jax.vmap(func)
     result = func(arr)
     return ops.moveaxis(result, -1, axis)
-
-
-def iq2doppler(
-    data,
-    center_frequency,
-    pulse_repetition_frequency,
-    sound_speed,
-    hamming_size=None,
-    lag=1,
-):
-    """Compute Doppler from packet of I/Q Data.
-
-    Args:
-        data (ndarray): I/Q complex data of shape (grid_size_z, grid_size_x, n_frames).
-            n_frames corresponds to the ensemble length used to compute
-            the Doppler signal.
-        center_frequency (float): Center frequency of the ultrasound probe in Hz.
-        pulse_repetition_frequency (float): Pulse repetition frequency in Hz.
-        sound_speed (float): Speed of sound in the medium in m/s.
-        hamming_size (int or tuple, optional): Size of the Hamming window to apply
-            for spatial averaging. If None, no window is applied.
-            If an integer, it is applied to both dimensions. If a tuple, it should
-            contain two integers for the row and column dimensions.
-        lag (int, optional): Lag for the auto-correlation computation.
-            Defaults to 1, meaning Doppler is computed from the current frame
-            and the next frame.
-
-    Returns:
-        doppler_velocities (ndarray): Doppler velocity map of shape (grid_size_z, grid_size_x).
-
-    """
-    assert data.ndim == 3, "Data must be a 3-D array"
-    assert isinstance(lag, int) and lag >= 0, "Lag must be a positive integer"
-    assert data.shape[-1] > lag, "Data must have more frames than the lag"
-
-    if hamming_size is None:
-        hamming_size = np.array([1, 1])
-    elif np.isscalar(hamming_size):
-        hamming_size = np.array([hamming_size, hamming_size])
-    assert hamming_size.all() > 0 and np.all(hamming_size == np.round(hamming_size)), (
-        "hamming_size must contain integers > 0"
-    )
-
-    # Auto-correlation method
-    iq1 = data[:, :, : data.shape[-1] - lag]
-    iq2 = data[:, :, lag:]
-    autocorr = ops.sum(iq1 * ops.conj(iq2), axis=2)  # Ensemble auto-correlation
-
-    # Spatial weighted average
-    if hamming_size[0] != 1 and hamming_size[1] != 1:
-        h_row = np.hamming(hamming_size[0])
-        h_col = np.hamming(hamming_size[1])
-        autocorr = apply_along_axis(
-            lambda x: ops.correlate(x, h_row, mode="same"), 0, autocorr
-        )
-        autocorr = apply_along_axis(
-            lambda x: ops.correlate(x, h_col, mode="same"), 1, autocorr
-        )
-
-    # Doppler velocity
-    nyquist_velocities = (
-        sound_speed * pulse_repetition_frequency / (4 * center_frequency * lag)
-    )
-    doppler_velocities = -nyquist_velocities * ops.imag(ops.log(autocorr)) / np.pi
-
-    return doppler_velocities
-
-
-def tissue_doppler_strain_rate(velocity_map, axis=0, spacing=1.0, method="central"):
-    """
-    Compute tissue strain rate (velocity gradient) from a tissue Doppler velocity map.
-
-    Args:
-        velocity_map (ndarray): Tissue velocity map (e.g., from Doppler), shape (grid_size_z, grid_size_x).
-        axis (int): Axis along which to compute the gradient (default: 0, axial/z).
-        spacing (float): Physical distance between points along the axis (in mm or m).
-        method (str): Gradient method: "central" (default), "forward", or "backward".
-
-    Returns:
-        strain_rate (ndarray): Strain rate map (same shape as velocity_map).
-    """
-    # Central difference (default)
-    if method == "central":
-        grad = np.gradient(velocity_map, spacing, axis=axis)
-    elif method == "forward":
-        grad = (
-            np.diff(velocity_map, axis=axis, append=velocity_map.take([-1], axis=axis))
-            / spacing
-        )
-    elif method == "backward":
-        grad = (
-            np.diff(velocity_map, axis=axis, prepend=velocity_map.take([0], axis=axis))
-            / spacing
-        )
-    else:
-        raise ValueError("Unknown method: choose 'central', 'forward', or 'backward'")
-    return grad
 
 
 class FirFilter(zea.ops.Operation):

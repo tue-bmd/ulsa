@@ -13,26 +13,22 @@ from keras import ops
 
 sys.path.append("/ulsa")
 
+from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import postprocess_agent_results
 from zea import Config
 
-DATA_ROOT = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data"
-DATA_FOLDER = Path(DATA_ROOT) / "Wessel/output/lud/ULSA_benchmarks"
+DATA_ROOT = "/mnt/z/prjs0966"
+DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
 N_PATIENTS = 3
 FIGSIZE = (3.5, 2.0 * N_PATIENTS / 3)  # single column
 # FIGSIZE = (7.16, 2.5 * N_PATIENTS / 2)  # two columns
 FRAME_IDX = 20
-
-
-def colorbar_contrast(data, q=99):
-    # the top 100-q % of the values are clipped to provide a better visualization of the image
-    percentile_value = np.percentile(data, q)
-    return np.clip(data, None, percentile_value)
+N_ACTIONS = 7
 
 
 plt.style.use("styles/ieee-tmi.mplstyle")
 
-sweep_dir = DATA_FOLDER / "sweep_2025_05_28_095707_408964"
+sweep_dir = DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40"
 run_dirs = sweep_dir.glob("run_*")
 
 patients = []
@@ -41,7 +37,7 @@ while len(patients) < N_PATIENTS:
     agent_config = Config.from_yaml(run_dir / "config.yaml")
     if agent_config.action_selection.selection_strategy != "greedy_entropy":
         continue
-    if agent_config.action_selection.n_actions != 7:
+    if agent_config.action_selection.n_actions != N_ACTIONS:
         continue
     if (run_dir / "metrics.npz").exists():
         patients.append(run_dir)
@@ -49,7 +45,7 @@ while len(patients) < N_PATIENTS:
 columns = [
     "Acquisitions",
     "Reconstruction",
-    "Variance",
+    "Entropy",
     "Target",
 ]
 interpolation = "nearest"
@@ -94,23 +90,23 @@ for p in range(N_PATIENTS):
         fill_value="white",
     )
     belief_distributions = data["belief_distributions"][FRAME_IDX].squeeze(-1)
-    variance = ops.var(belief_distributions, axis=0)
-    variance = colorbar_contrast(variance, q=99.5)
-    max_variance = ops.max(variance)
-    variance = postprocess_agent_results(
-        variance,
+    entropy = ops.squeeze(
+        pixelwise_entropy(belief_distributions[None], entropy_sigma=255), axis=0
+    )
+    entropy = postprocess_agent_results(
+        entropy,
         io_config=io_config,
         scan_convert_order=1,
-        image_range=[0, max_variance],
+        image_range=[0, entropy.max()],
         fill_value="transparent",
     )
+    entropy = np.clip(entropy, None, np.nanpercentile(entropy, 99.5))
 
     axs[p, 3].imshow(target, **imshow_kwargs)
     axs[p, 2].imshow(
-        variance,
+        entropy,
         cmap="inferno",
         vmin=0,
-        vmax=max_variance,
         interpolation=interpolation,
     )
     axs[p, 1].imshow(reconstruction, **imshow_kwargs)

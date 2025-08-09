@@ -7,7 +7,7 @@ action_selection:
 downstream_task: null
 
 diffusion_inference:
-  run_dir: hf://usbmd/ulsa
+  run_dir: hf://zeahub/ulsa
   num_steps: 500
   initial_step: 450 # [0, num_steps]
   batch_size: 4 # posterior samples

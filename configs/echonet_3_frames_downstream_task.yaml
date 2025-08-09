@@ -10,7 +10,7 @@ downstream_task: "echonet_segmentation"
 
 diffusion_inference:
   # run_dir: "{output_dir}/ddim/2025_02_26_160545_ddim_train_echonet_112_3_frames/hub"
-  run_dir: hf://usbmd/ulsa
+  run_dir: hf://zeahub/ulsa
   num_steps: 500
   initial_step: 450 # [0, num_steps]
   batch_size: 4 # posterior samples
