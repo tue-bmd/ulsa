@@ -3,12 +3,13 @@ import os
 import sys
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
-from zea import init_device
+from zea import init_device, log
 
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
@@ -68,17 +69,18 @@ if __name__ == "__main__":
         context="styles/ieee-tmi.mplstyle",
     )
 
-    results = {}
-    for metric_name in keys_to_extract:
-        results[metric_name] = df_to_dict(combined_results, metric_name)
-    combined_results = results
+    # results = {}
+    # for metric_name in keys_to_extract:
+    #     results[metric_name] = df_to_dict(combined_results, metric_name)
+    # combined_results = results
 
     # PSNR plot
     for metric_name in keys_to_extract:
         x_values = [3, 6, 12]
         formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
         plotter.plot(
-            sort_by_names(combined_results[metric_name], STRATEGY_NAMES.keys()),
+            # sort_by_names(combined_results[metric_name], STRATEGY_NAMES.keys()),
+            df_to_dict(combined_results, metric_name),
             save_path=f"./3d_{metric_name}_violin_plot.pdf",
             x_label_values=x_values,
             metric_name=formatted_metric_name,
@@ -89,6 +91,58 @@ if __name__ == "__main__":
                 "frameon": False,
             },
         )
+
+    # Combined LPIPS and PSNR
+    plotter = ViolinPlotter(
+        xlabel=get_axis_label(args.x_axis),
+        group_names=STRATEGY_NAMES,
+        legend_loc="top",
+        scatter_kwargs={"alpha": 0.01, "s": 4},
+        context="styles/ieee-tmi.mplstyle",
+    )
+    plt.close("all")
+    x_values = [3, 6, 12]
+    with plt.style.context("styles/ieee-tmi.mplstyle"):
+        fig, axs = plt.subplots(1, 2)
+        metric_name = "psnr"
+        formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+        order_by = plotter._order_groups_by_means(
+            df_to_dict(combined_results, metric_name), STRATEGY_NAMES, x_values
+        )
+        plotter.plot(
+            df_to_dict(combined_results, metric_name),
+            save_path=None,
+            x_label_values=x_values,
+            metric_name=formatted_metric_name,
+            ax=axs[0],
+            legend_kwargs=None,
+            order_by=order_by,
+        )
+        metric_name = "lpips"
+        formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+        plotter.plot(
+            df_to_dict(combined_results, metric_name),
+            save_path=None,
+            x_label_values=x_values,
+            metric_name=formatted_metric_name,
+            order_by=order_by,
+            ax=axs[1],
+            legend_kwargs=None,
+        )
+        h, l = axs[0].get_legend_handles_labels()
+        fig.legend(
+            h,
+            l,
+            loc="outside upper center",
+            ncol=3,
+            frameon=False,
+        )
+        for ext in [".pdf", ".png"]:
+            save_path = f"./lpips_psnr_combined_violin_plot{ext}"
+            plt.savefig(save_path)
+            log.info(
+                f"Saved combined LPIPS and PSNR violin plot to {log.yellow(save_path)}"
+            )
 
     # Find global min/max for PSNR for consistent binning and ticks
     all_psnr_values = []
