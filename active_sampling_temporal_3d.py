@@ -14,7 +14,7 @@ def parse_args():
     parser.add_argument(
         "--agent_config",
         type=str,
-        default="./configs/echonet_3_frames.yaml",
+        default="./configs/elevation_3d.yaml",
         help="Path to agent config yaml.",
     )
     parser.add_argument(
@@ -98,13 +98,9 @@ if __name__ == "__main__":
     keras.mixed_precision.set_global_policy(args.precision)
 
 import jax
-import zea.ops
 from keras.src import backend
-from zea import Config, File, Pipeline, log, set_data_paths
-from zea.io_lib import load_image
-from zea.utils import save_to_gif, translate
-from zea.visualize import plot_biplanes, set_mpl_style
 
+import zea.ops
 from active_sampling_temporal import (
     fix_paths,
     run_active_sampling,
@@ -116,6 +112,10 @@ from elevation_interpolation.tools import (
     postprocess_3d_data,
 )
 from ulsa.agent import reset_agent_state, setup_agent
+from zea import Config, File, Pipeline, log, set_data_paths
+from zea.io_lib import load_image
+from zea.utils import save_to_gif, translate
+from zea.visualize import plot_biplanes, set_mpl_style
 
 
 def safe_slice(start, end):

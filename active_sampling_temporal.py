@@ -328,7 +328,10 @@ def run_active_sampling(
             return measurements, target, pipeline_state, target_pipeline_state
 
     else:
-        params = pipeline.prepare_parameters(dynamic_range=scan.dynamic_range)
+        if scan is not None:
+            params = pipeline.prepare_parameters(dynamic_range=scan.dynamic_range)
+        else:
+            params = {}
 
         def acquire(
             full_data,
@@ -551,6 +554,7 @@ def active_sampling_single_file(
         seed=jax.random.PRNGKey(seed),
         pfield=pfield,
         jit_mode="recover",
+        # jit_mode=None,
     )
 
     pipeline = make_pipeline(

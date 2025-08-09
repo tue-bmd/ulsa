@@ -41,12 +41,12 @@ if __name__ == "__main__":
 
     # Define your sweep paths here
     SWEEPS = [
-        "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_out/3d_test_3_frame/sweep_2025_06_17_092553_947259",
-        "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_out/3d_test_3_frame/sweep_2025_06_17_132207_139566",
-        "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_out/3d_test_3_frame/sweep_2025_06_17_165304_798534",
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_07_30_075551_576866",
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_08_05_135605_502495",
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_08_08_073153_126915",
     ]
 
-    keys_to_extract = ["psnr"]
+    keys_to_extract = ["psnr", "lpips"]
 
     if TEMP_FILE.exists():
         print(f"Loading existing combined results from {str(TEMP_FILE)}")
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     else:
         combined_results = extract_and_combine_sweep_data(
             SWEEPS,
-            keys_to_extract=["psnr"],
+            keys_to_extract=keys_to_extract,
             x_axis_key=args.x_axis,
         )
         combined_results.to_pickle(TEMP_FILE)
@@ -74,16 +74,16 @@ if __name__ == "__main__":
     combined_results = results
 
     # PSNR plot
-    metric_name = "psnr"
-    x_values = [3, 6, 12]
-    formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
-    plotter.plot(
-        sort_by_names(combined_results[metric_name], STRATEGY_NAMES.keys()),
-        save_path=f"./3d_{metric_name}_violin_plot.pdf",
-        x_label_values=x_values,
-        metric_name=formatted_metric_name,
-        order_by_means=False,
-    )
+    for metric_name in keys_to_extract:
+        x_values = [3, 6, 12]
+        formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+        plotter.plot(
+            sort_by_names(combined_results[metric_name], STRATEGY_NAMES.keys()),
+            save_path=f"./3d_{metric_name}_violin_plot.pdf",
+            x_label_values=x_values,
+            metric_name=formatted_metric_name,
+            order_by_means=False,
+        )
 
     # Find global min/max for PSNR for consistent binning and ticks
     all_psnr_values = []

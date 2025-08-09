@@ -298,8 +298,12 @@ def benchmark(
         )
 
     if metrics is None:
+        if agent_config.get("is_3d", False):
+            metrics_to_compute = ["mae", "mse", "psnr", "lpips"]
+        else:
+            metrics_to_compute = ["mae", "mse", "psnr", "ssim", "lpips"]
         metrics = Metrics(
-            metrics=["mae", "mse", "psnr", "ssim", "lpips"],
+            metrics=metrics_to_compute,
             image_range=[0, 255],
         )
 

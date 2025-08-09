@@ -153,7 +153,7 @@ def get_initial_action_selection_fn(
         raise UserWarning("Invalid action selection strategy")
 
 
-def action_selection_wrapper(action_selector: LinesActionModel):
+def action_selection_wrapper(action_selector: LinesActionModel, is_3d=False):
     """
     Different selection strategy sample functions require different input parameters.
     This function defines a generic wrapper over those sample functions so that the
@@ -170,6 +170,9 @@ def action_selection_wrapper(action_selector: LinesActionModel):
     elif isinstance(action_selector, GreedyEntropy):
 
         def action_selection(particles, current_lines, seed):
+            if is_3d:
+                # transpose so that that azimuth axis becomes the batch [azimuth, n_particles, depth, elevation]
+                particles = ops.transpose(particles[0, ...], (1, 0, 2, 3))
             return action_selector.sample(particles=particles), None
 
     elif isinstance(action_selector, GreedyVariance):
@@ -465,9 +468,12 @@ def setup_agent(
         **agent_config.action_selection.get("kwargs", {}),
     )
     initial_action_selection = action_selection_wrapper(
-        get_initial_action_selection_fn(action_selector)
+        get_initial_action_selection_fn(action_selector),
+        is_3d=agent_config.get("is_3d", False),
     )
-    action_selection = action_selection_wrapper(action_selector)
+    action_selection = action_selection_wrapper(
+        action_selector, is_3d=agent_config.get("is_3d", False)
+    )
 
     if agent_config.action_selection.get("pfield"):
         assert pfield is not None, "pfield must be provided"

@@ -41,34 +41,34 @@ if __name__ == "__main__":
 
     ulsa_agent_config = Config.from_yaml(Path("/ulsa/configs/elevation_3d.yaml"))
 
-    sweep_save_dir, all_metrics_results = run_benchmark(
-        agent_config=ulsa_agent_config,
-        target_dir=TARGET_DIR,
-        save_dir=SAVE_DIR,
-        sweep_params={
-            "action_selection.n_actions": [3, 6, 12],
-            "action_selection.selection_strategy": ["greedy_entropy"],
-            "action_selection.kwargs": [{"average_across_batch": True}],
-            "diffusion_inference.batch_size": [4],
-        },
-        image_range=(0, 255),
-        data_type="data/image_3D",
-        validate_dataset=False,  # 3D data not in official USBMD format
-    )
-
     # sweep_save_dir, all_metrics_results = run_benchmark(
     #     agent_config=ulsa_agent_config,
     #     target_dir=TARGET_DIR,
     #     save_dir=SAVE_DIR,
     #     sweep_params={
     #         "action_selection.n_actions": [3, 6, 12],
-    #         "action_selection.selection_strategy": [
-    #             "uniform_random",
-    #             "equispaced",
-    #         ],
+    #         "action_selection.selection_strategy": ["greedy_entropy"],
+    #         "action_selection.kwargs": [{"average_across_batch": True}],
     #         "diffusion_inference.batch_size": [4],
     #     },
     #     image_range=(0, 255),
     #     data_type="data/image_3D",
     #     validate_dataset=False,  # 3D data not in official USBMD format
     # )
+
+    sweep_save_dir, all_metrics_results = run_benchmark(
+        agent_config=ulsa_agent_config,
+        target_dir=TARGET_DIR,
+        save_dir=SAVE_DIR,
+        sweep_params={
+            "action_selection.n_actions": [3, 6, 12],
+            "action_selection.selection_strategy": [
+                "uniform_random",
+                "equispaced",
+            ],
+            "diffusion_inference.batch_size": [4],
+        },
+        image_range=(0, 255),
+        data_type="data/image_3D",
+        validate_dataset=False,  # 3D data not in official USBMD format
+    )
