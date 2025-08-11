@@ -191,7 +191,7 @@ class Sharpen(zea.ops.Operation):
         from skimage.filters import unsharp_mask  # pip install scikit-image
 
         image = kwargs[self.key]
-        sharpened_image = unsharp_mask(image, sigma=self.sigma, amount=self.amount)
+        sharpened_image = unsharp_mask(image, radius=self.sigma, amount=self.amount)
 
         return {self.output_key: sharpened_image}
 
@@ -372,7 +372,7 @@ def lines_rx_apo(n_tx, grid_size_z, grid_size_x):
     This is a simple apodization that applies a uniform weight to all elements.
 
     Returns:
-        rx_apo: np.ndarray of shape (n_tx, grid_size_z, grid_size_x)
+        rx_apo: np.ndarray of shape (n_tx, grid_size_z * grid_size_x, 1)
     """
     assert grid_size_x % n_tx == 0, (
         "grid_size_x must be divisible by n_tx for this apodization scheme."

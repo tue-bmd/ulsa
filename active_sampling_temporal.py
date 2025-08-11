@@ -102,11 +102,8 @@ from keras.src import backend
 
 import zea.ops
 from ulsa import selection  # need to import this to update action selection registry
-from ulsa.agent import Agent, AgentState, setup_agent
-from ulsa.downstream_task import (
-    DownstreamTask,
-    downstream_task_registry,
-)
+from ulsa.agent import Agent, AgentState, hard_projection, setup_agent
+from ulsa.downstream_task import downstream_task_registry
 from ulsa.io_utils import (
     animate_overviews,
     make_save_dir,
@@ -117,16 +114,12 @@ from ulsa.io_utils import (
     plot_frame_overview,
     plot_frames_for_presentation,
 )
-from ulsa.ops import FirFilter, LowPassFilter, WaveletDenoise, lines_rx_apo
-from ulsa.pfield import (
-    select_transmits,
-    update_scan_for_polar_grid,
-)
+from ulsa.ops import lines_rx_apo
+from ulsa.pfield import select_transmits, update_scan_for_polar_grid
 from ulsa.pipeline import make_pipeline
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
 from zea.tensor_ops import batched_map, func_with_one_batch_dim
-from zea.utils import translate
 
 
 def simple_scan(f, init, xs, length=None, disable_tqdm=False):
@@ -143,22 +136,6 @@ def simple_scan(f, init, xs, length=None, disable_tqdm=False):
             y = ops.convert_to_numpy(y)
         ys.append(y)
     return carry, [np.stack(tensors) for tensors in zip(*ys)]
-
-
-def hard_projection(image, masked_measurements):
-    """
-    Projects an image onto the measurement space by replacing values with measurements
-    where they exist.
-
-    Args:
-        image (Tensor): The image to project onto
-        masked_measurements (Tensor): The masked measurements to project from
-            (same shape as image, with zeros where no measurements exist)
-
-    Returns:
-        Tensor: The projected image with measurements inserted where they exist
-    """
-    return ops.where(masked_measurements != 0, masked_measurements, image)
 
 
 def apply_downstream_task(
