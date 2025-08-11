@@ -366,6 +366,14 @@ class LogCompressNoClip(zea.ops.Operation):
         return {self.output_key: compressed_data}
 
 
+class Copy(zea.ops.Operation):
+    """Copy the input data to the output key."""
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        return {self.output_key: data}
+
+
 def lines_rx_apo(n_tx, grid_size_z, grid_size_x):
     """
     Create a receive apodization for line scanning.

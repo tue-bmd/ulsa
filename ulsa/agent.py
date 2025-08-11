@@ -11,12 +11,12 @@ from rich.table import Table
 
 import zea
 from ulsa.buffer import FrameBuffer, lifo_shift
-from ulsa.pfield import lines_to_pfield
 from ulsa.selection import (
     DownstreamTaskSelection,
     GreedyVariance,
     selector_from_name,
 )
+from ulsa.utils import lines_to_pfield
 from zea.agent.selection import (
     CovarianceSamplingLines,
     EquispacedLines,
@@ -599,3 +599,29 @@ def hard_projection(image, masked_measurements):
     """
     return ops.where(masked_measurements != 0, masked_measurements, image)
 
+
+class Recover(zea.ops.Operation):
+    def __init__(self, agent: Agent, hard_projection: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.agent = agent
+        self.hard_projection = hard_projection
+
+    def call(self, agent_state: AgentState, **kwargs):
+        measurements = kwargs[self.key]  # TODO: are measurements masked here?
+        recovered_frame, new_agent_state = self.agent.recover(measurements, agent_state)
+        if self.hard_projection:
+            recovered_frame = hard_projection(recovered_frame, measurements)
+        return {
+            self.output_key: recovered_frame,
+            "agent_state": new_agent_state,
+        }
+
+
+class AgentMask(zea.ops.Operation):
+    def call(self, agent_state: AgentState, **kwargs):
+        """
+        Returns the current mask of the agent.
+        """
+        data = kwargs[self.key]
+        current_mask = agent_state.mask[..., -1, None]
+        return {self.output_key: data * current_mask}
