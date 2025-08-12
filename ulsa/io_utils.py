@@ -216,7 +216,7 @@ def side_by_side_gif(
                 ims[i].set_data(arr[frame])
             return ims
 
-        writer = "pillow" if save_path.endswith(".gif") else "ffmpeg"
+        writer = "pillow" if str(save_path).endswith(".gif") else "ffmpeg"
         anim = FuncAnimation(fig, update, frames=num_frames, blit=True)
         anim.save(save_path, writer=writer, fps=fps, dpi=dpi)
         plt.close(fig)
