@@ -21,6 +21,38 @@ function setInterpolationImage(i) {
 
 
 $(document).ready(function() {
+    // Dark mode functionality
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    const darkModeIcon = document.getElementById('darkModeIcon');
+    const body = document.body;
+    const html = document.documentElement;
+
+    // Check for saved dark mode preference or default to light mode
+    const isDarkMode = localStorage.getItem('darkMode') === 'enabled';
+    
+    if (isDarkMode) {
+        body.classList.add('dark-mode');
+        html.classList.add('dark-mode');
+        darkModeIcon.classList.remove('fa-moon');
+        darkModeIcon.classList.add('fa-sun');
+    }
+
+    // Dark mode toggle event listener
+    darkModeToggle.addEventListener('click', function() {
+        body.classList.toggle('dark-mode');
+        html.classList.toggle('dark-mode');
+        
+        if (body.classList.contains('dark-mode')) {
+            darkModeIcon.classList.remove('fa-moon');
+            darkModeIcon.classList.add('fa-sun');
+            localStorage.setItem('darkMode', 'enabled');
+        } else {
+            darkModeIcon.classList.remove('fa-sun');
+            darkModeIcon.classList.add('fa-moon');
+            localStorage.setItem('darkMode', 'disabled');
+        }
+    });
+
     // Check for click events on the navbar burger icon
     $(".navbar-burger").click(function() {
       // Toggle the "is-active" class on both the "navbar-burger" and the "navbar-menu"
