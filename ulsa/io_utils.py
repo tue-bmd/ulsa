@@ -216,8 +216,9 @@ def side_by_side_gif(
                 ims[i].set_data(arr[frame])
             return ims
 
+        writer = "pillow" if save_path.endswith(".gif") else "ffmpeg"
         anim = FuncAnimation(fig, update, frames=num_frames, blit=True)
-        anim.save(save_path, writer="pillow", fps=fps, dpi=dpi)
+        anim.save(save_path, writer=writer, fps=fps, dpi=dpi)
         plt.close(fig)
         print(f"Saved animation to {save_path}")
 
@@ -449,6 +450,7 @@ def plot_frames_for_presentation(
     window_size=7,
     postfix_filename=None,
     sigma_heatmap=None,
+    file_type="gif",  # 'gif' or 'mp4'
 ):
     save_dir = Path(save_dir)
     Path(save_dir).mkdir(parents=True, exist_ok=True)
@@ -500,7 +502,7 @@ def plot_frames_for_presentation(
 
     # Target and reconstruction side by side
     side_by_side_gif(
-        save_dir / f"target_reconstruction{postfix_filename}.gif",
+        save_dir / f"target_reconstruction{postfix_filename}.{file_type}",
         targets,
         reconstructions,
         dpi=dpi,
@@ -512,7 +514,7 @@ def plot_frames_for_presentation(
 
     # Measurements and reconstruction side by side
     side_by_side_gif(
-        save_dir / f"measurements_reconstruction{postfix_filename}.gif",
+        save_dir / f"measurements_reconstruction{postfix_filename}.{file_type}",
         measurements,
         reconstructions,
         dpi=dpi,
@@ -535,7 +537,7 @@ def plot_frames_for_presentation(
     if offset > drop_first_n_frames:
         drop_extra_frames = offset - drop_first_n_frames
     side_by_side_gif(
-        save_dir / f"heatmap_reconstruction{postfix_filename}.gif",
+        save_dir / f"heatmap_reconstruction{postfix_filename}.{file_type}",
         heatmap[offset:],
         reconstructions[drop_extra_frames:],
         dpi=dpi,
