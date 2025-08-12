@@ -451,7 +451,9 @@ def plot_frames_for_presentation(
     postfix_filename=None,
     sigma_heatmap=None,
     file_type="gif",  # 'gif' or 'mp4'
+    fill_value="black",  # 'black', 'white', 'gray', 'transparent'
 ):
+    log.info("Plotting frames for presentation, this may take a while...")
     save_dir = Path(save_dir)
     Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -462,6 +464,7 @@ def plot_frames_for_presentation(
         image_range,
         drop_first_n_frames,
         scan_convert_resolution,
+        fill_value=fill_value,
     )
     reconstructions = postprocess_agent_results(
         reconstructions,
@@ -471,6 +474,7 @@ def plot_frames_for_presentation(
         drop_first_n_frames,
         scan_convert_resolution,
         reconstruction_sharpness_std=io_config.get("reconstruction_sharpness_std", 0.0),
+        fill_value=fill_value,
     )
     measurements = postprocess_agent_results(
         measurements,
@@ -479,6 +483,7 @@ def plot_frames_for_presentation(
         drop_first_n_frames=drop_first_n_frames,
         image_range=image_range,
         scan_convert_resolution=scan_convert_resolution,
+        fill_value=fill_value,
     )
 
     if postfix_filename is None:

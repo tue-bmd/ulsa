@@ -4,4 +4,4 @@ python active_sampling_temporal.py \
     --image_range -60 0 \
     --precision mixed_float16 \
     --save_dir output/assets_for_docs \
-    --override_config '{"downstream_task": null, "io_config": {"gif_fps": 30, "frame_cutoff": 100, "plot_frames_for_presentation_kwargs": {"file_type": "webm"}}, "action_selection": {"num_lines_to_sample": 7}}'
+    --override_config '{"downstream_task": null, "io_config": {"gif_fps": 30, "frame_cutoff": 100, "plot_frames_for_presentation_kwargs": {"file_type": "webm", "context": "styles/website.mplstyle", "drop_first_n_frames": 3, "fill_value": "transparent"}}, "action_selection": {"num_lines_to_sample": 7}}'
