@@ -115,8 +115,8 @@ from ulsa.io_utils import (
     plot_frames_for_presentation,
 )
 from ulsa.ops import lines_rx_apo
-from ulsa.pfield import select_transmits, update_scan_for_polar_grid
 from ulsa.pipeline import make_pipeline
+from ulsa.utils import select_transmits, update_scan_for_polar_grid
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
 from zea.tensor_ops import batched_map, func_with_one_batch_dim
