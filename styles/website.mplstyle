@@ -1,16 +1,13 @@
-font.family:  serif
+font.family: serif
 
-text.color: gray
+text.color: white
 
-axes.facecolor:     black   # axes background color
-axes.edgecolor:     gray   # axes edge color
-axes.titlesize:     medium   # font size of the axes title
-axes.labelcolor:    gray
+axes.facecolor: black
+axes.edgecolor: white
+axes.labelcolor: white
 
-xtick.color:          gray   # color of the ticks
-ytick.color:          gray   # color of the ticks
+xtick.color: white
+ytick.color: white
 
-image.interpolation:   none  # see help(imshow) for options
-
-figure.dpi:          150       # figure dots per inch
-savefig.transparent: True
+figure.dpi: 150
+figure.facecolor: black
