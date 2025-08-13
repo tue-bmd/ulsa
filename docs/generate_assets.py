@@ -57,7 +57,7 @@ if __name__ == "__main__":
 
     # For slider
     for n_actions in [2, 4, 7, 14, 28, 56, 112]:
-        run_dir, run_id = generate_assets(n_actions)
+        run_dir, run_id = generate_assets(n_actions=n_actions)
 
         glob_copy_files(
             run_dir,
@@ -68,11 +68,11 @@ if __name__ == "__main__":
 
     # For teaser
     run_dir, run_id = generate_assets(
-        "/mnt/USBMD_datasets/echonet_legacy/test/0X19AD6B318F7CEFFD.hdf5", n_actions=14
+        "/mnt/USBMD_datasets/echonet_legacy/test/0X329210815212AA6A.hdf5", n_actions=14
     )
     glob_copy_files(
         run_dir,
         "heatmap_reconstruction_*",
         new_assets_dir,
-        "heatmap_reconstruction_example_14_",
+        "heatmap_reconstruction_example_14",
     )
