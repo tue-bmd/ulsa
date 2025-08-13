@@ -1,3 +1,5 @@
+"""This file generates assets for the documentation and website."""
+
 import sys
 
 sys.path.append("/ulsa")
