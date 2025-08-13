@@ -452,6 +452,7 @@ def plot_frames_for_presentation(
     sigma_heatmap=None,
     file_type="gif",  # 'gif' or 'mp4'
     fill_value="black",  # 'black', 'white', 'gray', 'transparent'
+    no_measurement_color="gray",
 ):
     log.info("Plotting frames for presentation, this may take a while...")
     save_dir = Path(save_dir)
@@ -475,6 +476,9 @@ def plot_frames_for_presentation(
         scan_convert_resolution,
         reconstruction_sharpness_std=io_config.get("reconstruction_sharpness_std", 0.0),
         fill_value=fill_value,
+    )
+    measurements = keras.ops.where(
+        masks > 0, measurements, color_to_value(image_range, no_measurement_color)
     )
     measurements = postprocess_agent_results(
         measurements,
