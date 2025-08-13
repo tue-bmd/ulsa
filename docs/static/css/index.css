@@ -8,10 +8,6 @@ html {
   height: 100%;
 }
 
-html.dark-mode {
-  background-color: #000000;
-}
-
 /* Dark mode styles */
 body.dark-mode {
   background-color: #000000;
@@ -123,6 +119,11 @@ body.dark-mode .interpolation-panel {
 
 body.dark-mode .results-carousel .item {
   border: 1px solid #404040;
+}
+
+body.dark-mode pre {
+  background-color: #1a1a1a;
+  color: #e0e0e0;
 }
 
 /* Dark mode toggle button */
