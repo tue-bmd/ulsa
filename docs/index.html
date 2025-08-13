@@ -148,13 +148,75 @@
   <div class="container is-max-desktop">
     <div class="hero-body">
       <video id="teaser" autoplay muted loop playsinline height="100%">
-        <source src="./static/videos/measurements_reconstruction_0X10A5FC19152B50A5.webm"
+        <source src="./static/videos/heatmap_reconstruction_example_14.webm"
                 type="video/webm">
       </video>
       <h2 class="subtitle has-text-centered">
-        Page currently under construction. Refer to the <a href="https://github.com/tue-bmd/ulsa"><span>GitHub repository</span></a> for more information.
+        Patient-Adaptive Focused Transmit Beamforming selects the most informative ultrasound transmits
+        using Cognitive Ultrasound.
       </h2>
     </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container is-max-desktop">
+
+    <!-- Animation. -->
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-3">Examples</h2>
+
+        <!-- Interpolating. -->
+        <h3 class="title is-4">Select number of transmits</h3>
+        <div class="content has-text-justified">
+          <p>
+            Let's run active perception for various numbers of transmits.  Use the slider to choose
+            the number of transmits yourself.
+          </p>
+        </div>
+        <div class="columns is-vcentered interpolation-panel">
+          <div class="column interpolation-video-column">
+            <div id="interpolation-image-wrapper">
+              Loading...
+            </div>
+            <div class="has-text-centered" style="margin-top: 1rem;">
+              <input class="slider is-large is-info"
+                   id="interpolation-slider"
+                   step="1" min="0" max="6" value="3" type="range"
+                   list="slider-ticks"
+                   style="width: 60%; max-width: 400px;">
+              <datalist id="slider-ticks">
+                <option value="0" label="2"></option>
+                <option value="1" label="4"></option>
+                <option value="2" label="7"></option>
+                <option value="3" label="14"></option>
+                <option value="4" label="28"></option>
+                <option value="5" label="56"></option>
+                <option value="6" label="112"></option>
+              </datalist>
+            </div>
+            <div class="has-text-centered" style="margin-top: 0.5em;">
+              <span id="slider-value-label">14</span>
+            </div>
+            <script>
+              const slider = document.getElementById('interpolation-slider');
+              const label = document.getElementById('slider-value-label');
+              const values = [2, 4, 7, 14, 28, 56, 112];
+              // Set initial label to match initial slider value
+              label.textContent = values[parseInt(slider.value, 10)];
+              slider.addEventListener('input', function() {
+                label.textContent = values[parseInt(slider.value, 10)];
+              });
+            </script>
+          </div>
+        </div>
+        <br/>
+        <!--/ Interpolating. -->
+
+      </div>
+    </div>
+    <!--/ Animation. -->
   </div>
 </section>
 
