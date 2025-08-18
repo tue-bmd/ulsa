@@ -1,6 +1,8 @@
 # Patient-Adaptive Focused Transmit Beamforming using Cognitive Ultrasound
 
-Find our model on [Huggingface](https://huggingface.co/zeahub/ulsa).
+The repo contains the code for the paper [Patient-Adaptive Focused Transmit Beamforming using Cognitive Ultrasound](https://tue-bmd.github.io/ulsa/). For more information, please refer to the [project page](https://tue-bmd.github.io/ulsa/).
+
+Find the weights of our model on [Huggingface](https://huggingface.co/zeahub/ulsa).
 
 ## Setup code
 
