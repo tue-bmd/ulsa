@@ -27,7 +27,7 @@
             "type": "bind"
         },
         {
-            "source": "/mnt/USBMD_datasets",
+            "source": "/data/USBMD_datasets",
             "target": "/mnt/USBMD_datasets",
             "type": "bind"
         },

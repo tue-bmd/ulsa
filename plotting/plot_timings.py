@@ -168,7 +168,7 @@ if __name__ == "__main__":
     assert context.exists(), f"Context file {context} does not exist."
     plot_timings(
         [x, y],
-        ["Sequential", "Regular"],
+        ["SeqDiff", "Regular"],
         save_root=SAVE_ROOT,
         context=context,
         dark=False,

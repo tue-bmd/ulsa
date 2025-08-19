@@ -1,0 +1,13 @@
+font.family: serif
+
+text.color: white
+
+axes.facecolor: black
+axes.edgecolor: white
+axes.labelcolor: white
+
+xtick.color: white
+ytick.color: white
+
+figure.dpi: 150
+figure.facecolor: black

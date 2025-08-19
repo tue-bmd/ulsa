@@ -216,8 +216,9 @@ def side_by_side_gif(
                 ims[i].set_data(arr[frame])
             return ims
 
+        writer = "pillow" if str(save_path).endswith(".gif") else "ffmpeg"
         anim = FuncAnimation(fig, update, frames=num_frames, blit=True)
-        anim.save(save_path, writer="pillow", fps=fps, dpi=dpi)
+        anim.save(save_path, writer=writer, fps=fps, dpi=dpi)
         plt.close(fig)
         print(f"Saved animation to {save_path}")
 
@@ -449,7 +450,11 @@ def plot_frames_for_presentation(
     window_size=7,
     postfix_filename=None,
     sigma_heatmap=None,
+    file_type="gif",  # 'gif' or 'mp4'
+    fill_value="black",  # 'black', 'white', 'gray', 'transparent'
+    no_measurement_color="gray",
 ):
+    log.info("Plotting frames for presentation, this may take a while...")
     save_dir = Path(save_dir)
     Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -460,6 +465,7 @@ def plot_frames_for_presentation(
         image_range,
         drop_first_n_frames,
         scan_convert_resolution,
+        fill_value=fill_value,
     )
     reconstructions = postprocess_agent_results(
         reconstructions,
@@ -469,6 +475,10 @@ def plot_frames_for_presentation(
         drop_first_n_frames,
         scan_convert_resolution,
         reconstruction_sharpness_std=io_config.get("reconstruction_sharpness_std", 0.0),
+        fill_value=fill_value,
+    )
+    measurements = keras.ops.where(
+        masks > 0, measurements, color_to_value(image_range, no_measurement_color)
     )
     measurements = postprocess_agent_results(
         measurements,
@@ -477,6 +487,7 @@ def plot_frames_for_presentation(
         drop_first_n_frames=drop_first_n_frames,
         image_range=image_range,
         scan_convert_resolution=scan_convert_resolution,
+        fill_value=fill_value,
     )
 
     if postfix_filename is None:
@@ -500,7 +511,7 @@ def plot_frames_for_presentation(
 
     # Target and reconstruction side by side
     side_by_side_gif(
-        save_dir / f"target_reconstruction{postfix_filename}.gif",
+        save_dir / f"target_reconstruction{postfix_filename}.{file_type}",
         targets,
         reconstructions,
         dpi=dpi,
@@ -512,7 +523,7 @@ def plot_frames_for_presentation(
 
     # Measurements and reconstruction side by side
     side_by_side_gif(
-        save_dir / f"measurements_reconstruction{postfix_filename}.gif",
+        save_dir / f"measurements_reconstruction{postfix_filename}.{file_type}",
         measurements,
         reconstructions,
         dpi=dpi,
@@ -535,7 +546,7 @@ def plot_frames_for_presentation(
     if offset > drop_first_n_frames:
         drop_extra_frames = offset - drop_first_n_frames
     side_by_side_gif(
-        save_dir / f"heatmap_reconstruction{postfix_filename}.gif",
+        save_dir / f"heatmap_reconstruction{postfix_filename}.{file_type}",
         heatmap[offset:],
         reconstructions[drop_extra_frames:],
         dpi=dpi,

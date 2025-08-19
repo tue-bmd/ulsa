@@ -105,7 +105,7 @@ def parse_args():
         "--selection_strategy",
         type=str,
         nargs="+",
-        help="List of selection strategies to sweep over, e.g. --selection_strategy equispaced greedy_variance",
+        help="List of selection strategies to sweep over, e.g. --selection_strategy equispaced greedy_entropy",
         default=[
             "equispaced",
             "greedy_entropy",

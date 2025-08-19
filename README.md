@@ -1,12 +1,27 @@
 # Patient-Adaptive Focused Transmit Beamforming using Cognitive Ultrasound
 
-Find our model on [Huggingface](https://huggingface.co/zeahub/ulsa).
+The repo contains the code for the paper [Patient-Adaptive Focused Transmit Beamforming using Cognitive Ultrasound](https://tue-bmd.github.io/ulsa/). For more information, please refer to the [project page](https://tue-bmd.github.io/ulsa/).
+
+Find the weights of our model on [Huggingface](https://huggingface.co/zeahub/ulsa).
 
 ## Setup code
+
+Install [`zea`](https://github.com/tue-bmd/zea), the cognitive ultrasound toolbox.
+
+```bash
+pip install "zea==0.0.4"
+```
+
+or use the submodule in this repo:
 
 ```bash
 git submodule update --init --recursive
 pip install -e zea
+```
+
+Install other dependencies for this repo:
+
+```bash
 KERAS_VER=$(python3 -c "import keras; print(keras.__version__)")
 pip install tf2jax==0.3.6 pandas jaxwt dm-pix jax
 pip install keras==${KERAS_VER}

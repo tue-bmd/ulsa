@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Tuple
 
 import jax
 import keras
@@ -11,12 +11,12 @@ from rich.table import Table
 
 import zea
 from ulsa.buffer import FrameBuffer, lifo_shift
-from ulsa.pfield import lines_to_pfield
 from ulsa.selection import (
     DownstreamTaskSelection,
     GreedyVariance,
     selector_from_name,
 )
+from ulsa.utils import lines_to_pfield
 from zea.agent.selection import (
     CovarianceSamplingLines,
     EquispacedLines,
@@ -26,39 +26,8 @@ from zea.agent.selection import (
 )
 from zea.backend import jit
 from zea.config import Config
-from zea.internal.operators import Operator, operator_registry
 from zea.models.diffusion import DiffusionModel
 from zea.tensor_ops import split_seed
-from zea.utils import translate
-
-
-@operator_registry(name="soft_inpainting")
-class SoftInpaintingOperator(Operator):
-    """Soft inpainting operator class.
-
-    Soft inpainting uses a soft grayscale mask for a smooth transition between
-    the inpainted and generated regions of the image.
-    """
-
-    def __init__(self, image_range, mask_range=None):
-        self.image_range = tuple(image_range)
-        assert len(self.image_range) == 2
-
-        if mask_range is None:
-            mask_range = (0.0, 1.0)
-        self.mask_range = tuple(mask_range)
-        assert len(self.mask_range) == 2
-        assert self.mask_range[0] == 0.0, "mask_range[0] must be 0.0"
-
-    def forward(self, data, mask):
-        data1 = translate(data, self.image_range, self.mask_range)
-        data2 = mask * data1
-        data3 = translate(data2, self.mask_range, self.image_range)
-        return data3
-
-    def __str__(self):
-        return "SoftInpaintingOperator"
-
 
 DEBUGGING = False
 
@@ -613,3 +582,46 @@ def recover(
     )
 
     return recovered_frame, new_agent_state
+
+
+def hard_projection(image, masked_measurements):
+    """
+    Projects an image onto the measurement space by replacing values with measurements
+    where they exist.
+
+    Args:
+        image (Tensor): The image to project onto
+        masked_measurements (Tensor): The masked measurements to project from
+            (same shape as image, with zeros where no measurements exist)
+
+    Returns:
+        Tensor: The projected image with measurements inserted where they exist
+    """
+    return ops.where(masked_measurements != 0, masked_measurements, image)
+
+
+class Recover(zea.ops.Operation):
+    def __init__(self, agent: Agent, hard_projection: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.agent = agent
+        self.hard_projection = hard_projection
+
+    def call(self, agent_state: AgentState, **kwargs):
+        measurements = kwargs[self.key]  # TODO: are measurements masked here?
+        recovered_frame, new_agent_state = self.agent.recover(measurements, agent_state)
+        if self.hard_projection:
+            recovered_frame = hard_projection(recovered_frame, measurements)
+        return {
+            self.output_key: recovered_frame,
+            "agent_state": new_agent_state,
+        }
+
+
+class AgentMask(zea.ops.Operation):
+    def call(self, agent_state: AgentState, **kwargs):
+        """
+        Returns the current mask of the agent.
+        """
+        data = kwargs[self.key]
+        current_mask = agent_state.mask[..., -1, None]
+        return {self.output_key: data * current_mask}
