@@ -4,6 +4,7 @@ import cv2
 import jax
 import numpy as np
 from keras import ops
+from scipy.optimize import curve_fit
 
 import zea
 from models.deeplabv3_segmenter import DeeplabV3Plus
@@ -43,7 +44,7 @@ def overlay_segmentation_on_image_batch(images, segmentation_masks, alpha=0.3):
     images: (N, H, W) uint8
     segmentation_masks: (N, H, W) uint8, values 0 or 255
     Returns: (N, H, W, 3) uint8
-    """        
+    """
     assert images.shape == segmentation_masks.shape, (
         "Images and masks must have same shape"
     )
@@ -141,10 +142,16 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
 
     def postprocess_for_visualization(self, images, masks):
         images = self.scan_convert_batch(images[..., None])[..., 0]
-        images = map_range(images, from_range=(-1, 1), to_range=(0, 255)).astype(np.uint8)
+        images = map_range(images, from_range=(-1, 1), to_range=(0, 255)).astype(
+            np.uint8
+        )
         masks = map_range(masks, from_range=(0, 1), to_range=(0, 255)).astype(np.uint8)
         images_with_masks = overlay_segmentation_on_image_batch(images, masks)
-        images_with_masks = np.pad(images_with_masks, pad_width=((0, 0), (0, 0), (23, 24), (0, 0)), mode='constant')
+        images_with_masks = np.pad(
+            images_with_masks,
+            pad_width=((0, 0), (0, 0), (23, 24), (0, 0)),
+            mode="constant",
+        )
         return images_with_masks
 
     def scan_convert_batch(self, x):
@@ -252,7 +259,7 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
 
     def output_type(self):
         return "segmentation_mask"
-    
+
     def beliefs_to_reconstruction(self, belief_distributions):
         """
         This function maps a set of beliefs about the DST output to
@@ -261,11 +268,11 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
         Params:
         - belief_distributions (Tensor of shape [batch, n_particles, ...])
         """
-        # NOTE: we choose 0.5 here as a hard-coded cutoff for the proportion of 
-        # beliefs that need to agree in order for a pixel to be included in the 
+        # NOTE: we choose 0.5 here as a hard-coded cutoff for the proportion of
+        # beliefs that need to agree in order for a pixel to be included in the
         # reconstruction mask.
         # reconstructions = ops.cast(((ops.mean(belief_distributions, axis=1)) > 0.5), "uint8")
-        
+
         # NOTE: here we use 'choose first' reconstruction in order to get a segmentation
         # that is consistent with the first particle video
         reconstructions = ops.cast((belief_distributions[:, 0, ...] > 0.5), "uint8")
@@ -282,8 +289,11 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         # NOTE: image shape hardcoded for one of our echonetlvh models, could change.
         self.model = DeeplabV3Plus(image_shape=(224, 224, 3), num_classes=4)
         # NOTE: same with weights -- if we go with this it'd be nice to put model on HF
+        # self.model.load_weights(
+        #     "/mnt/z/Ultrasound-BMd/pretrained/deeplabv3/2025_07_15_114541_100430_echonetlvh_224/checkpoints/segmenter_184.weights.h5"
+        # )
         self.model.load_weights(
-            "/mnt/z/Ultrasound-BMd/pretrained/deeplabv3/2025_07_15_114541_100430_echonetlvh_224/checkpoints/segmenter_184.weights.h5"
+            "/mnt/z/Ultrasound-BMd/pretrained/deeplabv3/2025_08_15_141511_678383_echonetlvh_224/checkpoints/segmenter_4.weights.h5"
         )
 
         # Scan conversion constants for echonet
@@ -346,10 +356,10 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         #   overall picture of where is important
         logits = ops.expand_dims(ops.sum(logits, axis=-1), axis=-1)
         return logits
-    
+
     def output_type(self):
         return "segmentation_mask"
-    
+
     @staticmethod
     def make_ultrasound_cone_mask(image_shape, apex_y=0, cone_angle_deg=70):
         H, W = image_shape[:2]
@@ -360,9 +370,9 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         dy = Y - apex_y
         angle = np.arctan2(dx, dy + 1e-6) * 180 / np.pi
         mask = np.abs(angle) < (cone_angle_deg / 2)
-        mask &= (dy >= 0)
+        mask &= dy >= 0
         return mask.astype(np.float32)
-    
+
     @staticmethod
     def find_gaussian_center(mask_channel, threshold=0.0):
         mask = mask_channel.copy()
@@ -370,7 +380,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         if mask[idx] < threshold:
             return None
         return idx[::-1]  # (x, y)
-    
+
     @staticmethod
     def outputs_to_coordinates(outputs, measurement_type):
         """
@@ -380,33 +390,152 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         Returns:
             coordinates [batch, 2, 2]
         """
-        measurements_to_channels = {
-            "LVPW": [0, 1],
-            "LVID": [1, 2],
-            "IVS":  [2, 3]
-        }
-        cone_mask = EchoNetLVHSegmentation.make_ultrasound_cone_mask(ops.shape(outputs)[1:], apex_y=0, cone_angle_deg=70)
+        measurements_to_channels = {"LVPW": [0, 1], "LVID": [1, 2], "IVS": [2, 3]}
+        cone_mask = EchoNetLVHSegmentation.make_ultrasound_cone_mask(
+            ops.shape(outputs)[1:], apex_y=0, cone_angle_deg=70
+        )
         # filter out non-zero values outside the scan cone
         outputs = outputs * cone_mask[..., None]
         assert measurement_type in measurements_to_channels
         c1, c2 = measurements_to_channels[measurement_type]
-        bottom_coordinates = np.array([
-            EchoNetLVHSegmentation.find_gaussian_center(outputs[i, ..., c1])
-            for i in range(len(outputs))
-        ])
-        top_coordinates = np.array([
-            EchoNetLVHSegmentation.find_gaussian_center(outputs[i, ..., c2])
-            for i in range(len(outputs))
-        ])
+        bottom_coordinates = np.array(
+            [
+                EchoNetLVHSegmentation.find_gaussian_center(outputs[i, ..., c1])
+                for i in range(len(outputs))
+            ]
+        )
+        top_coordinates = np.array(
+            [
+                EchoNetLVHSegmentation.find_gaussian_center(outputs[i, ..., c2])
+                for i in range(len(outputs))
+            ]
+        )
         return bottom_coordinates, top_coordinates
 
+    @staticmethod
+    def outputs_to_gaussians(outputs, measurement_type):
+        """
+        Fit 2D anisotropic Gaussians to heatmaps and return parameters needed for EMD.
+
+        Params:
+            outputs [batch, height, width, 4]: output tensor produced by calling the model
+            measurement_type (str): one of ["LVPW" | "LVID" | "IVS"]
+        Returns:
+            gaussian_params: dict with keys 'bottom' and 'top', each containing:
+                - center_x: [batch] array of x centers
+                - center_y: [batch] array of y centers
+                - sigma_x: [batch] array of x standard deviations
+                - sigma_y: [batch] array of y standard deviations
+                - theta: [batch] array of rotation angles (radians)
+        """
+
+        def gaussian_2d_anisotropic(
+            coords, center_x, center_y, sigma_x, sigma_y, theta
+        ):
+            """2D anisotropic Gaussian function (amplitude fixed to 1)"""
+            x, y = coords
+
+            # Rotation matrix
+            cos_theta = np.cos(theta)
+            sin_theta = np.sin(theta)
+
+            # Rotate coordinates
+            x_rot = cos_theta * (x - center_x) + sin_theta * (y - center_y)
+            y_rot = -sin_theta * (x - center_x) + cos_theta * (y - center_y)
+
+            # Gaussian with unit amplitude
+            gaussian = np.exp(
+                -(x_rot**2 / (2 * sigma_x**2) + y_rot**2 / (2 * sigma_y**2))
+            )
+            return gaussian.ravel()
+
+        measurements_to_channels = {"LVPW": [0, 1], "LVID": [1, 2], "IVS": [2, 3]}
+
+        cone_mask = EchoNetLVHSegmentation.make_ultrasound_cone_mask(
+            ops.shape(outputs)[1:], apex_y=0, cone_angle_deg=70
+        )
+        outputs = outputs * cone_mask[..., None]
+
+        assert measurement_type in measurements_to_channels
+        c1, c2 = measurements_to_channels[measurement_type]
+
+        h, w = outputs.shape[1:3]
+        x_coords, y_coords = np.meshgrid(np.arange(w), np.arange(h))
+        coords = (x_coords, y_coords)
+
+        gaussian_params = {
+            "bottom": {
+                "center_x": [],
+                "center_y": [],
+                "sigma_x": [],
+                "sigma_y": [],
+                "theta": [],
+            },
+            "top": {
+                "center_x": [],
+                "center_y": [],
+                "sigma_x": [],
+                "sigma_y": [],
+                "theta": [],
+            },
+        }
+
+        for batch_idx in range(outputs.shape[0]):
+            for channel_name, channel_idx in [("bottom", c1), ("top", c2)]:
+                channel_data = outputs[batch_idx, ..., channel_idx]
+
+                # Normalize to unit amplitude
+                max_val = np.max(channel_data)
+                if max_val > 0:
+                    channel_data = channel_data / max_val
+
+                # Initial parameter estimates
+                max_idx = np.unravel_index(np.argmax(channel_data), channel_data.shape)
+                center_x_init, center_y_init = max_idx[1], max_idx[0]
+
+                p0 = [center_x_init, center_y_init, 5.0, 5.0, 0.0]
+
+                try:
+                    popt, _ = curve_fit(
+                        gaussian_2d_anisotropic,
+                        coords,
+                        channel_data.ravel(),
+                        p0=p0,
+                        bounds=([0, 0, 0.1, 0.1, -np.pi], [w - 1, h - 1, w, h, np.pi]),
+                        maxfev=1000,
+                    )
+                    center_x, center_y, sigma_x, sigma_y, theta = popt
+
+                except (RuntimeError, ValueError):
+                    center_x, center_y = center_x_init, center_y_init
+                    sigma_x, sigma_y = 5.0, 5.0
+                    theta = 0.0
+
+                gaussian_params[channel_name]["center_x"].append(center_x)
+                gaussian_params[channel_name]["center_y"].append(center_y)
+                gaussian_params[channel_name]["sigma_x"].append(sigma_x)
+                gaussian_params[channel_name]["sigma_y"].append(sigma_y)
+                gaussian_params[channel_name]["theta"].append(theta)
+
+        # Convert to numpy arrays
+        for channel_name in ["bottom", "top"]:
+            for param_name in gaussian_params[channel_name]:
+                gaussian_params[channel_name][param_name] = np.array(
+                    gaussian_params[channel_name][param_name]
+                )
+
+        return gaussian_params
+
     def postprocess_for_visualization(self, images, masks):
-        overlay_colors = np.array([
-            [255, 255, 0],    # Yellow (LVPWd_X1)
-            [255, 0, 255],    # Magenta (LVPWd_X2)
-            [0, 255, 255],    # Cyan (IVSd_X1)
-            [0, 255, 0],      # Green (IVSd_X2)
-        ], dtype=np.uint8)
+        overlay_colors = np.array(
+            [
+                [255, 255, 0],  # Yellow (LVPWd_X1)
+                [255, 0, 255],  # Magenta (LVPWd_X2)
+                [0, 255, 255],  # Cyan (IVSd_X1)
+                [0, 255, 0],  # Green (IVSd_X2)
+            ],
+            dtype=np.uint8,
+        )
 
         def overlay_labels_on_image(image, label, alpha=0.5):
             image = ops.convert_to_numpy(image)
@@ -418,7 +547,9 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             else:
                 image = image.copy()
 
-            cone_mask = EchoNetLVHSegmentation.make_ultrasound_cone_mask(image.shape, apex_y=0, cone_angle_deg=70)
+            cone_mask = EchoNetLVHSegmentation.make_ultrasound_cone_mask(
+                image.shape, apex_y=0, cone_angle_deg=70
+            )
             if label.ndim == 3 and label.shape[-1] > 1:
                 cone_mask = cone_mask[..., None]
 
@@ -440,7 +571,9 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             for ch in range(4):
                 mask = label[..., ch] ** 2
                 color = overlay_colors[ch]
-                center = EchoNetLVHSegmentation.find_gaussian_center(mask, threshold=0.0)
+                center = EchoNetLVHSegmentation.find_gaussian_center(
+                    mask, threshold=0.0
+                )
                 if center is not None:
                     mask_alpha = mask * alpha
                     for c in range(3):
@@ -471,7 +604,9 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
 
         images_resized = ops.image.resize(images_sc[..., None], size=(224, 224))
         images_clipped = ops.clip(images_resized, -1, 1)
-        images = zea.utils.translate(images_clipped, range_from=(-1, 1), range_to=(0, 255))
+        images = zea.utils.translate(
+            images_clipped, range_from=(-1, 1), range_to=(0, 255)
+        )
 
         # Overlay masks on images
         images_with_overlay = []
@@ -482,7 +617,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         images_with_overlay = np.stack(images_with_overlay, axis=0)
 
         return images_with_overlay
-    
+
     def beliefs_to_reconstruction(self, belief_distributions):
         """
         This function maps a set of beliefs about the DST output to

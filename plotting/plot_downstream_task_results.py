@@ -10,14 +10,13 @@ import numpy as np
 import scipy.ndimage
 import yaml
 from matplotlib.colors import LinearSegmentedColormap
+
 from zea.visualize import set_mpl_style
 
 if __name__ == "__main__":
     sys.path.append("/latent-ultrasound-diffusion")
 
-from benchmark_active_sampling_ultrasound import (
-    extract_sweep_data
-)
+from benchmark_active_sampling_ultrasound import extract_sweep_data
 from plotting.plot_utils import ViolinPlotter
 
 STRATEGY_COLORS = {
@@ -55,8 +54,6 @@ METRIC_NAMES = {
     "ssim": "SSIM [-]",
 }
 
-FILE_EXT = "pdf"
-
 
 def canonical_strategy_key(strategy):
     """Map legacy strategy names to canonical keys."""
@@ -65,7 +62,7 @@ def canonical_strategy_key(strategy):
 
 # Add this near the top of the file where other constants are defined
 AXIS_LABEL_MAP = {
-    "n_actions": "# Scan Lines (out of 112)",
+    "n_actions": "# Scan Lines (out of 256)",
     # Add more mappings as needed
 }
 
@@ -170,7 +167,10 @@ def get_axis_label(key):
 
 
 def plot_all_sweeps(
-    sweep_results, save_root=None, x_axis_key="action_selection.n_actions"
+    sweep_results,
+    save_root=None,
+    x_axis_key="action_selection.n_actions",
+    file_ext=".pdf",
 ):
     """Modified to handle configurable x-axis parameter."""
 
@@ -257,7 +257,7 @@ def plot_all_sweeps(
         # Set x-ticks to show all values
         plt.xticks(all_x_values)
 
-        save_path = os.path.join(save_root, f"{metric_name}_combined_plot.{FILE_EXT}")
+        save_path = os.path.join(save_root, f"{metric_name}_combined_plot{file_ext}")
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Saved to {save_path}")
 
@@ -414,6 +414,7 @@ def plot_violin_sweeps(
     save_root=None,
     x_axis_key="action_selection.n_actions",
     x_values=None,
+    file_ext=".pdf",
     **kwargs,
 ):
     """Create violin plots showing distribution of patient means for each strategy."""
@@ -437,7 +438,7 @@ def plot_violin_sweeps(
 
         plotter.plot(
             results,
-            save_path=os.path.join(save_root, f"{metric_name}_violin_plot.{FILE_EXT}"),
+            save_path=os.path.join(save_root, f"{metric_name}_violin_plot{file_ext}"),
             x_label_values=x_values,
             metric_name=formatted_metric_name,
         )
@@ -848,7 +849,9 @@ def plot_strategy_comparison_scatter(
     # Find all x_values present in both strategies
     x_values = sorted(set(x_dict.keys()) & set(y_dict.keys()))
     if not x_values:
-        print(f"No overlapping x_values for {strategy_x} and {strategy_y} in metric '{metric}'")
+        print(
+            f"No overlapping x_values for {strategy_x} and {strategy_y} in metric '{metric}'"
+        )
         return
 
     # For each x_value, plot all samples
@@ -873,9 +876,18 @@ def plot_strategy_comparison_scatter(
         max_val = max(max(x_samples[:n]), max(y_samples[:n]))
         plt.plot([min_val, max_val], [min_val, max_val], "k--", label="y = x")
 
-        plt.xlabel(x_axis_label or f"{STRATEGY_NAMES.get(strategy_x, strategy_x)} {METRIC_NAMES.get(metric, metric)}")
-        plt.ylabel(y_axis_label or f"{STRATEGY_NAMES.get(strategy_y, strategy_y)} {METRIC_NAMES.get(metric, metric)}")
-        plt.title(plot_title or f"{METRIC_NAMES.get(metric, metric)}: {STRATEGY_NAMES.get(strategy_x, strategy_x)} vs {STRATEGY_NAMES.get(strategy_y, strategy_y)}\n(x_value={x_val})")
+        plt.xlabel(
+            x_axis_label
+            or f"{STRATEGY_NAMES.get(strategy_x, strategy_x)} {METRIC_NAMES.get(metric, metric)}"
+        )
+        plt.ylabel(
+            y_axis_label
+            or f"{STRATEGY_NAMES.get(strategy_y, strategy_y)} {METRIC_NAMES.get(metric, metric)}"
+        )
+        plt.title(
+            plot_title
+            or f"{METRIC_NAMES.get(metric, metric)}: {STRATEGY_NAMES.get(strategy_x, strategy_x)} vs {STRATEGY_NAMES.get(strategy_y, strategy_y)}\n(x_value={x_val})"
+        )
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
@@ -908,15 +920,31 @@ if __name__ == "__main__":
         # echonetlvh
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/sweep_2025_07_22_105039_845597",
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/sweep_2025_07_22_113842_262566"
-
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25/sweep_2025_07_22_191803_274338",
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25/sweep_2025_07_22_200031_873116"
-
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_23_120035_223599",
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_24_110801_857975/"
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_23_120035_223599",
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_24_110801_857975/",
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/10_08_25_run1/sweep_2025_08_10_182230_873544",
+        # TIG with TIG base config
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_19_012058_101602",
+        # TIG with DST base config
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_18_155556_492998",
+        # DST with DST base config
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_18_111256_715117",
     ]
     # METRICS = ["mse", "psnr", "dice"]
-    METRICS = ["psnr", "heatmap_center_mse"]
+    METRICS = [
+        # "psnr",
+        # "gaussian_emd_LVPW",
+        # "heatmap_center_mse_LVPW",
+        # "heatmap_entropy_LVPW"
+        # "heatmap_volume_LVPW",
+        # "heatmap_center_mse_LVID",
+        # "heatmap_center_mse_IVS",
+        "heatmap_mse"
+    ]
+
+    TEMP_FILE = Path("/tmp/plot_downstream_task_results.pkl")
 
     # Aggregate results from all sweep paths
     combined_results = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
@@ -960,9 +988,13 @@ if __name__ == "__main__":
         # )
 
         # Plot violin sweeps
-        plot_violin_sweeps(
-            combined_results, save_root=args.save_root, x_axis_key=args.x_axis
-        )
+        for file_ext in [".png", ".pdf"]:
+            plot_violin_sweeps(
+                combined_results,
+                save_root=args.save_root,
+                x_axis_key=args.x_axis,
+                file_ext=file_ext,
+            )
 
         # Plot image-mask comparisons (now uses stored gt_masks in results)
         # plot_image_mask_comparisons(sweep_results, None, save_root=args.save_root)

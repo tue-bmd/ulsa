@@ -23,10 +23,20 @@ from plotting.plot_psnr_dice import (
     STRATEGY_NAMES,
     df_to_dict,
     extract_and_combine_sweep_data,
-    get_axis_label,
     sort_by_names,
 )
 from plotting.plot_utils import OverlappingHistogramPlotter, ViolinPlotter
+
+AXIS_LABEL_MAP_3D = {
+    "n_actions": "# Elevation Planes (out of 48)",
+}
+
+
+def get_axis_label_3d(key):
+    """Get friendly label for axis keys."""
+    base_key = key.split(".")[-1]
+    return AXIS_LABEL_MAP_3D.get(base_key, base_key.replace("_", " ").title())
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -94,7 +104,7 @@ if __name__ == "__main__":
 
     # Combined LPIPS and PSNR
     plotter = ViolinPlotter(
-        xlabel=get_axis_label(args.x_axis),
+        xlabel=get_axis_label_3d(args.x_axis),
         group_names=STRATEGY_NAMES,
         legend_loc="top",
         scatter_kwargs={"alpha": 0.01, "s": 4},
@@ -184,7 +194,7 @@ if __name__ == "__main__":
     for metric_name in ["psnr"]:
         table = Table(title=f"{metric_name.upper()} Results", show_lines=True)
         table.add_column("Strategy", style="cyan", no_wrap=True)
-        table.add_column(get_axis_label(args.x_axis), style="magenta")
+        table.add_column(get_axis_label_3d(args.x_axis), style="magenta")
         table.add_column("Mean", style="green")
         table.add_column("Std", style="yellow")
         table.add_column("Count", style="white")
