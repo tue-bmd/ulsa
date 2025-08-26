@@ -12,17 +12,16 @@ if __name__ == "__main__":
 
 from pathlib import Path
 
+from benchmark_active_sampling_ultrasound import run_benchmark
 from zea import Config
 
-from benchmark_active_sampling_ultrasound import run_benchmark
-
 if __name__ == "__main__":
-
     TARGET_DIR = Path("/mnt/z/Ultrasound-BMd/data/USBMD_datasets/echonetlvh/val")
     SAVE_DIR = Path(
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1"
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1"
     )
 
+    # USING DST Diffusion Regime: start at tau_init=50
     ulsa_agent_dst_config = Config.from_yaml(
         Path("/ulsa/configs/echonetlvh_3_frames_downstream_task.yaml")
     )
@@ -30,20 +29,8 @@ if __name__ == "__main__":
         Path("/ulsa/configs/echonetlvh_3_frames.yaml")
     )
 
-    # run_benchmark(
-    #     agent_config=ulsa_agent_dst_config,
-    #     target_dir=TARGET_DIR,
-    #     save_dir=SAVE_DIR,
-    #     sweep_params={
-    #         "action_selection.n_actions": [1, 3, 5, 7],
-    #     },
-    #     limit_n_samples=50,
-    #     image_range=(0, 255),
-    #     validate_dataset=False
-    # )
-
     run_benchmark(
-        agent_config=ulsa_agent_tig_config,
+        agent_config=ulsa_agent_dst_config,
         target_dir=TARGET_DIR,
         save_dir=SAVE_DIR,
         sweep_params={
@@ -51,7 +38,34 @@ if __name__ == "__main__":
         },
         limit_n_samples=50,
         image_range=(0, 255),
-        validate_dataset=False
+        validate_dataset=False,
     )
 
-    
+    # Run TIG baseline with both DST setup and TIG setup
+    # run_benchmark(
+    #     agent_config=ulsa_agent_dst_config,
+    #     target_dir=TARGET_DIR,
+    #     save_dir=SAVE_DIR,
+    #     sweep_params={
+    #         "action_selection.selection_strategy": ["greedy_entropy"],
+    #         "action_selection.kwargs": [{"std_dev": 1.5, "num_lines_to_update": 7}],
+    #         "action_selection.n_actions": [1, 3, 5, 7],
+    #     },
+    #     limit_n_samples=50,
+    #     image_range=(0, 255),
+    #     validate_dataset=False,
+    # )
+
+    # run_benchmark(
+    #     agent_config=ulsa_agent_tig_config,
+    #     target_dir=TARGET_DIR,
+    #     save_dir=SAVE_DIR,
+    #     sweep_params={
+    #         "action_selection.selection_strategy": ["greedy_entropy"],
+    #         "action_selection.kwargs": [{"std_dev": 1.5, "num_lines_to_update": 7}],
+    #         "action_selection.n_actions": [1, 3, 5, 7],
+    #     },
+    #     limit_n_samples=50,
+    #     image_range=(0, 255),
+    #     validate_dataset=False,
+    # )

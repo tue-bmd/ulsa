@@ -12,7 +12,7 @@ downstream_task: "echonetlvh_segmentation"
 diffusion_inference:
   run_dir: "{output_dir}/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"
   num_steps: 500
-  initial_step: 450 # [0, num_steps]
+  initial_step: 50 # [0, num_steps]
   batch_size: 4 # posterior samples
   guidance_kwargs:
     initial_omega: 1
@@ -31,7 +31,7 @@ io_config:
   save_animation: true
   scan_convert: true
   scan_conversion_angles: [-45, 45]
-  frame_cutoff: 30
+  frame_cutoff: null
   gif_fps: 30
   verbose: false
   reconstruction_sharpness_std: 0.025

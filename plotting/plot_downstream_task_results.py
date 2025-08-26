@@ -7,6 +7,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import scipy.ndimage
 import yaml
 from matplotlib.colors import LinearSegmentedColormap
@@ -15,6 +16,8 @@ from zea.visualize import set_mpl_style
 
 if __name__ == "__main__":
     sys.path.append("/latent-ultrasound-diffusion")
+
+from plot_psnr_dice import df_to_dict
 
 from benchmark_active_sampling_ultrasound import extract_sweep_data
 from plotting.plot_utils import ViolinPlotter
@@ -411,6 +414,7 @@ def plot_image_mask_comparisons(sweep_results, gt_masks, save_root, max_videos=3
 
 def plot_violin_sweeps(
     all_results,
+    metric_names,
     save_root=None,
     x_axis_key="action_selection.n_actions",
     x_values=None,
@@ -419,7 +423,7 @@ def plot_violin_sweeps(
 ):
     """Create violin plots showing distribution of patient means for each strategy."""
 
-    for metric_name, results in all_results.items():
+    for metric_name in metric_names:
         if metric_name == "masks":
             continue
 
@@ -437,7 +441,7 @@ def plot_violin_sweeps(
         )
 
         plotter.plot(
-            results,
+            df_to_dict(all_results, metric_name),
             save_path=os.path.join(save_root, f"{metric_name}_violin_plot{file_ext}"),
             x_label_values=x_values,
             metric_name=formatted_metric_name,
@@ -901,6 +905,10 @@ def plot_strategy_comparison_scatter(
         print(f"Saved scatter plot to {save_path}")
 
 
+# Add this import at the top with other imports
+import pickle
+
+# Replace the main section starting from "TEMP_FILE = Path..." with this:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -928,9 +936,11 @@ if __name__ == "__main__":
         # TIG with TIG base config
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_19_012058_101602",
         # TIG with DST base config
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_18_155556_492998",
-        # DST with DST base config
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_18_155556_492998",
+        # TIG with DST base config
         "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_18_111256_715117",
+        # DST with DST base config
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_19_110944_448094",
     ]
     # METRICS = ["mse", "psnr", "dice"]
     METRICS = [
@@ -941,42 +951,53 @@ if __name__ == "__main__":
         # "heatmap_volume_LVPW",
         # "heatmap_center_mse_LVID",
         # "heatmap_center_mse_IVS",
-        "heatmap_mse"
+        # "heatmap_mse"
+        "measurement_length_mse_LVPW",
+        "measurement_length_mse_LVID",
+        "measurement_length_mse_IVS",
     ]
 
     TEMP_FILE = Path("/tmp/plot_downstream_task_results.pkl")
 
-    # Aggregate results from all sweep paths
-    combined_results = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-    for sweep_path in SWEEP_PATHS:
-        try:
-            results = extract_sweep_data(
-                sweep_path,
-                keys_to_extract=METRICS,
-                x_axis_key=args.x_axis,
-            )
-            for metric in results:
-                for strategy in results[metric]:
-                    for x_value in results[metric][strategy]:
-                        combined_results[metric][strategy][x_value].extend(
-                            results[metric][strategy][x_value]
-                        )
-        except Exception as e:
-            print(f"Failed to process {sweep_path}: {e}")
+    # Check if cached results exist
+    if TEMP_FILE.exists():
+        print(f"Loading existing combined results from {str(TEMP_FILE)}")
+        with open(TEMP_FILE, "rb") as f:
+            combined_results = pickle.load(f)
+    else:
+        print("No cached results found. Extracting data from sweep paths...")
+        # Aggregate results from all sweep paths
+        combined_results = []
+        for sweep_path in SWEEP_PATHS:
+            try:
+                print(f"Processing sweep: {sweep_path}")
+                results = extract_sweep_data(
+                    sweep_path,
+                    keys_to_extract=METRICS,
+                    x_axis_key=args.x_axis,
+                )
+                combined_results.append(results)
+            except Exception as e:
+                print(f"Failed to process {sweep_path}: {e}")
+        combined_results = pd.concat(combined_results)
+        # Save combined results to cache
+        print(f"Saving combined results to {str(TEMP_FILE)}")
+        with open(TEMP_FILE, "wb") as f:
+            combined_results.to_pickle(TEMP_FILE)
 
-    if combined_results:
+    if combined_results is not None:
         # Pass combined results as a single sweep for plotting
         sweep_results = {"combined": (combined_results, "agent_type")}
         # plot_all_sweeps(sweep_results, save_root=args.save_root, x_axis_key=args.x_axis)
 
         # Generate and save LaTeX table
-        latex_table = generate_latex_table(combined_results)
-        table_path = os.path.join(args.save_root, "dice_scores_table.tex")
-        with open(table_path, "w") as f:
-            f.write(latex_table)
-        print(f"\nLaTeX table saved to {table_path}")
-        print("\nTable preview:")
-        print(latex_table)
+        # latex_table = generate_latex_table(combined_results)
+        # table_path = os.path.join(args.save_root, "dice_scores_table.tex")
+        # with open(table_path, "w") as f:
+        #     f.write(latex_table)
+        # print(f"\nLaTeX table saved to {table_path}")
+        # print("\nTable preview:")
+        # print(latex_table)
 
         # Example usage after combined_results is populated
         # plot_strategy_comparison_scatter(
@@ -991,6 +1012,7 @@ if __name__ == "__main__":
         for file_ext in [".png", ".pdf"]:
             plot_violin_sweeps(
                 combined_results,
+                METRICS,
                 save_root=args.save_root,
                 x_axis_key=args.x_axis,
                 file_ext=file_ext,

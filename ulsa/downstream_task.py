@@ -308,6 +308,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         self.init_scan_conversion()
         # TODO: can we infer output shape from model?
         self.output_shape = (224, 224, 4)
+        self.coordinate_grid = ops.stack(np.indices((224, 224)), axis=-1)
 
     def init_scan_conversion(self):
         # Precompute interpolation coordinates using the new display.py functions
@@ -373,158 +374,72 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         mask &= dy >= 0
         return mask.astype(np.float32)
 
-    @staticmethod
-    def find_gaussian_center(mask_channel, threshold=0.0):
+    def find_brightest_pixel(self, mask_channel, threshold=0.0):
         mask = mask_channel.copy()
         idx = np.unravel_index(np.argmax(mask), mask.shape)
         if mask[idx] < threshold:
             return None
         return idx[::-1]  # (x, y)
 
-    @staticmethod
-    def outputs_to_coordinates(outputs, measurement_type):
+    def expected_coordinate(self, mask):
         """
+        This is like a differentiable version of taking the max of a heatmap.
+        source: https://arxiv.org/pdf/1711.08229
+        This is the center-of-mass of the heatmap
+
+        Params:
+            mask (Tensor of shape [B, H, W]): batch of masks
+        Returns:
+            expected_coordiantes (Tesnro of shape [B, 2]): batch of coordinates
+        """
+        # [B, H, W]
+        coordinate_probabilities = ops.map(
+            lambda m: m / ops.sum(m), mask
+        )  # normalize to get valid pdf
+        # add an outer dim to broadcast over x, y
+        coordinate_probabilities = ops.expand_dims(coordinate_probabilities, axis=-1)
+        expected_coordinate = ops.sum(
+            ops.expand_dims(self.coordinate_grid, axis=0) * coordinate_probabilities,
+            axis=(1, 2),
+        )
+        # expected_coordinate_int = ops.cast(expected_coordinate, "uint8")
+        return expected_coordinate[..., ::-1]  # reverse to make (x, y)
+
+    def get_heatmaps_for_measurement(self, all_heatmaps, measurement):
+        measurements_to_channels = {"LVPW": [0, 1], "LVID": [1, 2], "IVS": [2, 3]}
+        return all_heatmaps[..., measurements_to_channels[measurement]]
+
+    def outputs_to_coordinates(self, outputs, measurement_type):
+        """
+        NOTE: we take the square of the outputs to remo
         Params:
             outputs [batch, height, width, 4]: output tensor produced by calling the model
             measurement_type (str): one of ["LVPW" | "LVID" | "IVS"]
         Returns:
             coordinates [batch, 2, 2]
         """
-        measurements_to_channels = {"LVPW": [0, 1], "LVID": [1, 2], "IVS": [2, 3]}
+        # square the outliers to simplify the heatmap, this is like a soft version
+        # of thresholding
+        outputs_squared = outputs**2
+        measurement_heatmaps = self.get_heatmaps_for_measurement(
+            outputs_squared, measurement_type
+        )
         cone_mask = EchoNetLVHSegmentation.make_ultrasound_cone_mask(
-            ops.shape(outputs)[1:], apex_y=0, cone_angle_deg=70
+            ops.shape(measurement_heatmaps)[1:], apex_y=0, cone_angle_deg=70
         )
         # filter out non-zero values outside the scan cone
-        outputs = outputs * cone_mask[..., None]
-        assert measurement_type in measurements_to_channels
-        c1, c2 = measurements_to_channels[measurement_type]
-        bottom_coordinates = np.array(
-            [
-                EchoNetLVHSegmentation.find_gaussian_center(outputs[i, ..., c1])
-                for i in range(len(outputs))
-            ]
+        measurement_heatmaps = measurement_heatmaps * cone_mask[..., None]
+        top_coordinates, bottom_coordinates = self.expected_coordinate(
+            ops.transpose(measurement_heatmaps[0], (2, 0, 1))  # channels -> batches
         )
-        top_coordinates = np.array(
-            [
-                EchoNetLVHSegmentation.find_gaussian_center(outputs[i, ..., c2])
-                for i in range(len(outputs))
-            ]
-        )
+        # coordinates = ops.map(
+        #     lambda h: self.expected_coordinate(
+        #         ops.transpose(h, (2, 0, 1))  # channels -> batches
+        #     ),
+        #     measurement_heatmaps,
+        # )
+        # return coordinates
         return bottom_coordinates, top_coordinates
-
-    @staticmethod
-    def outputs_to_gaussians(outputs, measurement_type):
-        """
-        Fit 2D anisotropic Gaussians to heatmaps and return parameters needed for EMD.
-
-        Params:
-            outputs [batch, height, width, 4]: output tensor produced by calling the model
-            measurement_type (str): one of ["LVPW" | "LVID" | "IVS"]
-        Returns:
-            gaussian_params: dict with keys 'bottom' and 'top', each containing:
-                - center_x: [batch] array of x centers
-                - center_y: [batch] array of y centers
-                - sigma_x: [batch] array of x standard deviations
-                - sigma_y: [batch] array of y standard deviations
-                - theta: [batch] array of rotation angles (radians)
-        """
-
-        def gaussian_2d_anisotropic(
-            coords, center_x, center_y, sigma_x, sigma_y, theta
-        ):
-            """2D anisotropic Gaussian function (amplitude fixed to 1)"""
-            x, y = coords
-
-            # Rotation matrix
-            cos_theta = np.cos(theta)
-            sin_theta = np.sin(theta)
-
-            # Rotate coordinates
-            x_rot = cos_theta * (x - center_x) + sin_theta * (y - center_y)
-            y_rot = -sin_theta * (x - center_x) + cos_theta * (y - center_y)
-
-            # Gaussian with unit amplitude
-            gaussian = np.exp(
-                -(x_rot**2 / (2 * sigma_x**2) + y_rot**2 / (2 * sigma_y**2))
-            )
-            return gaussian.ravel()
-
-        measurements_to_channels = {"LVPW": [0, 1], "LVID": [1, 2], "IVS": [2, 3]}
-
-        cone_mask = EchoNetLVHSegmentation.make_ultrasound_cone_mask(
-            ops.shape(outputs)[1:], apex_y=0, cone_angle_deg=70
-        )
-        outputs = outputs * cone_mask[..., None]
-
-        assert measurement_type in measurements_to_channels
-        c1, c2 = measurements_to_channels[measurement_type]
-
-        h, w = outputs.shape[1:3]
-        x_coords, y_coords = np.meshgrid(np.arange(w), np.arange(h))
-        coords = (x_coords, y_coords)
-
-        gaussian_params = {
-            "bottom": {
-                "center_x": [],
-                "center_y": [],
-                "sigma_x": [],
-                "sigma_y": [],
-                "theta": [],
-            },
-            "top": {
-                "center_x": [],
-                "center_y": [],
-                "sigma_x": [],
-                "sigma_y": [],
-                "theta": [],
-            },
-        }
-
-        for batch_idx in range(outputs.shape[0]):
-            for channel_name, channel_idx in [("bottom", c1), ("top", c2)]:
-                channel_data = outputs[batch_idx, ..., channel_idx]
-
-                # Normalize to unit amplitude
-                max_val = np.max(channel_data)
-                if max_val > 0:
-                    channel_data = channel_data / max_val
-
-                # Initial parameter estimates
-                max_idx = np.unravel_index(np.argmax(channel_data), channel_data.shape)
-                center_x_init, center_y_init = max_idx[1], max_idx[0]
-
-                p0 = [center_x_init, center_y_init, 5.0, 5.0, 0.0]
-
-                try:
-                    popt, _ = curve_fit(
-                        gaussian_2d_anisotropic,
-                        coords,
-                        channel_data.ravel(),
-                        p0=p0,
-                        bounds=([0, 0, 0.1, 0.1, -np.pi], [w - 1, h - 1, w, h, np.pi]),
-                        maxfev=1000,
-                    )
-                    center_x, center_y, sigma_x, sigma_y, theta = popt
-
-                except (RuntimeError, ValueError):
-                    center_x, center_y = center_x_init, center_y_init
-                    sigma_x, sigma_y = 5.0, 5.0
-                    theta = 0.0
-
-                gaussian_params[channel_name]["center_x"].append(center_x)
-                gaussian_params[channel_name]["center_y"].append(center_y)
-                gaussian_params[channel_name]["sigma_x"].append(sigma_x)
-                gaussian_params[channel_name]["sigma_y"].append(sigma_y)
-                gaussian_params[channel_name]["theta"].append(theta)
-
-        # Convert to numpy arrays
-        for channel_name in ["bottom", "top"]:
-            for param_name in gaussian_params[channel_name]:
-                gaussian_params[channel_name][param_name] = np.array(
-                    gaussian_params[channel_name][param_name]
-                )
-
-        return gaussian_params
 
     def postprocess_for_visualization(self, images, masks):
         overlay_colors = np.array(
@@ -571,9 +486,8 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
             for ch in range(4):
                 mask = label[..., ch] ** 2
                 color = overlay_colors[ch]
-                center = EchoNetLVHSegmentation.find_gaussian_center(
-                    mask, threshold=0.0
-                )
+                center = self.expected_coordinate(ops.expand_dims(mask, axis=0))
+                center = tuple((int(center[0, 0]), int(center[0, 1])))
                 if center is not None:
                     mask_alpha = mask * alpha
                     for c in range(3):
@@ -631,3 +545,25 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         # coordinate space maybe?
         reconstructions = ops.mean(belief_distributions, axis=1)
         return reconstructions
+
+
+@downstream_task_registry(name="echonetlvh_measurement")
+class EchoNetLVHMeasurement(EchoNetLVHSegmentation):
+    def __init__(self, measurement_type="LVPW", batch_size=4):
+        super().__init__(batch_size=batch_size)
+        assert measurement_type in ["LVPW", "LVID", "IVS"]
+        self.measurement_type = measurement_type
+
+    def call_differentiable(self, x):
+        """
+        Params:
+            x (Tensor of shape [1, H, W, C])
+        """
+        logits = self.__call__(x)
+        bottom_coordinates, top_coordinates = self.outputs_to_coordinates(
+            logits, self.measurement_type
+        )
+        measurement_length = ops.sqrt(
+            ops.sum((top_coordinates - bottom_coordinates) ** 2)
+        )
+        return measurement_length

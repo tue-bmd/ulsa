@@ -689,18 +689,24 @@ def save_results(
                 save_dir / run_id,
                 squeezed_results.target_imgs,
                 squeezed_results.measurements,
-                squeezed_results.reconstructions,
+                # squeezed_results.reconstructions,
+                np.mean(
+                    squeezed_results.belief_distributions, axis=1
+                ),  # use posterior mean as reconstructions
+                squeezed_results.masks,
                 np.std(
                     squeezed_results.belief_distributions, axis=1
                 ),  # posterior std per frame
                 downstream_task,
                 np.squeeze(reconstructions_dst),  # segmentation masks
+                np.squeeze(beliefs_dst),
                 np.squeeze(targets_dst),  # segmentation masks
                 np.squeeze(
                     np.log(results.saliency_map + 1e-2)
                 ),  # NOTE: tweak the +1e-2 for visualization
                 agent_config.io_config,
                 image_range=agent.input_range,
+                scan_convert_resolution=1,
             )
 
     with open(save_dir / run_id / "config.json", "w") as json_file:
