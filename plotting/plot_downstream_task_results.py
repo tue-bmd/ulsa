@@ -15,7 +15,11 @@ from matplotlib.colors import LinearSegmentedColormap
 from zea.visualize import set_mpl_style
 
 if __name__ == "__main__":
-    sys.path.append("/latent-ultrasound-diffusion")
+    os.environ["KERAS_BACKEND"] = "jax"
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+    from zea import init_device
+
+    init_device()
 
 from plot_psnr_dice import df_to_dict
 
@@ -55,6 +59,12 @@ METRIC_NAMES = {
     "dice": "DICE [-]",
     "psnr": "PSNR [dB]",
     "ssim": "SSIM [-]",
+    "measurement_length_mse_lvid": "LVID (pixels) MSE",
+    "measurement_length_mse_lvpw": "LVPW (pixels) MSE",
+    "measurement_length_mse_ivs": "IVS (pixels) MSE",
+    "measurement_length_mae_lvid": "LVID [cm] MAE",
+    "measurement_length_mae_lvpw": "LVPW [cm] MAE",
+    "measurement_length_mae_ivs": "IVS [cm] MAE",
 }
 
 
@@ -350,7 +360,6 @@ def plot_volume_over_time(sweep_results, gt_masks, save_root, max_videos=3):
 
 
 def plot_image_mask_comparisons(sweep_results, gt_masks, save_root, max_videos=3):
-    set_mpl_style()  # darkmode
     """Create side-by-side comparisons of images and masks."""
 
     colors = [(1, 0, 0, 0), (1, 0, 0, 0.5)]  # red with alpha=0 for 0, alpha=0.5 for 1
@@ -838,6 +847,7 @@ def plot_strategy_comparison_scatter(
     x_axis_label=None,
     y_axis_label=None,
     plot_title=None,
+    file_ext=".pdf",
 ):
     """
     Scatter plot comparing metric values for two strategies across all samples.
@@ -873,36 +883,223 @@ def plot_strategy_comparison_scatter(
             y_samples[:n],
             alpha=0.6,
             color="#1f77b4",
-            label=f"{STRATEGY_NAMES[strategy_x]} vs {STRATEGY_NAMES[strategy_y]}",
+            s=20,
+            edgecolors="none",
         )
+
         # Plot y=x reference line
         min_val = min(min(x_samples[:n]), min(y_samples[:n]))
         max_val = max(max(x_samples[:n]), max(y_samples[:n]))
-        plt.plot([min_val, max_val], [min_val, max_val], "k--", label="y = x")
+        plt.plot(
+            [min_val, max_val],
+            [min_val, max_val],
+            "k--",
+            alpha=0.7,
+            linewidth=1,
+            label="y = x",
+        )
+
+        # Calculate correlation coefficient
+        import scipy.stats
+
+        r, p_value = scipy.stats.pearsonr(x_samples[:n], y_samples[:n])
 
         plt.xlabel(
             x_axis_label
-            or f"{STRATEGY_NAMES.get(strategy_x, strategy_x)} {METRIC_NAMES.get(metric, metric)}"
+            or f"{STRATEGY_NAMES.get(strategy_x, strategy_x)}\n{METRIC_NAMES.get(metric, metric)}",
+            fontsize=9,
         )
         plt.ylabel(
             y_axis_label
-            or f"{STRATEGY_NAMES.get(strategy_y, strategy_y)} {METRIC_NAMES.get(metric, metric)}"
+            or f"{STRATEGY_NAMES.get(strategy_y, strategy_y)}\n{METRIC_NAMES.get(metric, metric)}",
+            fontsize=9,
         )
         plt.title(
             plot_title
-            or f"{METRIC_NAMES.get(metric, metric)}: {STRATEGY_NAMES.get(strategy_x, strategy_x)} vs {STRATEGY_NAMES.get(strategy_y, strategy_y)}\n(x_value={x_val})"
+            or f"{METRIC_NAMES.get(metric, metric)} Comparison (n_lines={x_val})\nr = {r:.3f}, p = {p_value:.3f}",
+            fontsize=10,
         )
-        plt.legend()
+        plt.legend(fontsize=8)
         plt.grid(True, alpha=0.3)
+        plt.tick_params(axis="both", labelsize=8)
         plt.tight_layout()
 
         save_path = os.path.join(
             save_root,
-            f"{metric}_scatter_{strategy_x}_vs_{strategy_y}_x{x_val}.{FILE_EXT}",
+            f"{metric}_scatter_{strategy_x}_vs_{strategy_y}_x{x_val}{file_ext}",
         )
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close()
         print(f"Saved scatter plot to {save_path}")
+
+
+def plot_combined_measurement_violin(
+    all_results,
+    save_root=None,
+    x_axis_key="action_selection.n_actions",
+    x_values=None,
+    file_ext=".pdf",
+    context="styles/ieee-tmi.mplstyle",
+    measurement_types_to_plot=None,  # New parameter
+):
+    """Create combined violin plots for all measurement types in a single row."""
+
+    # Use the same measurement metrics as defined in METRICS (with uppercase endings)
+    all_measurement_metrics = [
+        "measurement_length_mae_LVPW",
+        "measurement_length_mae_LVID",
+        "measurement_length_mae_IVS",
+    ]
+
+    all_subplot_titles = ["LVPW", "LVID", "IVS"]
+
+    # Filter based on measurement_types_to_plot
+    if measurement_types_to_plot is None:
+        measurement_metrics = all_measurement_metrics
+        subplot_titles = all_subplot_titles
+    else:
+        # Map measurement types to metrics and titles
+        type_to_metric = {
+            "LVPW": "measurement_length_mae_LVPW",
+            "LVID": "measurement_length_mae_LVID",
+            "IVS": "measurement_length_mae_IVS",
+        }
+        type_to_title = {"LVPW": "LVPW", "LVID": "LVID", "IVS": "IVS"}
+
+        measurement_metrics = [
+            type_to_metric[mt]
+            for mt in measurement_types_to_plot
+            if mt in type_to_metric
+        ]
+        subplot_titles = [
+            type_to_title[mt] for mt in measurement_types_to_plot if mt in type_to_title
+        ]
+
+    num_measurements = len(measurement_metrics)
+
+    # Define colors to match default violin plots (blue and orange)
+    default_colors = {
+        "downstream_task_selection": "#1f77b4",  # Blue
+        "greedy_entropy": "#ff7f0e",  # Orange
+        "uniform_random": "#2ca02c",  # Green
+        "equispaced": "#d62728",  # Red
+    }
+
+    with plt.style.context(context):
+        # Adjust figure size based on number of measurements
+        if num_measurements == 1:
+            figsize = (3.5, 2.5)  # Single column width for one measurement
+        else:
+            figsize = (7.16, 2.5)  # IEEE two-column width for multiple measurements
+
+        fig, axes = plt.subplots(1, num_measurements, figsize=figsize, sharey=False)
+
+        # Handle single subplot case
+        if num_measurements == 1:
+            axes = [axes]
+
+        # Create ViolinPlotter instance with default colors
+        plotter = ViolinPlotter(
+            xlabel=get_axis_label(x_axis_key),
+            ylabel="MAE [cm]",
+            group_names=STRATEGY_NAMES,
+            group_colors=default_colors,  # Use default blue/orange colors
+            legend_loc="top",
+            scatter_kwargs={"alpha": 0.05, "s": 7},
+        )
+
+        for idx, (metric_name, title) in enumerate(
+            zip(measurement_metrics, subplot_titles)
+        ):
+            ax = axes[idx]
+
+            # Check if metric exists in results
+            if metric_name not in all_results.columns:
+                print(f"Warning: {metric_name} not found in results")
+                print(f"Available columns: {list(all_results.columns)}")
+                continue
+
+            # Get data for this metric using the same approach as plot_violin_sweeps
+            metric_data = df_to_dict(all_results, metric_name)
+
+            if not metric_data:
+                print(f"Warning: No data found for {metric_name}")
+                continue
+
+            # Use the ViolinPlotter's _plot_core method to plot on this specific axis
+            plotter._plot_core(
+                ax,
+                metric_data,
+                x_label_values=x_values,
+                metric_name=None,  # We'll set our own y-label
+                groups_to_plot=None,  # Use all available groups
+                ylim=None,
+                order_by="mean",
+                reverse_order=True,
+                width=0.5,
+            )
+
+            # Customize this specific subplot
+            if num_measurements > 1:
+                ax.set_title(title, fontsize=9, pad=8)
+
+            # Set x-axis label - for single measurement, always show; for multiple, show on middle
+            if num_measurements == 1 or idx == num_measurements // 2:
+                ax.set_xlabel(get_axis_label(x_axis_key), fontsize=10)
+            else:
+                ax.set_xlabel("")  # Clear x-label for other subplots
+
+            # Set y-axis label only on leftmost subplot
+            if idx == 0:
+                ax.set_ylabel("MAE [cm]", fontsize=10)
+            else:
+                ax.set_ylabel("")  # Clear y-label for other subplots
+
+            # Update font sizes to match IEEE requirements
+            ax.tick_params(axis="both", labelsize=10)
+
+            # Set y-axis to start from 0 for better comparison
+            current_ylim = ax.get_ylim()
+            ax.set_ylim(bottom=0, top=current_ylim[1])
+
+        # Add legend above the plots
+        # Collect legend handles and labels from the first subplot
+        handles, labels = axes[0].get_legend_handles_labels()
+        if handles:
+            fig.legend(
+                handles,
+                labels,
+                loc="upper center",
+                bbox_to_anchor=(0.45, 0.94),  # Centered above the plots
+                # ncol=len(handles),  # Arrange horizontally
+                ncol=1,  # Arrange vertically
+                fontsize=10,
+                framealpha=0.9,
+            )
+
+        # Adjust layout to accommodate legend above
+        plt.tight_layout()
+
+        # Adjust spacing based on number of measurements
+        if num_measurements == 1:
+            plt.subplots_adjust(top=0.72)  # No need for wspace with single plot
+        else:
+            plt.subplots_adjust(top=0.72, wspace=0.2)  # Leave space at top for legend
+
+        # Save plot with measurement type info in filename
+        if measurement_types_to_plot is None:
+            filename_suffix = "combined_measurement_mae_violin"
+        elif len(measurement_types_to_plot) == 1:
+            filename_suffix = f"{measurement_types_to_plot[0]}_measurement_mae_violin"
+        else:
+            filename_suffix = (
+                f"{'_'.join(measurement_types_to_plot)}_measurement_mae_violin"
+            )
+
+        save_path = os.path.join(save_root, f"{filename_suffix}{file_ext}")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        print(f"Saved combined measurement MAE violin plot to {save_path}")
 
 
 # Add this import at the top with other imports
@@ -918,43 +1115,28 @@ if __name__ == "__main__":
         help="Config key to use for x-axis (dot notation)",
     )
     parser.add_argument("--save-root", type=str, default=".")
+    parser.add_argument(
+        "--measurement-to-plot",
+        type=str,
+        default="LVID",
+        choices=["LVPW", "LVID", "IVS", "all"],
+        help="Which measurement type to plot (default: all)",
+    )
     args = parser.parse_args()
 
+    # set_mpl_style()  # darkmode
+
     SWEEP_PATHS = [
-        # echonet
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_161012_159911",
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_2/echonet_downstream_task/sweep_2025_07_19_165029_487065"
-        #
-        # echonetlvh
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/sweep_2025_07_22_105039_845597",
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/sweep_2025_07_22_113842_262566"
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25/sweep_2025_07_22_191803_274338",
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25/sweep_2025_07_22_200031_873116"
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_23_120035_223599",
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_24_110801_857975/",
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/10_08_25_run1/sweep_2025_08_10_182230_873544",
-        # TIG with TIG base config
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_19_012058_101602",
-        # TIG with DST base config
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_18_155556_492998",
-        # TIG with DST base config
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_18_111256_715117",
-        # DST with DST base config
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/18_08_25_run1/sweep_2025_08_19_110944_448094",
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/26_08_25_run4/sweep_2025_08_26_213849_625395",
+        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/26_08_25_run4/sweep_2025_08_26_170059_245130",
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/27_08_25_run1/sweep_2025_08_28_165310_165677",
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/27_08_25_run1/sweep_2025_08_29_154154_763351",
     ]
-    # METRICS = ["mse", "psnr", "dice"]
+
     METRICS = [
-        # "psnr",
-        # "gaussian_emd_LVPW",
-        # "heatmap_center_mse_LVPW",
-        # "heatmap_entropy_LVPW"
-        # "heatmap_volume_LVPW",
-        # "heatmap_center_mse_LVID",
-        # "heatmap_center_mse_IVS",
-        # "heatmap_mse"
-        "measurement_length_mse_LVPW",
-        "measurement_length_mse_LVID",
-        "measurement_length_mse_IVS",
+        "measurement_length_mae_LVPW",
+        "measurement_length_mae_LVID",
+        "measurement_length_mae_IVS",
     ]
 
     TEMP_FILE = Path("/tmp/plot_downstream_task_results.pkl")
@@ -986,42 +1168,66 @@ if __name__ == "__main__":
             combined_results.to_pickle(TEMP_FILE)
 
     if combined_results is not None:
-        # Pass combined results as a single sweep for plotting
-        sweep_results = {"combined": (combined_results, "agent_type")}
-        # plot_all_sweeps(sweep_results, save_root=args.save_root, x_axis_key=args.x_axis)
+        # Determine which measurements to plot
+        if args.measurement_to_plot == "all":
+            measurement_types_to_plot = None  # Plot all measurements
+        else:
+            measurement_types_to_plot = [args.measurement_to_plot]
 
-        # Generate and save LaTeX table
-        # latex_table = generate_latex_table(combined_results)
-        # table_path = os.path.join(args.save_root, "dice_scores_table.tex")
-        # with open(table_path, "w") as f:
-        #     f.write(latex_table)
-        # print(f"\nLaTeX table saved to {table_path}")
-        # print("\nTable preview:")
-        # print(latex_table)
-
-        # Example usage after combined_results is populated
-        # plot_strategy_comparison_scatter(
-        #     combined_results,
-        #     metric="heatmap_center_mse",
-        #     strategy_x="downstream_task_selection",
-        #     strategy_y="greedy_entropy",
-        #     save_root=args.save_root,
-        # )
-
-        # Plot violin sweeps
+        # Plot combined measurement violin plots with measurement filtering
         for file_ext in [".png", ".pdf"]:
-            plot_violin_sweeps(
+            plot_combined_measurement_violin(
                 combined_results,
-                METRICS,
                 save_root=args.save_root,
                 x_axis_key=args.x_axis,
                 file_ext=file_ext,
+                context="styles/ieee-tmi.mplstyle",
+                measurement_types_to_plot=measurement_types_to_plot,
             )
 
-        # Plot image-mask comparisons (now uses stored gt_masks in results)
-        # plot_image_mask_comparisons(sweep_results, None, save_root=args.save_root)
+        # Plot individual violin sweeps for each metric (optionally filtered)
+        if args.measurement_to_plot != "all":
+            # Filter METRICS based on selected measurement type
+            type_to_metric = {
+                "LVPW": "measurement_length_mae_LVPW",
+                "LVID": "measurement_length_mae_LVID",
+                "IVS": "measurement_length_mae_IVS",
+            }
+            filtered_metrics = [type_to_metric[args.measurement_to_plot]]
+        else:
+            filtered_metrics = METRICS
 
-        # Other plots can be updated similarly to use the masks and images in results
+        for file_ext in [".png", ".pdf"]:
+            plot_violin_sweeps(
+                combined_results,
+                filtered_metrics,
+                save_root=args.save_root,
+                x_axis_key=args.x_axis,
+                file_ext=file_ext,
+                # context="styles/ieee-tmi.mplstyle",
+            )
+
+        # Create strategy comparison scatter plots (optionally filtered)
+        strategies_to_compare = [
+            ("downstream_task_selection", "greedy_entropy"),
+            ("downstream_task_selection", "uniform_random"),
+            ("greedy_entropy", "uniform_random"),
+        ]
+
+        # Convert combined_results DataFrame to the format expected by plot_strategy_comparison_scatter
+        combined_results_dict = {}
+        for metric in filtered_metrics:
+            combined_results_dict[metric] = df_to_dict(combined_results, metric)
+
+        for strategy_x, strategy_y in strategies_to_compare:
+            for metric in filtered_metrics:
+                plot_strategy_comparison_scatter(
+                    combined_results_dict,
+                    metric=metric,
+                    strategy_x=strategy_x,
+                    strategy_y=strategy_y,
+                    save_root=args.save_root,
+                )
 
     else:
         print("No valid results found in any of the provided paths.")
