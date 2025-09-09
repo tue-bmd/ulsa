@@ -11,10 +11,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from keras import ops
 from matplotlib.animation import FuncAnimation
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, PowerNorm
 
 import zea
 from zea import log
+from zea.backend.autograd import AutoGrad
 from zea.display import scan_convert_2d
 from zea.visualize import plot_image_grid
 
@@ -569,6 +570,8 @@ def plot_downstream_task_beliefs(
     dpi=150,
     interpolation_matplotlib="nearest",
     context="styles/darkmode.mplstyle",
+    scan_convert_order=0,
+    scan_convert_resolution=0.1,
 ):
     """
     Plots a row with:
@@ -579,10 +582,10 @@ def plot_downstream_task_beliefs(
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     target_with_mask = downstream_task.postprocess_for_visualization(
-        target[None, ...], target_dst[None, ...]
+        target[None, ...], target_dst[None, ...], fill_value=np.nan
     )
     beliefs_with_mask = downstream_task.postprocess_for_visualization(
-        belief_distribution, beliefs_dst
+        belief_distribution, beliefs_dst, fill_value=np.nan
     )
 
     # Prepare mask agreement: sum of beliefs_dst masks
@@ -602,7 +605,7 @@ def plot_downstream_task_beliefs(
         ax0 = fig.add_subplot(gs[0, 0])
         ax0.imshow(
             np.squeeze(target_with_mask),
-            cmap="gray",
+            # cmap="gray",
             interpolation=interpolation_matplotlib,
         )
         ax0.set_title("Target", fontsize=12)
@@ -618,7 +621,7 @@ def plot_downstream_task_beliefs(
             ax = fig.add_subplot(grid_gs[row, col])
             ax.imshow(
                 np.squeeze(belief_img),
-                cmap="gray",
+                # cmap="gray",
                 interpolation=interpolation_matplotlib,
             )
             ax.axis("off")
@@ -646,6 +649,143 @@ def plot_downstream_task_beliefs(
         plt.close(fig)
         log.info(log.yellow(f"Saved downstream task beliefs plot to {save_path}"))
 
+    autograd = AutoGrad()
+    autograd.set_function(downstream_task.call_differentiable)
+    echonet_grad_and_value_fn = autograd.get_gradient_and_value_jit_fn()
+    jacobians, _ = ops.vectorized_map(
+        echonet_grad_and_value_fn,
+        belief_distribution[:, None, ..., None],  # add batch dim for segmenter
+    )
+    jacobians_squared = jacobians[:, 0, ..., 0] ** 2
+
+    saliency_map = ops.var(belief_distribution, axis=0) * ops.mean(
+        jacobians_squared, axis=0
+    )
+
+    # Scan convert jacobians
+    jacobians_squared_sc = _scan_convert(
+        jacobians_squared,
+        io_config.scan_conversion_angles,
+        order=scan_convert_order,
+        fill_value=np.nan,
+        resolution=scan_convert_resolution,
+    )
+
+    saliency_map_sc = _scan_convert(
+        saliency_map,
+        io_config.scan_conversion_angles,
+        order=scan_convert_order,
+        fill_value=np.nan,
+        resolution=scan_convert_resolution,
+    )
+
+    # Compute mean squared jacobian
+    mean_jacobian_squared = np.mean(jacobians_squared_sc, axis=0)
+
+    vmin, vmax = np.nanpercentile(jacobians_squared_sc, [0, 99.9])
+    jacobians_squared_sc = np.clip(jacobians_squared_sc, vmin, vmax)
+
+    vmin, vmax = np.nanpercentile(mean_jacobian_squared, [0, 99.9])
+    mean_jacobian_squared = np.clip(mean_jacobian_squared, vmin, vmax)
+
+    vmin, vmax = np.nanpercentile(saliency_map_sc, [0, 99.9])
+    saliency_map_sc = np.clip(saliency_map_sc, vmin, vmax)
+
+    # Plot grid of individual squared jacobians
+    with plt.style.context(context):
+        fig_jac = plt.figure(figsize=(8, 8), dpi=dpi)
+        fig_jac.patch.set_alpha(0.0)  # Transparent background
+
+        # Create 2x2 grid for the 4 beliefs
+        for i in range(4):
+            ax = fig_jac.add_subplot(2, 2, i + 1)
+            ax.patch.set_alpha(0.0)  # Transparent axis background
+
+            if i < len(jacobians_squared_sc):
+                im = ax.imshow(
+                    jacobians_squared_sc[i],
+                    cmap="viridis",
+                    interpolation=interpolation_matplotlib,
+                    norm=PowerNorm(gamma=0.4),
+                )
+                ax.set_title(f"x^({i + 1})", fontsize=14)
+            else:
+                # Empty subplot if fewer than 4 beliefs
+                ax.axis("off")
+                continue
+
+            ax.axis("off")
+
+        plt.suptitle("Squared Jacobians (LVID)", fontsize=16)
+        plt.tight_layout()
+
+        jacobians_save_path = save_dir / f"jacobians_squared_grid_{frame_idx}.png"
+        plt.savefig(jacobians_save_path, bbox_inches="tight", dpi=dpi, transparent=True)
+        plt.close(fig_jac)
+        log.info(log.yellow(f"Saved squared jacobians grid to {jacobians_save_path}"))
+
+    # Plot mean squared jacobian
+    with plt.style.context(context):
+        fig_mean = plt.figure(figsize=(6, 6), dpi=dpi)
+        fig_mean.patch.set_alpha(0.0)  # Transparent background
+
+        ax = fig_mean.add_subplot(1, 1, 1)
+        ax.patch.set_alpha(0.0)  # Transparent axis background
+
+        im = ax.imshow(
+            mean_jacobian_squared,
+            cmap="viridis",
+            interpolation=interpolation_matplotlib,
+            norm=PowerNorm(gamma=0.4),
+        )
+        ax.set_title("Mean Squared Jacobian (LVID)", fontsize=16)
+        ax.axis("off")
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, shrink=0.6)
+
+        plt.tight_layout()
+
+        mean_jacobian_save_path = save_dir / f"mean_jacobian_squared_{frame_idx}.png"
+        plt.savefig(
+            mean_jacobian_save_path, bbox_inches="tight", dpi=dpi, transparent=True
+        )
+        plt.close(fig_mean)
+        log.info(
+            log.yellow(f"Saved mean squared jacobian to {mean_jacobian_save_path}")
+        )
+
+    with plt.style.context(context):
+        fig_mean = plt.figure(figsize=(6, 6), dpi=dpi)
+        fig_mean.patch.set_alpha(0.0)  # Transparent background
+
+        ax = fig_mean.add_subplot(1, 1, 1)
+        ax.patch.set_alpha(0.0)  # Transparent axis background
+
+        im = ax.imshow(
+            saliency_map_sc,
+            cmap="viridis",
+            interpolation=interpolation_matplotlib,
+            norm=PowerNorm(gamma=0.5),
+        )
+        ax.set_title("Saliency (LVID)", fontsize=16)
+        ax.axis("off")
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, shrink=0.6)
+
+        plt.tight_layout()
+
+        saliency_save_path = save_dir / f"saliency_{frame_idx}.png"
+        plt.savefig(saliency_save_path, bbox_inches="tight", dpi=dpi, transparent=True)
+        plt.close(fig_mean)
+        log.info(log.yellow(f"Saved saliency map to {saliency_save_path}"))
+
+    demo_greedy_entropy_variance_reduction_gif(
+        save_dir / f"greedy_saliency_reduction_{frame_idx}.gif",
+        ops.convert_to_numpy(saliency_map),
+        io_config,
+        cmap="viridis",
+        gif_fps=3,
+        # context=context,
+    )
+
 
 def plot_downstream_task_output_for_presentation(
     save_dir,
@@ -669,6 +809,8 @@ def plot_downstream_task_output_for_presentation(
     gif_name="downstream_task_output.gif",
     drop_first_n_frames=0,
     no_measurement_color="gray",
+    show_reconstructions_in_timeseries=True,  # New parameter
+    target_file_hash=None,
 ):
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -747,7 +889,12 @@ def plot_downstream_task_output_for_presentation(
         """Compute Euclidean distance between bottom and top coordinates"""
         if bottom_coords is None or top_coords is None:
             return np.nan
-        return np.sqrt(np.sum((bottom_coords - top_coords) ** 2))
+        if target_file_hash is None:
+            return np.sqrt(np.sum((bottom_coords - top_coords) ** 2))
+        else:
+            return downstream_task.get_distance_in_cm(
+                target_file_hash, bottom_coords, top_coords
+            )
 
     # Compute line lengths for all frames and measurement types
     target_line_lengths = {mt: [] for mt in measurement_types}
@@ -774,44 +921,47 @@ def plot_downstream_task_output_for_presentation(
             except:
                 target_line_lengths[measurement_type].append(np.nan)
 
-            # Belief measurements (compute for all 4 beliefs)
-            try:
-                belief_lengths = []
-                # beliefs_dst shape: (30, 4, 224, 224, 4)
-                # Extract all 4 beliefs for this frame
-                for belief_idx in range(beliefs_dst.shape[1]):  # 4 beliefs
-                    belief_bottom, belief_top = downstream_task.outputs_to_coordinates(
-                        beliefs_dst[frame_idx, belief_idx : belief_idx + 1],
-                        measurement_type,
-                    )
-                    belief_length = compute_line_length(belief_bottom, belief_top)
-                    if not np.isnan(belief_length):
-                        belief_lengths.append(belief_length)
-
-                    if belief_length > 345:
-                        print(
-                            f"❗️ error, belief_length={belief_length}, \n belief_bottom={belief_bottom}, \n belief_top={belief_top} \n measurement_type={measurement_type}",
+            # Belief measurements (compute for all 4 beliefs) - only if showing reconstructions
+            if show_reconstructions_in_timeseries:
+                try:
+                    belief_lengths = []
+                    # beliefs_dst shape: (30, 4, 224, 224, 4)
+                    # Extract all 4 beliefs for this frame
+                    for belief_idx in range(beliefs_dst.shape[1]):  # 4 beliefs
+                        belief_bottom, belief_top = (
+                            downstream_task.outputs_to_coordinates(
+                                beliefs_dst[frame_idx, belief_idx : belief_idx + 1],
+                                measurement_type,
+                            )
                         )
-                        np.save(
-                            f"belief_{frame_idx}_{belief_idx}.npy",
-                            beliefs_dst[frame_idx, belief_idx : belief_idx + 1][
-                                frame_idx : frame_idx + 1
-                            ],
-                        )
+                        belief_length = compute_line_length(belief_bottom, belief_top)
+                        if not np.isnan(belief_length):
+                            belief_lengths.append(belief_length)
 
-                if belief_lengths:
-                    belief_mean = np.mean(belief_lengths)
-                    belief_std = (
-                        np.std(belief_lengths) if len(belief_lengths) > 1 else 0.0
-                    )
-                    belief_line_lengths_mean[measurement_type].append(belief_mean)
-                    belief_line_lengths_std[measurement_type].append(belief_std)
-                else:
+                        if belief_length > 345:
+                            print(
+                                f"❗️ error, belief_length={belief_length}, \n belief_bottom={belief_bottom}, \n belief_top={belief_top} \n measurement_type={measurement_type}",
+                            )
+                            np.save(
+                                f"belief_{frame_idx}_{belief_idx}.npy",
+                                beliefs_dst[frame_idx, belief_idx : belief_idx + 1][
+                                    frame_idx : frame_idx + 1
+                                ],
+                            )
+
+                    if belief_lengths:
+                        belief_mean = np.mean(belief_lengths)
+                        belief_std = (
+                            np.std(belief_lengths) if len(belief_lengths) > 1 else 0.0
+                        )
+                        belief_line_lengths_mean[measurement_type].append(belief_mean)
+                        belief_line_lengths_std[measurement_type].append(belief_std)
+                    else:
+                        belief_line_lengths_mean[measurement_type].append(np.nan)
+                        belief_line_lengths_std[measurement_type].append(np.nan)
+                except:
                     belief_line_lengths_mean[measurement_type].append(np.nan)
                     belief_line_lengths_std[measurement_type].append(np.nan)
-            except:
-                belief_line_lengths_mean[measurement_type].append(np.nan)
-                belief_line_lengths_std[measurement_type].append(np.nan)
 
     # Shared function to create time series plot
     def create_timeseries_plot(ax_timeseries, frame_idx):
@@ -847,29 +997,31 @@ def plot_downstream_task_output_for_presentation(
                 alpha=0.8,
             )
 
-            # Plot belief line lengths (mean with std as error bars)
-            belief_means = np.array(belief_line_lengths_mean[measurement_type])
-            belief_stds = np.array(belief_line_lengths_std[measurement_type])
-            valid_beliefs = ~np.isnan(belief_means)
+            # Only plot belief/reconstruction lines if enabled
+            if show_reconstructions_in_timeseries:
+                # Plot belief line lengths (mean with std as error bars)
+                belief_means = np.array(belief_line_lengths_mean[measurement_type])
+                belief_stds = np.array(belief_line_lengths_std[measurement_type])
+                valid_beliefs = ~np.isnan(belief_means)
 
-            ax.plot(
-                frame_indices[valid_beliefs],
-                belief_means[valid_beliefs],
-                color=color,
-                linestyle="--",
-                linewidth=2,
-                label="Beliefs",
-                alpha=0.8,
-            )
+                ax.plot(
+                    frame_indices[valid_beliefs],
+                    belief_means[valid_beliefs],
+                    color=color,
+                    linestyle="--",
+                    linewidth=2,
+                    label="Beliefs",
+                    alpha=0.8,
+                )
 
-            # Add error bars for standard deviation
-            ax.fill_between(
-                frame_indices[valid_beliefs],
-                belief_means[valid_beliefs] - belief_stds[valid_beliefs],
-                belief_means[valid_beliefs] + belief_stds[valid_beliefs],
-                color=color,
-                alpha=0.2,
-            )
+                # Add error bars for standard deviation
+                ax.fill_between(
+                    frame_indices[valid_beliefs],
+                    belief_means[valid_beliefs] - belief_stds[valid_beliefs],
+                    belief_means[valid_beliefs] + belief_stds[valid_beliefs],
+                    color=color,
+                    alpha=0.2,
+                )
 
             # Add vertical line for current frame
             ax.axvline(
@@ -877,10 +1029,13 @@ def plot_downstream_task_output_for_presentation(
             )
 
             # Set labels and formatting
-            ax.set_ylabel(f"{measurement_type}\n(pixels)", fontsize=10)
-            ax.legend(loc="upper right", fontsize=8)
+            unit = "[cm]" if target_file_hash is not None else "[pixels]"
+            ax.set_ylabel(f"{measurement_type} {unit}", fontsize=10)
+            if show_reconstructions_in_timeseries:
+                ax.legend(loc="upper right", fontsize=8)
             ax.grid(True, alpha=0.3)
             ax.set_xlim(0, num_frames - 1)
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:.2f}"))
 
             # Only show x-axis label on bottom subplot
             if idx == len(measurement_types) - 1:
@@ -894,12 +1049,13 @@ def plot_downstream_task_output_for_presentation(
                 [l for l in target_line_lengths[measurement_type] if not np.isnan(l)]
             )
 
-            # Include mean ± std for beliefs
-            means = np.array(belief_line_lengths_mean[measurement_type])
-            stds = np.array(belief_line_lengths_std[measurement_type])
-            valid = ~np.isnan(means) & ~np.isnan(stds)
-            measurement_lengths.extend((means[valid] + stds[valid]).tolist())
-            measurement_lengths.extend((means[valid] - stds[valid]).tolist())
+            # Include mean ± std for beliefs only if showing reconstructions
+            if show_reconstructions_in_timeseries:
+                means = np.array(belief_line_lengths_mean[measurement_type])
+                stds = np.array(belief_line_lengths_std[measurement_type])
+                valid = ~np.isnan(means) & ~np.isnan(stds)
+                measurement_lengths.extend((means[valid] + stds[valid]).tolist())
+                measurement_lengths.extend((means[valid] - stds[valid]).tolist())
 
             if measurement_lengths:
                 y_min, y_max = min(measurement_lengths), max(measurement_lengths)
@@ -1426,3 +1582,142 @@ def animate_overviews(save_dir, io_config):
         sort_key_fn=sort_frames,
         fps=io_config.gif_fps,
     )
+
+
+def demo_greedy_entropy_variance_reduction_gif(
+    save_path,
+    variance_image,
+    io_config,
+    cmap="magma",
+    scan_convert_order=0,
+    interpolation_matplotlib="nearest",
+    context="styles/darkmode.mplstyle",
+    n_steps=None,
+    std_dev=1.0,
+    num_lines_to_update=9,
+    gif_fps=10,
+):
+    """
+    Demonstrates the effect of GreedyEntropy's select_line_and_reweight_entropy on a variance map.
+    Args:
+        save_path (str or Path): Where to save the gif.
+        variance_image (np.ndarray): 2D variance image, shape (H, W).
+        io_config: IO config with scan_conversion_angles.
+        scan_convert_order: Order for scan conversion.
+        interpolation_matplotlib: Matplotlib interpolation.
+        context: Matplotlib style context.
+        n_steps: Number of lines to select (default: image width).
+        std_dev: Stddev for the upside-down Gaussian.
+        num_lines_to_update: Width of the reweighting window (should be odd).
+        gif_fps: Frames per second for the gif.
+    """
+    from keras import ops
+
+    vmin, vmax = np.nanpercentile(variance_image, [0, 99.9])
+    variance_image = np.clip(variance_image, vmin, vmax)
+    H, W = variance_image.shape
+    n_possible_actions = W
+    if n_steps is None:
+        n_steps = n_possible_actions
+
+    # Prepare the upside-down Gaussian kernel
+    mean = 0
+    assert num_lines_to_update % 2 == 1, "num_lines_to_update must be odd."
+    points_to_evaluate = np.linspace(
+        mean - 2 * std_dev, mean + 2 * std_dev, num_lines_to_update
+    )
+    upside_down_gaussian = 1 - np.exp(
+        -0.5 * ((points_to_evaluate - mean) / std_dev) ** 2
+    )
+
+    # We'll work on a copy of the variance image
+    current_variance = variance_image.copy()
+    frames = []
+
+    sc_variance_initial = _scan_convert(
+        variance_image,
+        io_config.scan_conversion_angles,
+        order=scan_convert_order,
+        fill_value=np.nan,
+        resolution=0.1,
+    )
+    # global_min = sc_variance_initial.min()
+    global_max = np.nanmax(sc_variance_initial)
+    with plt.style.context(context):
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.imshow(
+            sc_variance_initial,
+            cmap=cmap,
+            interpolation=interpolation_matplotlib,
+            norm=PowerNorm(gamma=0.4),
+        )
+        ax.axis("off")
+        plt.tight_layout()
+        plt.savefig("variance_initial.png")
+        plt.close()
+
+    for step in range(n_steps):
+        # Compute per-line (column) variance (mean over rows)
+        entropy_per_line = current_variance.mean(axis=0)
+
+        # Select the line with max variance
+        max_entropy_line = np.argmax(entropy_per_line)
+
+        # Pad the entropy vector for reweighting
+        pad = num_lines_to_update // 2
+        padded_entropy = np.pad(entropy_per_line, (pad, pad), mode="constant")
+        reweighting = np.ones_like(padded_entropy)
+        reweighting[max_entropy_line : max_entropy_line + num_lines_to_update] = (
+            upside_down_gaussian
+        )
+        updated_entropy = padded_entropy * reweighting
+        updated_entropy = updated_entropy[pad : pad + n_possible_actions]
+
+        # Apply the reweighting to the variance image columns
+        for i in range(num_lines_to_update):
+            col = max_entropy_line + i - pad
+            if 0 <= col < n_possible_actions:
+                current_variance[:, col] *= upside_down_gaussian[i]
+
+        vis_variance = current_variance.copy()
+        vis_variance[:, max_entropy_line] = global_max * 1.2  # exaggerate brightness
+
+        # Scan convert for visualization
+        sc_variance = _scan_convert(
+            vis_variance,
+            io_config.scan_conversion_angles,
+            order=scan_convert_order,
+            fill_value=np.nan,
+            resolution=0.1,
+        )
+        # sc_variance_norm = (sc_variance - sc_variance.min()) / (sc_variance.max() - sc_variance.min() + 1e-8)
+
+        # Plot and save frame
+        with plt.style.context(context):
+            fig, ax = plt.subplots(figsize=(6, 6))
+            im = ax.imshow(
+                sc_variance,
+                cmap=cmap,
+                interpolation=interpolation_matplotlib,
+                norm=PowerNorm(gamma=0.4),
+            )
+            # plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, shrink=0.6)
+            # ax.set_title(f"Step {step+1}: Line {max_entropy_line}", fontsize=16)
+            ax.axis("off")
+            plt.tight_layout()
+            fig.canvas.draw()
+            # frame = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            # frame = frame.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            frame = np.asarray(fig.canvas.buffer_rgba())[:, :, :3].copy()
+            frames.append(frame)
+            plt.close(fig)
+
+        # Stop if all variance is (almost) gone
+        if np.all(current_variance < 1e-6):
+            break
+
+    # Save as GIF
+    import imageio
+
+    imageio.mimsave(save_path, frames, fps=gif_fps)
+    print(f"Saved GreedyEntropy variance reduction demo to {save_path}")
