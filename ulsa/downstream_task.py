@@ -3,6 +3,7 @@ from abc import ABC
 import cv2
 import jax
 import numpy as np
+import pandas as pd
 from keras import ops
 from scipy.optimize import curve_fit
 
@@ -140,8 +141,10 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
 
         self.scan_convert_2d = _scan_convert_2d
 
-    def postprocess_for_visualization(self, images, masks):
-        images = self.scan_convert_batch(images[..., None])[..., 0]
+    def postprocess_for_visualization(self, images, masks, fill_value=np.nan):
+        images = self.scan_convert_batch(images[..., None], fill_value=fill_value)[
+            ..., 0
+        ]
         images = map_range(images, from_range=(-1, 1), to_range=(0, 255)).astype(
             np.uint8
         )
@@ -154,9 +157,12 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
         )
         return images_with_masks
 
-    def scan_convert_batch(self, x):
+    def scan_convert_batch(self, x, fill_value=np.nan):
+        def _scan_convert(x):
+            return self.scan_convert_2d(x, fill_value=fill_value)
+
         # x: (batch, n_rho, n_theta, 1)
-        x_cartesian = ops.vectorized_map(self.scan_convert_2d, x[..., 0])
+        x_cartesian = ops.vectorized_map(_scan_convert, x[..., 0])
         x_cartesian_cropped = x_cartesian[:, :, 23 : 159 - 24, None]
         return x_cartesian_cropped
 
@@ -283,7 +289,12 @@ class EchoNetSegmentation(DifferentiableDownstreamTask):
 #       maybe could make a shared 'SegmentationModel' parent
 @downstream_task_registry(name="echonetlvh_segmentation")
 class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
-    def __init__(self, batch_size=4):
+    def __init__(
+        self,
+        batch_size=4,
+        measurements_file="/mnt/z/Ultrasound-BMd/data/USBMD_datasets/echonetlvh/MeasurementsList.csv",
+        cone_parameters_file="/mnt/z/Ultrasound-BMd/data/USBMD_datasets/echonetlvh/cone_parameters.csv",
+    ):
         super().__init__()
 
         # NOTE: image shape hardcoded for one of our echonetlvh models, could change.
@@ -295,6 +306,8 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         self.model.load_weights(
             "/mnt/z/Ultrasound-BMd/pretrained/deeplabv3/2025_08_15_141511_678383_echonetlvh_224/checkpoints/segmenter_4.weights.h5"
         )
+        self.measurements_info = pd.read_csv(measurements_file)
+        self.cone_info = pd.read_csv(cone_parameters_file)
 
         # Scan conversion constants for echonet
         self.rho_range = (0, 224)
@@ -331,10 +344,13 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
 
         self.scan_convert_2d = _scan_convert_2d
 
-    def scan_convert_batch(self, x):
+    def scan_convert_batch(self, x, fill_value=None):
+        def _scan_convert(x):
+            _fill_value = self.fill_value if fill_value is None else fill_value
+            return self.scan_convert_2d(x, fill_value=_fill_value)
+
         # x: (batch, n_rho, n_theta, 1)
-        x_cartesian = ops.vectorized_map(self.scan_convert_2d, x[..., 0])
-        # x_cartesian_cropped = x_cartesian[:, :, 23 : 159 - 24, None]
+        x_cartesian = ops.vectorized_map(_scan_convert, x[..., 0])
         return x_cartesian
 
     def call_generic(self, x):
@@ -380,6 +396,45 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         if mask[idx] < threshold:
             return None
         return idx[::-1]  # (x, y)
+
+    def get_distance_in_cm(self, target_file_hash, bottom_coordinate, top_coordinate):
+        """
+        Convert distance in pixels to distance in cm
+
+        Params:
+            target_file_hash: the hash identifying the file in self.measurements_info
+            bottom_coordinate: (x, y) coordinate in pixels
+            top_coordinate: (x, y) coordinate in pixels
+        """
+        # convert coordinates to original pixel basis
+        file_cone_info = self.cone_info[
+            self.cone_info["avi_filename"].str.contains(target_file_hash)
+        ]
+        cropped_width = file_cone_info["new_width"].iloc[0]
+        cropped_height = file_cone_info["new_height"].iloc[0]
+        x_rescale = cropped_width / 224
+        y_rescale = cropped_height / 224
+        x1, y1 = bottom_coordinate
+        x2, y2 = top_coordinate
+        x1 = x1 * x_rescale
+        y1 = y1 * y_rescale
+        x2 = x2 * x_rescale
+        y2 = y2 * y_rescale
+
+        # get ratio of pixel distance to spatial distance from real measurement
+        measurement_info = self.measurements_info[
+            self.measurements_info["HashedFileName"] == target_file_hash
+        ].iloc[0]
+        measurement_pixel_distance = ops.sqrt(
+            (measurement_info["X2"] - measurement_info["X1"]) ** 2
+            + (measurement_info["Y2"] - measurement_info["Y1"]) ** 2
+        )
+        pixel_to_cm_ratio = measurement_pixel_distance / measurement_info["CalcValue"]
+
+        # convert original pixel distance to spatial distance
+        predicted_pixel_distance = ops.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+        return predicted_pixel_distance / pixel_to_cm_ratio
 
     def expected_coordinate(self, mask):
         """
@@ -441,13 +496,17 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         # return coordinates
         return bottom_coordinates, top_coordinates
 
-    def postprocess_for_visualization(self, images, masks):
+    def postprocess_for_visualization(self, images, masks, fill_value=np.nan):
         overlay_colors = np.array(
             [
-                [255, 255, 0],  # Yellow (LVPWd_X1)
-                [255, 0, 255],  # Magenta (LVPWd_X2)
-                [0, 255, 255],  # Cyan (IVSd_X1)
-                [0, 255, 0],  # Green (IVSd_X2)
+                # [255, 255, 0],  # Yellow (LVPWd_X1)
+                # [255, 0, 255],  # Magenta (LVPWd_X2)
+                # [0, 255, 255],  # Cyan (IVSd_X1)
+                # [0, 255, 0],  # Green (IVSd_X2)
+                [1, 1, 0],  # Yellow (LVPWd_X1)
+                [1, 0, 1],  # Magenta (LVPWd_X2)
+                [0, 1, 1],  # Cyan (IVSd_X1)
+                [0, 1, 0],  # Green (IVSd_X2)
             ],
             dtype=np.uint8,
         )
@@ -505,21 +564,23 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
                         overlay[..., c][line_mask.astype(bool)] = color[c] * alpha
                     mask_any |= line_mask.astype(bool)
 
-            overlay = np.clip(overlay, 0, 255)
+            overlay = np.clip(overlay, 0, 1)
             out = image.astype(np.float32)
-            blend_mask = np.any(overlay > 5, axis=-1)
+            blend_mask = np.any(overlay > 0.02, axis=-1)
             out[blend_mask] = (1 - alpha) * out[blend_mask] + overlay[blend_mask]
-            out = np.clip(out, 0, 255).astype(np.uint8)
+            out = np.clip(out, 0, 1)  # .astype(np.uint8)
             return out
 
         # Scan convert images
         images_resized = ops.image.resize(images[..., None], size=(224, 224))
-        images_sc = self.scan_convert_batch(images_resized)
+        images_sc = self.scan_convert_batch(images_resized, fill_value=fill_value)
 
-        images_resized = ops.image.resize(images_sc[..., None], size=(224, 224))
+        images_resized = ops.image.resize(
+            images_sc[..., None], size=(224, 224), interpolation="nearest"
+        )
         images_clipped = ops.clip(images_resized, -1, 1)
         images = zea.utils.translate(
-            images_clipped, range_from=(-1, 1), range_to=(0, 255)
+            images_clipped, range_from=(-1, 1), range_to=(0, 1)
         )
 
         # Overlay masks on images
@@ -549,7 +610,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
 
 @downstream_task_registry(name="echonetlvh_measurement")
 class EchoNetLVHMeasurement(EchoNetLVHSegmentation):
-    def __init__(self, measurement_type="LVPW", batch_size=4):
+    def __init__(self, measurement_type="LVID", batch_size=4):
         super().__init__(batch_size=batch_size)
         assert measurement_type in ["LVPW", "LVID", "IVS"]
         self.measurement_type = measurement_type
