@@ -352,11 +352,13 @@ def benchmark(
         target_sequence_preprocessed = zea.utils.translate(
             target_sequence[..., None], dynamic_range, (-1, 1)
         )
-        downstream_task, targets_dst, reconstructions_dst, _ = apply_downstream_task(
-            downstream_task,
-            agent_config,
-            target_sequence_preprocessed,
-            results.belief_distributions,
+        downstream_task, targets_dst, reconstructions_dst, beliefs_dst = (
+            apply_downstream_task(
+                downstream_task,
+                agent_config,
+                target_sequence_preprocessed,
+                results.belief_distributions,
+            )
         )
 
         denormalized = results.to_uint8(agent.input_range)
@@ -407,6 +409,7 @@ def benchmark(
                     {
                         f"{downstream_task.output_type()}_targets": targets_dst,
                         f"{downstream_task.output_type()}_reconstructions": reconstructions_dst,
+                        f"{downstream_task.output_type()}_beliefs": beliefs_dst,
                     }
                     if downstream_task is not None
                     else {}
@@ -608,6 +611,8 @@ def extract_sweep_data(
     if not os.path.exists(sweep_details_path):
         raise FileNotFoundError(f"Missing sweep_details.yaml in {sweep_dir}")
 
+    dst_model = EchoNetLVHSegmentation()
+
     sweep_details = Config.from_yaml(sweep_details_path)
     results = []
 
@@ -629,6 +634,7 @@ def extract_sweep_data(
         config = Config.from_yaml(config_path)
         metrics = np.load(metrics_path, allow_pickle=True)
         target_file = Config.from_yaml(filepath_yaml)["target_filepath"]
+        target_file_hash = Path(target_file).stem
 
         # Optional file filter
         if (
@@ -692,12 +698,10 @@ def extract_sweep_data(
 
                     try:
                         gt_bottom_coords, gt_top_coords = (
-                            EchoNetLVHSegmentation.outputs_to_coordinates(
-                                gt_masks, measurement_type
-                            )
+                            dst_model.outputs_to_coordinates(gt_masks, measurement_type)
                         )
                         pred_bottom_coords, pred_top_coords = (
-                            EchoNetLVHSegmentation.outputs_to_coordinates(
+                            dst_model.outputs_to_coordinates(
                                 pred_masks, measurement_type
                             )
                         )
@@ -742,10 +746,10 @@ def extract_sweep_data(
                     log.warning(f"Failed to compute heatmap_mse for {run_path}: {e}")
                     result_row["heatmap_mse"] = np.nan
 
-            # Compute measurement length MSE metrics
+            # Compute measurement length MAE metrics
             for key in keys_to_extract:
-                if key.startswith("measurement_length_mse_"):
-                    measurement_type = key.replace("measurement_length_mse_", "")
+                if key.startswith("measurement_length_mae_"):
+                    measurement_type = key.replace("measurement_length_mae_", "")
                     valid_types = ["LVPW", "LVID", "IVS"]
                     if measurement_type not in valid_types:
                         log.warning(
@@ -757,63 +761,49 @@ def extract_sweep_data(
                         """Compute Euclidean distance between bottom and top coordinates"""
                         if bottom_coords is None or top_coords is None:
                             return np.nan
-                        return ops.sqrt(ops.sum((bottom_coords - top_coords) ** 2))
+                        if target_file_hash is None:
+                            return np.sqrt(np.sum((bottom_coords - top_coords) ** 2))
+                        else:
+                            return dst_model.get_distance_in_cm(
+                                target_file_hash, bottom_coords, top_coords
+                            )
 
                     try:
-                        # Compute target and predicted line lengths
-                        target_line_lengths = []
-                        pred_line_lengths = []
+                        # Vectorized computation of line lengths
+                        def compute_line_length_single(dst_output):
+                            bottom, top = dst_model.outputs_to_coordinates(
+                                dst_output[None, ...], measurement_type
+                            )
+                            return compute_line_length(bottom, top)
 
-                        num_frames = gt_masks.shape[0]
-                        for frame_idx in range(num_frames):
-                            # Target measurements
-                            try:
-                                target_bottom, target_top = (
-                                    EchoNetLVHSegmentation.outputs_to_coordinates(
-                                        gt_masks[frame_idx : frame_idx + 1],
-                                        measurement_type,
-                                    )
-                                )
-                                target_length = compute_line_length(
-                                    target_bottom[0], target_top[0]
-                                )
-                                target_line_lengths.append(target_length)
-                            except:
-                                target_line_lengths.append(np.nan)
-
-                            # Predicted measurements
-                            try:
-                                pred_bottom, pred_top = (
-                                    EchoNetLVHSegmentation.outputs_to_coordinates(
-                                        pred_masks[frame_idx : frame_idx + 1],
-                                        measurement_type,
-                                    )
-                                )
-                                pred_length = compute_line_length(
-                                    pred_bottom[0], pred_top[0]
-                                )
-                                pred_line_lengths.append(pred_length)
-                            except:
-                                pred_line_lengths.append(np.nan)
-
-                        # Convert to tensors and filter out NaN values
-                        target_lengths = ops.convert_to_tensor(target_line_lengths)
-                        pred_lengths = ops.convert_to_tensor(pred_line_lengths)
-
-                        # Only compute MSE for frames where both target and prediction are valid
-                        valid_mask = ~(
-                            ops.isnan(target_lengths) | ops.isnan(pred_lengths)
+                        # Compute target and predicted line lengths using vectorized_map
+                        target_line_lengths = ops.vectorized_map(
+                            compute_line_length_single,
+                            gt_masks,
+                        )
+                        pred_line_lengths = ops.vectorized_map(
+                            compute_line_length_single,
+                            pred_masks,
                         )
 
-                        if ops.any(valid_mask):
+                        # Convert to numpy arrays and filter out NaN values
+                        target_lengths = ops.convert_to_numpy(target_line_lengths)
+                        pred_lengths = ops.convert_to_numpy(pred_line_lengths)
+
+                        # Only compute MAE for frames where both target and prediction are valid
+                        valid_mask = ~(
+                            np.isnan(target_lengths) | np.isnan(pred_lengths)
+                        )
+
+                        if np.any(valid_mask):
                             valid_target_lengths = target_lengths[valid_mask]
                             valid_pred_lengths = pred_lengths[valid_mask]
 
-                            # Compute MSE
-                            measurement_length_mse = ops.mean(
-                                (valid_target_lengths - valid_pred_lengths) ** 2
+                            # Compute MAE
+                            measurement_length_mae = np.mean(
+                                np.abs(valid_target_lengths - valid_pred_lengths)
                             )
-                            result_row[key] = float(measurement_length_mse)
+                            result_row[key] = float(measurement_length_mae)
                         else:
                             # No valid measurements found
                             log.warning(
