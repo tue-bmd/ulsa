@@ -1,14 +1,14 @@
 action_selection:
   n_possible_actions: 256
-  n_actions: 2
+  n_actions: 5
   shape: [256, 256]
   selection_strategy: "downstream_task_selection" # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
   kwargs:
     # downstream_task_key: "echonetlvh_segmentation"
     downstream_task_key: "echonetlvh_measurement"
-    measurement_type: "IVS"
+    measurement_type: "LVID"
 
-downstream_task: "echonetlvh_segmentation"
+downstream_task: "echonetlvh_measurement"
 
 diffusion_inference:
   run_dir: "{output_dir}/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"
@@ -32,7 +32,7 @@ io_config:
   save_animation: true
   scan_convert: true
   scan_conversion_angles: [-45, 45]
-  frame_cutoff: 5
+  frame_cutoff: null
   gif_fps: 30
   verbose: false
   reconstruction_sharpness_std: 0.025

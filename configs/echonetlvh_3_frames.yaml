@@ -7,7 +7,7 @@ action_selection:
     std_dev: 1.5
     num_lines_to_update: 7
 
-downstream_task: "echonetlvh_segmentation"
+downstream_task: "echonetlvh_measurement"
 
 diffusion_inference:
   run_dir: "{output_dir}/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"
@@ -16,7 +16,7 @@ diffusion_inference:
   batch_size: 4 # posterior samples
   guidance_kwargs:
     initial_omega: 1
-    omega: 10
+    omega: 1
   reconstruction_method: "choose_first" # "choose_first" | "maximum_likelihood" | "mean"
   hard_project: true
 
