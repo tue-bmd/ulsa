@@ -65,3 +65,8 @@ python active_sampling_temporal_3d.py --config "configs/elevation_3d.yaml"
 ```
 
 Additionally, we have created a [Jupyter notebook](./example.ipynb), stripping down the code to the essentials.
+
+## Scripts for paper
+
+In the [`benchmarking_scripts/`](./benchmarking_scripts/) folder, we have provided scripts to reproduce the results from the paper.
+These scripts will save data to a folder, which can be visualized using the scripts in the [`plotting/`](./plotting/) folder.
