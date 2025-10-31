@@ -49,3 +49,19 @@ Alternatively, we have provided a [Dockerfile](./Dockerfile) to build a Docker i
     ```bash
     python -m zea.data.convert.echonet --source /path/to/echonet-dynamic --target /path/to/echonet-dynamic-polar --splits /path/to/splits
     ```
+
+## Inference
+
+The main file to use for inference is [`active_sampling_temporal.py`](./active_sampling_temporal.py) in combination with a config file.
+
+```bash
+python active_sampling_temporal.py --config "configs/echonet_3_frames.yaml"
+```
+
+For the 3D model, use [`active_sampling_temporal_3d.py`](./active_sampling_temporal_3d.py).
+
+```bash
+python active_sampling_temporal_3d.py --config "configs/elevation_3d.yaml"
+```
+
+Additionally, we have created a [Jupyter notebook](./example.ipynb), stripping down the code to the essentials.
