@@ -6,6 +6,15 @@ Find the weights of our model on [Huggingface](https://huggingface.co/zeahub/uls
 
 ## Setup code
 
+### 1. Settings
+
+```bash
+cp .env.example .env  # edit!
+cp users.yaml.example users.yaml  # edit!
+```
+
+### 2. Dependencies
+
 Install [`zea`](https://github.com/tue-bmd/zea), the cognitive ultrasound toolbox.
 
 ```bash
@@ -25,9 +34,9 @@ Install other dependencies for this repo:
 KERAS_VER=$(python3 -c "import keras; print(keras.__version__)")
 pip install tf2jax==0.3.6 pandas jaxwt dm-pix jax
 pip install keras==${KERAS_VER}
-cp .env.example .env
-touch users.yaml # edit!
 ```
+
+Alternatively, we have provided a [Dockerfile](./Dockerfile) to build a Docker image with all dependencies installed.
 
 ## Dataset
 
