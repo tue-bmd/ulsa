@@ -32,7 +32,7 @@ Install other dependencies for this repo:
 
 ```bash
 KERAS_VER=$(python3 -c "import keras; print(keras.__version__)")
-pip install tf2jax==0.3.6 pandas jaxwt dm-pix jax
+pip install tf2jax==0.3.6 pandas jaxwt jax
 pip install keras==${KERAS_VER}
 ```
 

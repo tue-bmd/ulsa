@@ -106,10 +106,10 @@ from ulsa.downstream_task import (
     downstream_task_registry,
 )
 from ulsa.io_utils import make_save_dir
-from ulsa.metrics import Metrics
 from zea import Config, Dataset, init_device, log, set_data_paths
 from zea.config import Config
 from zea.data.augmentations import RandomCircleInclusion
+from zea.metrics import Metrics
 
 # Default parameter paths and values
 DEFAULT_SWEEP_VALUES = {
@@ -267,7 +267,7 @@ def benchmark(
     jit_mode="recover",
     circle_augmentation=None,
     save_dir=None,
-    metrics=None,
+    metrics: Metrics = None,
 ):
     # Not sure if I have to reinit the agent every time?
     seed, seed_1 = jax.random.split(seed)
@@ -360,7 +360,7 @@ def benchmark(
         )
 
         denormalized = results.to_uint8(agent.input_range)
-        metrics_results = metrics.eval_metrics(
+        metrics_results = metrics(
             denormalized.target_imgs, denormalized.reconstructions
         )
         all_metrics_results.append(metrics_results)
