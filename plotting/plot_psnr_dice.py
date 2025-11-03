@@ -27,6 +27,8 @@ from plotting.plot_utils import ViolinPlotter, natural_sort
 
 DATA_ROOT = "/mnt/z/prjs0966"
 DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
+# DATA_ROOT = "/mnt/z/usbmd/Wessel/"
+# DATA_FOLDER = Path(DATA_ROOT) / "eval_echonet_dynamic_test_set"
 SUBSAMPLED_PATHS = [
     DATA_FOLDER / "sharding_sweep_2025-08-05_14-35-11",
     DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
