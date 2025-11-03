@@ -18,7 +18,7 @@ cp users.yaml.example users.yaml  # edit!
 Install [`zea`](https://github.com/tue-bmd/zea), the cognitive ultrasound toolbox.
 
 ```bash
-pip install "zea==0.0.4"
+pip install "zea==0.0.7"
 ```
 
 or use the submodule in this repo:
