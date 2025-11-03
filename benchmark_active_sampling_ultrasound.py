@@ -349,7 +349,7 @@ def benchmark(
             post_pipeline=post_pipeline,
         )
 
-        target_sequence_preprocessed = zea.utils.translate(
+        target_sequence_preprocessed = zea.ops.translate(
             target_sequence[..., None], dynamic_range, (-1, 1)
         )
         downstream_task, targets_dst, reconstructions_dst, _ = apply_downstream_task(

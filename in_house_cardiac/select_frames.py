@@ -67,7 +67,7 @@ def main():
     filename = filepath.stem
     selected_idx = select_frames(images)
     np.save(save_path / f"{filename}_selected_frames.npy", selected_idx)
-    zea.utils.save_to_mp4(
+    zea.io_lib.save_to_mp4(
         images[selected_idx],
         save_path / f"{filename}_selected_frames.mp4",
     )

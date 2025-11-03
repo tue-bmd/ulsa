@@ -23,7 +23,7 @@ from ulsa.ops import (
     lines_rx_apo,
 )
 from zea.display import compute_scan_convert_2d_coordinates, scan_convert_2d
-from zea.utils import translate
+from zea.ops import translate
 
 
 def focused_waves(target_sequence, n_frames, resize_height=112):
@@ -127,4 +127,4 @@ if __name__ == "__main__":
         _images = translate(images, dynamic_range, (0, 255))
         _images = np.clip(_images, 0, 255).astype(np.uint8)
         mp4_path = (save_dir / file.stem).with_suffix(".mp4")
-        zea.utils.save_to_mp4(_images, mp4_path, fps=30)
+        zea.io_lib.save_to_mp4(_images, mp4_path, fps=30)

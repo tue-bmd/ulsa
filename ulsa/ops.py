@@ -6,7 +6,7 @@ import numpy as np
 from keras import ops
 
 import zea.ops
-from zea.utils import translate
+from zea.ops import translate
 
 NOISE_ESTIMATION_NORMALIZER = (
     0.6745  # Used for robust noise estimation from median absolute deviation

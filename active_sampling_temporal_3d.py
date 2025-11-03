@@ -113,8 +113,8 @@ from elevation_interpolation.tools import (
 )
 from ulsa.agent import reset_agent_state, setup_agent
 from zea import Config, File, Pipeline, log, set_data_paths
-from zea.io_lib import load_image
-from zea.utils import save_to_gif, translate
+from zea.io_lib import load_image, save_to_gif
+from zea.ops import translate
 from zea.visualize import plot_biplanes, set_mpl_style
 
 

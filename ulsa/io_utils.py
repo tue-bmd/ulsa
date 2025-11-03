@@ -36,7 +36,7 @@ def save_animation(save_dir, filename, prefix, sort_key_fn, fps=1):
         ).astype(np.uint8)
         for path in step_paths_sorted
     ]
-    zea.utils.save_to_gif(
+    zea.io_lib.save_to_gif(
         images_as_np,
         os.path.join(save_dir, filename),
         fps=fps,
@@ -57,7 +57,7 @@ def make_save_dir(path, prefix="run"):
 
 def map_range(img, from_range=(-1, 1), to_range=(0, 255)):
     img = ops.convert_to_numpy(img)
-    img = zea.utils.translate(img, from_range, to_range)
+    img = zea.ops.translate(img, from_range, to_range)
     return np.clip(img, to_range[0], to_range[1])
 
 

@@ -7,7 +7,7 @@ import zea
 from zea import log
 from zea.metrics import gcnr as generalized_contrast_to_noise_ratio
 from zea.models.lpips import LPIPS
-from zea.utils import translate
+from zea.ops import translate
 
 
 def mean_squared_error(y_true, y_pred, **kwargs):

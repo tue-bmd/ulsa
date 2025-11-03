@@ -119,7 +119,7 @@ from ulsa.pipeline import make_pipeline
 from ulsa.utils import select_transmits, update_scan_for_polar_grid
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
-from zea.tensor_ops import batched_map, func_with_one_batch_dim
+from zea.tensor_ops import func_with_one_batch_dim, vmap
 
 
 def simple_scan(f, init, xs, length=None, disable_tqdm=False):
@@ -148,21 +148,19 @@ def apply_downstream_task(
         beliefs_stacked = ops.reshape(
             belief_distributions, (n_frames * n_particles, h, w, c)
         )
-        beliefs_dst = batched_map(
+        beliefs_dst = vmap(
             downstream_task.call_generic,
-            beliefs_stacked,
-            jit=True,
             batch_size=agent_config.diffusion_inference.batch_size,
-        )
+            fn_supports_batch=True,
+        )(beliefs_stacked)
         _, h, w, c = ops.shape(beliefs_dst)
         beliefs_dst = ops.reshape(beliefs_dst, (n_frames, n_particles, h, w, c))
         reconstructions_dst = downstream_task.beliefs_to_reconstruction(beliefs_dst)
-        targets_dst = batched_map(
+        targets_dst = vmap(
             downstream_task.call_generic,
-            targets,
-            jit=True,
             batch_size=agent_config.diffusion_inference.batch_size,
-        )
+            fn_supports_batch=True,
+        )(targets)
         return downstream_task, targets_dst, reconstructions_dst, beliefs_dst
 
 
@@ -568,7 +566,7 @@ def active_sampling_single_file(
 
     if downstream_task is not None:
         # Load downstream task model and apply to targets and reconstructions for comparison
-        targets_normalized = zea.utils.translate(
+        targets_normalized = zea.ops.translate(
             validation_sample_frames, range_from=dynamic_range, range_to=(-1, 1)
         )
         downstream_task, targets_dst, reconstructions_dst, beliefs_dst = (

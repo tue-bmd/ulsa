@@ -10,18 +10,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 from keras import ops
 from matplotlib.patches import FancyArrow
+
 from zea import log
 from zea.agent.selection import EquispacedLines
 from zea.display import scan_convert_2d, scan_convert_3d
 from zea.internal.cache import cache_output
-from zea.io_lib import matplotlib_figure_to_numpy
+from zea.io_lib import matplotlib_figure_to_numpy, save_to_gif
+from zea.ops import translate
 from zea.tensor_ops import (
-    batched_map,
     interpolate_data,
     split_volume_data_from_axis,
     stack_volume_data_along_axis,
+    vmap,
 )
-from zea.utils import save_to_gif, translate
 from zea.visualize import plot_frustum_vertices, plot_image_grid
 
 TITLE_LOOKUP = {
@@ -187,12 +188,12 @@ def interpolate_volumes(
                     measurement,
                     center_value,
                 )
-                outputs = batched_map(
+                outputs = vmap(
                     func,
-                    measurement,
                     batch_size=batch_size,
-                    jit=False,
-                )
+                    disable_jit=True,
+                    fn_supports_batch=True,
+                )(measurement)
 
             else:
                 measurement = ops.squeeze(measurement, axis=-1)
@@ -702,7 +703,7 @@ def plot_slices_from_3d_volumes(
             # crop and resize frustum image to fit with other images
             frustum_ax.set_position([0, 0, 2, 2])
             frustum_image = matplotlib_figure_to_numpy(
-                frustum_fig # , savefig_kwargs={"dpi": 300, "bbox_inches": "tight"}
+                frustum_fig  # , savefig_kwargs={"dpi": 300, "bbox_inches": "tight"}
             )
 
             background_value = frustum_image[0, 0, 0]

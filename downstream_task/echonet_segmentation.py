@@ -17,8 +17,8 @@ from ulsa.downstream_task import EchoNetSegmentation
 from ulsa.io_utils import map_range
 from zea import Dataset
 from zea.config import Config
-from zea.tensor_ops import batched_map
-from zea.utils import translate
+from zea.ops import translate
+from zea.tensor_ops import vmap
 
 
 def parse_args():
@@ -91,7 +91,9 @@ def main():
         reconstructions = targets.copy()
 
         frames = seg_model.scan_convert_batch(targets)
-        masks = batched_map(seg_model, frames, args.batch_size)
+        masks = vmap(seg_model, batch_size=args.batch_size, fn_supports_batch=True)(
+            frames
+        )
         metadata = {
             "masks": ops.convert_to_numpy(masks),
             "x_scan_converted": ops.convert_to_numpy(ops.squeeze(frames, axis=-1)),

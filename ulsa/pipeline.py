@@ -54,8 +54,9 @@ def make_pipeline(
                 ulsa.ops.ExpandDims(axis=-1),
                 ulsa.ops.TranslateDynamicRange(output_range),
                 *resize(action_selection_shape, output_shape),
-                zea.ops.Clip(
-                    *(output_range if output_range else [])
+                zea.keras_ops.Clip(
+                    x_min=output_range[0] if output_range else None,
+                    x_max=output_range[1] if output_range else None,
                 ),  # for resize and dynamic range clipping
             ],
             with_batch_dim=with_batch_dim,
@@ -80,7 +81,7 @@ def make_pipeline(
                 ulsa.ops.TranslateDynamicRange(output_range),
                 # transpose so that azimuth dimension is on the outside, like a batch.
                 # then we simply apply the 2d DM along all azimuthal angles
-                zea.ops.Transpose((1, 0, 2, 3)),
+                zea.keras_ops.Transpose(axes=(1, 0, 2, 3)),
                 # we do cropping rather than resizing to maintain elevation focusing
                 zea.ops.Lambda(
                     keras.layers.CenterCrop(*action_selection_shape),

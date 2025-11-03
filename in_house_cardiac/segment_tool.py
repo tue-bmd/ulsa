@@ -22,14 +22,14 @@ from zea.internal.viewer import (
 )
 from zea.io_lib import _SUPPORTED_VID_TYPES, load_image, load_video
 from zea.tools.selection_tool import (
-    add_rectangle_from_mask,
-    add_shape_from_mask,
     ask_for_num_selections,
     ask_for_selection_tool,
     ask_save_animation_with_fps,
     interactive_selector,
     interactive_selector_with_plot_and_metric,
     interpolate_masks,
+    plot_rectangle_from_mask,
+    plot_shape_from_mask,
     update_imshow_with_mask,
 )
 
@@ -132,9 +132,9 @@ def main():
                 pos, size = get_matplotlib_figure_props(fig)
 
                 if selector == "rectangle":
-                    add_rectangle_from_mask(axs, mask[0], alpha=0.5)
+                    plot_rectangle_from_mask(axs, mask[0], alpha=0.5)
                 else:
-                    add_shape_from_mask(axs, mask[0], alpha=0.5)
+                    plot_shape_from_mask(axs, mask[0], alpha=0.5)
                 plt.close()
                 selection_masks.append(mask[0])
 
@@ -151,9 +151,9 @@ def main():
         imshow_obj = axs.imshow(images[0], cmap="gray")
 
         if selector == "rectangle":
-            add_rectangle_from_mask(axs, interpolated_masks[0])
+            plot_rectangle_from_mask(axs, interpolated_masks[0])
         else:
-            add_shape_from_mask(axs, interpolated_masks[0], alpha=0.5)
+            plot_shape_from_mask(axs, interpolated_masks[0], alpha=0.5)
 
         filestem = Path(file.parent / f"{file.stem}_{title}_annotations.gif")
         np.save(filestem.with_suffix(".npy"), interpolated_masks)

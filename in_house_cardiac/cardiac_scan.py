@@ -18,7 +18,8 @@ import ulsa.ops
 from active_sampling_temporal import preload_data
 from ulsa.pipeline import make_pipeline
 from zea.display import scan_convert_2d
-from zea.utils import save_to_gif, translate
+from zea.io_lib import save_to_gif
+from zea.ops import translate
 
 
 def cardiac_scan(
