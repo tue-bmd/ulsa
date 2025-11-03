@@ -9,15 +9,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.ndimage
 import yaml
+from keras import ops
 from matplotlib.colors import LinearSegmentedColormap
+
+from ulsa.downstream_task import (
+    DownstreamTask,
+    EchoNetLVHSegmentation,
+    compute_dice_score,
+    downstream_task_registry,
+)
+from zea import Config, log
 from zea.visualize import set_mpl_style
 
-if __name__ == "__main__":
-    sys.path.append("/latent-ultrasound-diffusion")
 
-from benchmark_active_sampling_ultrasound import (
-    extract_sweep_data
-)
 from plotting.plot_utils import ViolinPlotter
 
 STRATEGY_COLORS = {
@@ -68,6 +72,135 @@ AXIS_LABEL_MAP = {
     "n_actions": "# Scan Lines (out of 112)",
     # Add more mappings as needed
 }
+
+
+def extract_sweep_data(
+    sweep_dir: str,
+    keys_to_extract=["mse", "psnr", "dice"],
+    x_axis_key="action_selection.n_actions",
+    strategies_to_plot=None,
+    include_only_these_files=None,
+):
+    """Load all metrics from a sweep directory. Now uses segmentation_mask_targets and segmentation_mask_reconstructions from metrics.npz."""
+    sweep_details_path = os.path.join(sweep_dir, "sweep_details.yaml")
+    if not os.path.exists(sweep_details_path):
+        raise FileNotFoundError(f"Missing sweep_details.yaml in {sweep_dir}")
+
+    sweep_details = Config.from_yaml(sweep_details_path)
+    results = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+
+    for run_dir in sorted(os.listdir(sweep_dir)):
+        run_path = os.path.join(sweep_dir, run_dir)
+        if not os.path.isdir(run_path):
+            continue
+
+        print(f"Processing run: {run_dir}", end="\r")
+
+        config_path = os.path.join(run_path, "config.yaml")
+        metrics_path = os.path.join(run_path, "metrics.npz")
+        filepath_yaml = os.path.join(run_path, "target_filepath.yaml")
+        if not all(
+            os.path.exists(p) for p in [config_path, metrics_path, filepath_yaml]
+        ):
+            continue
+
+        config = Config.from_yaml(config_path)
+        metrics = np.load(metrics_path, allow_pickle=True)
+        target_file = Config.from_yaml(filepath_yaml)["target_filepath"]
+
+        # Optional file filter
+        if (
+            include_only_these_files is not None
+            and target_file not in include_only_these_files
+        ):
+            continue
+
+        x_value = get_config_value(config, x_axis_key)
+        if x_value is None:
+            log.warning(f"Skipping {run_path} due to missing x_axis_key: {x_axis_key}.")
+            continue
+
+        selection_strategy = config.get("action_selection", {}).get(
+            "selection_strategy"
+        )
+        if selection_strategy is None:
+            log.warning(f"Skipping {run_path} due to missing selection_strategy.")
+            continue
+
+        if (
+            strategies_to_plot is not None
+            and selection_strategy not in strategies_to_plot
+        ):
+            continue
+
+        # Extract masks and images for comparison and plotting
+        if (
+            "segmentation_mask_targets" in metrics
+            and "segmentation_mask_reconstructions" in metrics
+        ):
+            # TODO: converting to an array is slow here -- maybe faster way to do it?
+            gt_masks = np.array(metrics[f"segmentation_mask_targets"])
+            pred_masks = np.array(metrics[f"segmentation_mask_reconstructions"])
+            if "dice" in keys_to_extract:
+                dice_score = compute_dice_score(pred_masks, gt_masks)
+                results["dice"][selection_strategy][x_value].append(np.mean(dice_score))
+            elif "heatmap_center_mse" in keys_to_extract:
+                measurement_type = "LVPW"  # TODO: hard coded for now
+                gt_bottom_coords, gt_top_coords = (
+                    EchoNetLVHSegmentation.outputs_to_coordinates(
+                        gt_masks, measurement_type
+                    )
+                )
+                pred_bottom_coords, pred_top_coords = (
+                    EchoNetLVHSegmentation.outputs_to_coordinates(
+                        pred_masks, measurement_type
+                    )
+                )
+                bottom_mean_euclidean_distance = ops.mean(
+                    [
+                        ops.sqrt(
+                            ops.sum((gt_bottom_coords[i] - pred_bottom_coords[i]) ** 2)
+                        )
+                        for i in range(len(gt_bottom_coords))
+                    ]
+                )
+                top_mean_euclidean_distance = ops.mean(
+                    [
+                        ops.sqrt(ops.sum((gt_top_coords[i] - pred_top_coords[i]) ** 2))
+                        for i in range(len(gt_top_coords))
+                    ]
+                )
+                # NOTE: currently taking the mean over both points, but could report both
+                results["heatmap_center_mse"][selection_strategy][x_value].append(
+                    float(
+                        (bottom_mean_euclidean_distance + top_mean_euclidean_distance)
+                        / 2
+                    )
+                )
+            # TODO: implement earth mover distance / mse for logits
+
+            # Store masks and images for plotting
+            results["masks"][selection_strategy][x_value].append(
+                {
+                    "masks": pred_masks,
+                    "x_scan_converted": metrics["reconstructions"],
+                    "run_dir": run_path,
+                    "gt_masks": gt_masks,
+                }
+            )
+
+        # Add other metrics
+        for metric_name in keys_to_extract:
+            if metric_name == "dice":
+                continue  # Already handled above
+            if metric_name not in metrics:
+                continue
+            metric_values = metrics[metric_name]
+            if isinstance(metric_values, np.ndarray) and metric_values.size > 0:
+                sequence_means = np.mean(metric_values, axis=-1)
+                results[metric_name][selection_strategy][x_value].append(sequence_means)
+
+    return results
 
 
 def load_yaml(filepath):
@@ -848,7 +981,9 @@ def plot_strategy_comparison_scatter(
     # Find all x_values present in both strategies
     x_values = sorted(set(x_dict.keys()) & set(y_dict.keys()))
     if not x_values:
-        print(f"No overlapping x_values for {strategy_x} and {strategy_y} in metric '{metric}'")
+        print(
+            f"No overlapping x_values for {strategy_x} and {strategy_y} in metric '{metric}'"
+        )
         return
 
     # For each x_value, plot all samples
@@ -873,9 +1008,18 @@ def plot_strategy_comparison_scatter(
         max_val = max(max(x_samples[:n]), max(y_samples[:n]))
         plt.plot([min_val, max_val], [min_val, max_val], "k--", label="y = x")
 
-        plt.xlabel(x_axis_label or f"{STRATEGY_NAMES.get(strategy_x, strategy_x)} {METRIC_NAMES.get(metric, metric)}")
-        plt.ylabel(y_axis_label or f"{STRATEGY_NAMES.get(strategy_y, strategy_y)} {METRIC_NAMES.get(metric, metric)}")
-        plt.title(plot_title or f"{METRIC_NAMES.get(metric, metric)}: {STRATEGY_NAMES.get(strategy_x, strategy_x)} vs {STRATEGY_NAMES.get(strategy_y, strategy_y)}\n(x_value={x_val})")
+        plt.xlabel(
+            x_axis_label
+            or f"{STRATEGY_NAMES.get(strategy_x, strategy_x)} {METRIC_NAMES.get(metric, metric)}"
+        )
+        plt.ylabel(
+            y_axis_label
+            or f"{STRATEGY_NAMES.get(strategy_y, strategy_y)} {METRIC_NAMES.get(metric, metric)}"
+        )
+        plt.title(
+            plot_title
+            or f"{METRIC_NAMES.get(metric, metric)}: {STRATEGY_NAMES.get(strategy_x, strategy_x)} vs {STRATEGY_NAMES.get(strategy_y, strategy_y)}\n(x_value={x_val})"
+        )
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
@@ -908,12 +1052,10 @@ if __name__ == "__main__":
         # echonetlvh
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/sweep_2025_07_22_105039_845597",
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/sweep_2025_07_22_113842_262566"
-
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25/sweep_2025_07_22_191803_274338",
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25/sweep_2025_07_22_200031_873116"
-
         "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_23_120035_223599",
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_24_110801_857975/"
+        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1/sweep_2025_07_24_110801_857975/",
     ]
     # METRICS = ["mse", "psnr", "dice"]
     METRICS = ["psnr", "heatmap_center_mse"]

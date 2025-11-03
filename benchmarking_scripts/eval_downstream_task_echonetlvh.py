@@ -2,8 +2,6 @@ import os
 import sys
 
 if __name__ == "__main__":
-    sys.path.append("/latent-ultrasound-diffusion")
-    sys.path.append("/latent-ultrasound-diffusion/active_sampling")
     os.environ["KERAS_BACKEND"] = "jax"
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     from zea import init_device
@@ -17,7 +15,6 @@ from zea import Config
 from benchmark_active_sampling_ultrasound import run_benchmark
 
 if __name__ == "__main__":
-
     TARGET_DIR = Path("/mnt/z/Ultrasound-BMd/data/USBMD_datasets/echonetlvh/val")
     SAVE_DIR = Path(
         "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1"
@@ -51,7 +48,5 @@ if __name__ == "__main__":
         },
         limit_n_samples=50,
         image_range=(0, 255),
-        validate_dataset=False
+        validate_dataset=False,
     )
-
-    
