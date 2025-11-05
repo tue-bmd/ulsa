@@ -3,15 +3,15 @@
 import os
 
 os.environ["KERAS_BACKEND"] = "numpy"
-
 import sys
 from pathlib import Path
 
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from keras import ops
-from mpl_toolkits.axes_grid1 import ImageGrid
+from keras.utils import Progbar
 
 sys.path.append("/ulsa")
 
@@ -28,15 +28,14 @@ SUBSAMPLED_PATHS = [
     DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
 ]
 
-N_PATIENTS = 3
-# FIGSIZE = (3.5, 2.0 * N_PATIENTS / 3)  # single column
-FIGSIZE = (7.16, 2.5 * N_PATIENTS / 2)  # two columns
+N_PATIENTS = 4
 FRAME_IDX = 20
 N_ACTIONS = [7, 14, 28]
 METHOD = "greedy_entropy"
 
 
-plt.style.use("styles/ieee-tmi.mplstyle")
+# plt.style.use("styles/ieee-tmi.mplstyle")
+# plt.rcParams.update({"figure.constrained_layout.use": False})
 
 patients = list(random_patients(SUBSAMPLED_PATHS, N_PATIENTS, seed=0))
 results = []
@@ -79,20 +78,28 @@ imshow_kwargs = {
     "vmax": vmax,
     "interpolation": interpolation,
 }
-fig = plt.figure(figsize=FIGSIZE)
-grid = ImageGrid(
-    fig,
-    111,
-    nrows_ncols=(N_PATIENTS, len(columns)),
-    axes_pad=(0.1, 0.1),  # (horizontal, vertical) padding between axes in inches
+
+grid_shape = (N_PATIENTS, len(columns))
+figsize = (7.16, grid_shape[0])  # (width, height) in inches
+wspace = -0.1
+hspace = 0.02
+inner_grid_shape = (2, 2)
+fig = plt.figure(figsize=figsize)
+
+outer = gridspec.GridSpec(
+    *grid_shape,
+    figure=fig,
+    wspace=wspace,
+    hspace=hspace,
+    left=0.0,
+    right=1.0,
+    top=0.93,  # <1.0 to leave space for titles
+    bottom=0.0,
+    width_ratios=[1.5, 1.5, 1.5, 1.0],
 )
-axs = np.array(grid.axes_row)
 
-for idx, column in enumerate(columns):
-    axs[0, idx].set_title(column)
-
-for ax in axs.flat:
-    ax.axis("off")
+print("Generating figure...")
+pbar = Progbar(len(patient_names) * len(N_ACTIONS))
 
 for patient_id, patient_name in enumerate(patient_names):
     patient = patients[patients["name"] == patient_name]
@@ -109,34 +116,15 @@ for patient_id, patient_name in enumerate(patient_names):
             scan_convert_order=scan_convert_order,
             image_range=image_range,
             reconstruction_sharpness_std=reconstruction_sharpness_std,
-            fill_value="white",
+            fill_value="transparent",
         )
-        target = postprocess_agent_results(
-            data["targets"][FRAME_IDX].squeeze(-1),
-            io_config=io_config,
-            scan_convert_order=scan_convert_order,
-            image_range=image_range,
-            fill_value="white",
-        )
-        axs[patient_id, -1].imshow(target, **imshow_kwargs)
-        axs[patient_id, i].imshow(reconstruction, **imshow_kwargs)
 
-
-fig.canvas.draw()  # needed for inset positioning
-
-# INSETS
-for patient_id, patient_name in enumerate(patient_names):
-    patient = patients[patients["name"] == patient_name]
-    for i, n_actions in enumerate(N_ACTIONS):
-        p = patient[patient["n_actions"] == n_actions].iloc[0]
-        path = p["run_dir"] / "metrics.npz"
-        data = np.load(path)
         measurement = postprocess_agent_results(
             data["measurements"][FRAME_IDX].squeeze(-1),
             io_config=io_config,
             scan_convert_order=0,
             image_range=image_range,
-            fill_value="white",
+            fill_value="transparent",
         )
         belief_distributions = data["belief_distributions"][FRAME_IDX].squeeze(-1)
         entropy = ops.squeeze(
@@ -152,15 +140,52 @@ for patient_id, patient_name in enumerate(patient_names):
         # TODO: entropy not normalized to same scale for all images
         entropy = np.clip(entropy, None, np.nanpercentile(entropy, 99.5))
 
-        inset_ax = get_inset(
-            fig, axs[patient_id, i], axs[patient_id, i + 1], entropy.shape, height=0.6
+        inner = gridspec.GridSpecFromSubplotSpec(
+            *inner_grid_shape,
+            subplot_spec=outer[patient_id, i],
+            width_ratios=[2, 1],
+            height_ratios=[1, 1],
+            wspace=wspace * inner_grid_shape[1],
+            hspace=hspace * inner_grid_shape[0],
         )
-        inset_ax.imshow(entropy, cmap="inferno", vmin=0, interpolation=interpolation)
-        # axs[patient_id, 0].imshow(measurement, **imshow_kwargs)
+
+        if patient_id == 0:
+            ax = fig.add_subplot(outer[patient_id, i])
+            ax.axis("off")
+            ax.set_title(f"{n_actions} / 122")
+
+        ax_big = fig.add_subplot(inner[:, 0])
+        ax_big.imshow(reconstruction, **imshow_kwargs)
+        ax_big.axis("off")
+
+        ax_top = fig.add_subplot(inner[0, 1])
+        ax_top.imshow(entropy, cmap="inferno", vmin=0, interpolation=interpolation)
+        ax_top.axis("off")
+
+        ax_bottom = fig.add_subplot(inner[1, 1])
+        ax_bottom.imshow(measurement, **imshow_kwargs)
+        ax_bottom.axis("off")
+
+        pbar.add(1)
+
+    target = postprocess_agent_results(
+        data["targets"][FRAME_IDX].squeeze(-1),
+        io_config=io_config,
+        scan_convert_order=scan_convert_order,
+        image_range=image_range,
+        fill_value="transparent",
+    )
+    target_ax = fig.add_subplot(outer[patient_id, -1])
+    target_ax.imshow(target, **imshow_kwargs)
+    target_ax.axis("off")
+    if patient_id == 0:
+        target_ax.set_title("Target")
+
 
 # exts = [".png", ".pdf"]
 exts = [".png"]
 for ext in exts:
+    print("Saving figure...")
     save_path = f"./qualitative_results_echonet{ext}"
     fig.savefig(save_path, dpi=300)
     print(f"Saved qualitative results to {save_path}")
