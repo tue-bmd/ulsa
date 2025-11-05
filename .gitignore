@@ -12,5 +12,8 @@ users.yaml
 # Ignore everything in the output directory
 output/*
 
+# Ignore wandb outputs
+wandb/
+
 # But not this file
 !output/README.md
