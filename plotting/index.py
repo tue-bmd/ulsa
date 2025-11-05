@@ -75,3 +75,13 @@ def random_patients(sweep_dirs, n_samples: int, seed=42):
     for random_filename in random_filenames:
         sample_rows = data_frame[data_frame["filename"] == random_filename]
         yield sample_rows["run_path"].tolist(), random_filename
+
+
+def load_patients_by_name(sweep_dirs, patient_names: List[str]):
+    generator = index_sweep_data(sweep_dirs)
+
+    data_frame = pd.DataFrame(generator, columns=["run_path", "filepath", "filename"])
+
+    for patient_name in patient_names:
+        sample_rows = data_frame[data_frame["filename"] == patient_name]
+        yield sample_rows["run_path"].tolist(), patient_name

@@ -15,7 +15,7 @@ from keras.utils import Progbar
 
 sys.path.append("/ulsa")
 
-from plotting.index import random_patients
+from plotting.index import load_patients_by_name, random_patients
 from plotting.plot_utils import get_inset
 from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import color_to_value, postprocess_agent_results
@@ -37,7 +37,24 @@ METHOD = "greedy_entropy"
 # plt.style.use("styles/ieee-tmi.mplstyle")
 # plt.rcParams.update({"figure.constrained_layout.use": False})
 
-patients = list(random_patients(SUBSAMPLED_PATHS, N_PATIENTS, seed=0))
+# Loading same randomly selected patients as before
+patients = list(
+    load_patients_by_name(
+        SUBSAMPLED_PATHS,
+        [
+            "0X1870E70784D77469.hdf5",
+            "0X18B3A9EB362299CF.hdf5",
+            "0X19DF9461CA5F498F.hdf5",
+        ],
+    )
+)
+
+# If not enough patients, sample some more randomly
+if len(patients) < N_PATIENTS:
+    patients += list(
+        random_patients(SUBSAMPLED_PATHS, len(patients) - N_PATIENTS, seed=0)
+    )
+
 results = []
 for run_dirs, name in patients:
     for run_dir in run_dirs:
