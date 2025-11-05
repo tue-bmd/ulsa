@@ -34,8 +34,8 @@ N_ACTIONS = [7, 14, 28]
 METHOD = "greedy_entropy"
 
 
-# plt.style.use("styles/ieee-tmi.mplstyle")
-# plt.rcParams.update({"figure.constrained_layout.use": False})
+plt.style.use("styles/ieee-tmi.mplstyle")
+plt.rcParams.update({"figure.constrained_layout.use": False})
 
 # Loading same randomly selected patients as before
 patients = list(
@@ -234,10 +234,9 @@ for patient_id, i, reconstruction, measurement, entropy, psnr in results:
     pbar.add(1)
 
 
-# exts = [".png", ".pdf"]
-exts = [".png"]
+exts = [".png", ".pdf"]
 for ext in exts:
     print("Saving figure...")
     save_path = f"./qualitative_results_echonet{ext}"
-    fig.savefig(save_path, dpi=300)
+    fig.savefig(save_path, dpi=600)
     print(f"Saved qualitative results to {save_path}")
