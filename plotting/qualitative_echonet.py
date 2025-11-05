@@ -28,7 +28,7 @@ SUBSAMPLED_PATHS = [
     DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
 ]
 
-N_PATIENTS = 4
+N_PATIENTS = 3
 FRAME_IDX = 20
 N_ACTIONS = [7, 14, 28]
 METHOD = "greedy_entropy"
@@ -151,7 +151,6 @@ for patient_id, patient_name in enumerate(patient_names):
             fill_value="transparent",
         )
         # TODO: entropy not normalized to same scale for all images
-        # entropy = np.clip(entropy, None, np.nanpercentile(entropy, 99.5))
         results.append((patient_id, i, reconstruction, measurement, entropy, psnr))
 
     target = postprocess_agent_results(
@@ -198,6 +197,7 @@ for patient_id, i, reconstruction, measurement, entropy, psnr in results:
         transform=ax_big.transAxes,
         fontsize=7,
         rotation=45,
+        color="gray",
     )
 
     ax_top = fig.add_subplot(inner[0, 1])
