@@ -32,10 +32,11 @@ N_PATIENTS = 3
 FRAME_IDX = 20
 N_ACTIONS = [7, 14, 28]
 METHOD = "greedy_entropy"
+QUICK_MODE = False
 
-
-plt.style.use("styles/ieee-tmi.mplstyle")
-plt.rcParams.update({"figure.constrained_layout.use": False})
+if not QUICK_MODE:
+    plt.style.use("styles/ieee-tmi.mplstyle")
+    plt.rcParams.update({"figure.constrained_layout.use": False})
 
 # Loading same randomly selected patients as before
 patients = list(
@@ -154,13 +155,6 @@ for patient_id, patient_name in enumerate(patient_names):
         entropy = ops.squeeze(
             pixelwise_entropy(belief_distributions[None], entropy_sigma=255), axis=0
         )
-        entropy = postprocess_agent_results(
-            entropy,
-            io_config=io_config,
-            scan_convert_order=1,
-            image_range=[0, entropy.max()],
-            fill_value="transparent",
-        )
         # TODO: entropy not normalized to same scale for all images
         results.append((patient_id, i, reconstruction, measurement, entropy, psnr))
 
@@ -203,12 +197,18 @@ for patient_id, i, reconstruction, measurement, entropy, psnr in results:
         0.0,  # left=0.0
         0.5,  # upper=1.0
         f"{psnr:.1f} dB",
-        # horizontalalignment="center",
-        # verticalalignment="center",
         transform=ax_big.transAxes,
         fontsize=7,
         rotation=45,
         color="gray",
+    )
+
+    entropy = postprocess_agent_results(
+        entropy,
+        io_config=io_config,
+        scan_convert_order=1,
+        image_range=[0, max_percentile],
+        fill_value="transparent",
     )
 
     ax_top = fig.add_subplot(inner[0, 1])
@@ -216,7 +216,7 @@ for patient_id, i, reconstruction, measurement, entropy, psnr in results:
         entropy,
         cmap="inferno",
         vmin=0,
-        vmax=max_percentile,
+        vmax=255,
         interpolation=interpolation,
     )
     ax_top.axis("off")
@@ -227,10 +227,14 @@ for patient_id, i, reconstruction, measurement, entropy, psnr in results:
 
     pbar.add(1)
 
-
-exts = [".png", ".pdf"]
+if not QUICK_MODE:
+    exts = [".png", ".pdf"]
+    dpi = 600
+else:
+    exts = [".png"]
+    dpi = 150
 for ext in exts:
     print("Saving figure...")
     save_path = f"./qualitative_results_echonet{ext}"
-    fig.savefig(save_path, dpi=600)
+    fig.savefig(save_path, dpi=dpi)
     print(f"Saved qualitative results to {save_path}")
