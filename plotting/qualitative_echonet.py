@@ -42,9 +42,9 @@ patients = list(
     load_patients_by_name(
         SUBSAMPLED_PATHS,
         [
-            "0X1870E70784D77469.hdf5",
-            "0X18B3A9EB362299CF.hdf5",
-            "0X19DF9461CA5F498F.hdf5",
+            "0X15C904A855E4FF2B.hdf5",
+            "0X15BA82A1F6BF8B6.hdf5",
+            "0X33646D65192ECB1B.hdf5",
         ],
     )
 )
