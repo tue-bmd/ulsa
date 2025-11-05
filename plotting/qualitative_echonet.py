@@ -74,12 +74,6 @@ patients = pd.DataFrame(results)
 patient_names = patients["name"].unique()
 
 
-columns = [
-    # "Acquisitions",
-    *[f"{n} / 122" for n in N_ACTIONS],
-    # "Entropy",
-    "Target",
-]
 interpolation = "nearest"
 vmin = 0
 vmax = 255
@@ -96,7 +90,7 @@ imshow_kwargs = {
     "interpolation": interpolation,
 }
 
-grid_shape = (N_PATIENTS, len(columns))
+grid_shape = (N_PATIENTS, 4)
 figsize = (7.16, grid_shape[0])  # (width, height) in inches
 wspace = 0.04
 wspace_inner = -0.2
@@ -131,7 +125,7 @@ for patient_id, patient_name in enumerate(patient_names):
         if patient_id == 0:
             ax = fig.add_subplot(outer[patient_id, i])
             ax.axis("off")
-            ax.set_title(f"{n_actions} / 122")
+            ax.set_title(f"{n_actions} / 112")
 
         psnr = data["psnr"][FRAME_IDX].item()
 
