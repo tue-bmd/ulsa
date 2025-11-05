@@ -514,14 +514,16 @@ def get_inset(
     ax0: plt.Axes,
     ax1: plt.Axes,
     shape: tuple,
-    height: float = 0.2,
-    y_offset: float = 0.05,
+    height: float = 0.5,  # quantile of ax height
+    y_offset: float = 0.1,  # quantile offset
 ) -> plt.Axes:
     """
     Add an inset image to a matplotlib ImageGrid plot.
 
     Example:
     ```python
+    from mpl_toolkits.axes_grid1 import ImageGrid
+
     fig = plt.figure()
     axs = ImageGrid(fig, 111, nrows_ncols=(1, 2), axes_pad=0.1)
     axs[0].imshow(targets, **kwargs)
@@ -532,17 +534,22 @@ def get_inset(
     inset_ax.imshow(measurements, **kwargs)
     ```
     """
-    aspect_ratio = shape[1] / shape[0]
-    w = height * aspect_ratio
+    assert 0 < height <= 1, "height must be in (0, 1]"
 
     axpos0 = ax0.get_position()
     axpos1 = ax1.get_position()
+    axheight = axpos0.ymax - axpos0.ymin
+
+    absolute_height = height * axheight
+    aspect_ratio = shape[1] / shape[0]
+    w = absolute_height * aspect_ratio
 
     x_center = (axpos0.xmin + axpos0.xmax + axpos1.xmin + axpos1.xmax) / 4
     x = x_center - w / 2
-    y = axpos0.ymax - 2 * height + y_offset
+    y = axpos0.ymax - absolute_height + y_offset * axheight
 
-    inset_ax = fig.add_axes([x, y, w, height])
+    inset_ax = fig.add_axes([x, y, w, absolute_height])
+    inset_ax.axis("off")
     return inset_ax
 
 
