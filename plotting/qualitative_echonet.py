@@ -18,7 +18,7 @@ sys.path.append("/ulsa")
 from plotting.index import random_patients
 from plotting.plot_utils import get_inset
 from ulsa.entropy import pixelwise_entropy
-from ulsa.io_utils import postprocess_agent_results
+from ulsa.io_utils import color_to_value, postprocess_agent_results
 from zea import Config
 
 DATA_ROOT = "/mnt/z/usbmd/Wessel/"
@@ -81,8 +81,10 @@ imshow_kwargs = {
 
 grid_shape = (N_PATIENTS, len(columns))
 figsize = (7.16, grid_shape[0])  # (width, height) in inches
-wspace = -0.1
-hspace = 0.02
+wspace = 0.04
+wspace_inner = -0.2
+hspace = 0.07
+hspace_inner = 0.02
 inner_grid_shape = (2, 2)
 fig = plt.figure(figsize=figsize)
 
@@ -101,6 +103,7 @@ outer = gridspec.GridSpec(
 print("Generating figure...")
 pbar = Progbar(len(patient_names) * len(N_ACTIONS))
 
+results = []
 for patient_id, patient_name in enumerate(patient_names):
     patient = patients[patients["name"] == patient_name]
     for i, n_actions in enumerate(N_ACTIONS):
@@ -108,7 +111,12 @@ for patient_id, patient_name in enumerate(patient_names):
         path = p["run_dir"] / "metrics.npz"
         data = np.load(path)
 
-        psnr = data["psnr"][FRAME_IDX].item()  # TODO: add to plot
+        if patient_id == 0:
+            ax = fig.add_subplot(outer[patient_id, i])
+            ax.axis("off")
+            ax.set_title(f"{n_actions} / 122")
+
+        psnr = data["psnr"][FRAME_IDX].item()
 
         reconstruction = postprocess_agent_results(
             data["reconstructions"][FRAME_IDX].squeeze(-1),
@@ -119,8 +127,13 @@ for patient_id, patient_name in enumerate(patient_names):
             fill_value="transparent",
         )
 
+        measurement = data["measurements"][FRAME_IDX].squeeze(-1)
+        mask = data["masks"][FRAME_IDX].squeeze(-1)
+        no_measurement_color = "gray"
+        no_measurement_color = color_to_value(image_range, no_measurement_color)
+        measurement = np.where(mask, measurement, no_measurement_color)
         measurement = postprocess_agent_results(
-            data["measurements"][FRAME_IDX].squeeze(-1),
+            measurement,
             io_config=io_config,
             scan_convert_order=0,
             image_range=image_range,
@@ -138,35 +151,8 @@ for patient_id, patient_name in enumerate(patient_names):
             fill_value="transparent",
         )
         # TODO: entropy not normalized to same scale for all images
-        entropy = np.clip(entropy, None, np.nanpercentile(entropy, 99.5))
-
-        inner = gridspec.GridSpecFromSubplotSpec(
-            *inner_grid_shape,
-            subplot_spec=outer[patient_id, i],
-            width_ratios=[2, 1],
-            height_ratios=[1, 1],
-            wspace=wspace * inner_grid_shape[1],
-            hspace=hspace * inner_grid_shape[0],
-        )
-
-        if patient_id == 0:
-            ax = fig.add_subplot(outer[patient_id, i])
-            ax.axis("off")
-            ax.set_title(f"{n_actions} / 122")
-
-        ax_big = fig.add_subplot(inner[:, 0])
-        ax_big.imshow(reconstruction, **imshow_kwargs)
-        ax_big.axis("off")
-
-        ax_top = fig.add_subplot(inner[0, 1])
-        ax_top.imshow(entropy, cmap="inferno", vmin=0, interpolation=interpolation)
-        ax_top.axis("off")
-
-        ax_bottom = fig.add_subplot(inner[1, 1])
-        ax_bottom.imshow(measurement, **imshow_kwargs)
-        ax_bottom.axis("off")
-
-        pbar.add(1)
+        # entropy = np.clip(entropy, None, np.nanpercentile(entropy, 99.5))
+        results.append((patient_id, i, reconstruction, measurement, entropy, psnr))
 
     target = postprocess_agent_results(
         data["targets"][FRAME_IDX].squeeze(-1),
@@ -180,6 +166,55 @@ for patient_id, patient_name in enumerate(patient_names):
     target_ax.axis("off")
     if patient_id == 0:
         target_ax.set_title("Target")
+
+max_percentile = -np.inf
+for result in results:
+    patient_id, i, reconstruction, measurement, entropy, psnr = result
+    curr_percentile = np.nanpercentile(entropy, 98.5)
+    print(curr_percentile)
+    max_percentile = max(max_percentile, curr_percentile)
+print(f"Max: {max_percentile}")
+
+
+for patient_id, i, reconstruction, measurement, entropy, psnr in results:
+    inner = gridspec.GridSpecFromSubplotSpec(
+        *inner_grid_shape,
+        subplot_spec=outer[patient_id, i],
+        width_ratios=[2, 1],
+        height_ratios=[1, 1],
+        wspace=wspace_inner,
+        hspace=hspace_inner * inner_grid_shape[0],
+    )
+
+    ax_big = fig.add_subplot(inner[:, 0])
+    ax_big.imshow(reconstruction, **imshow_kwargs)
+    ax_big.axis("off")
+    ax_big.text(
+        0.0,  # left=0.0
+        0.5,  # upper=1.0
+        f"{psnr:.1f} dB",
+        # horizontalalignment="center",
+        # verticalalignment="center",
+        transform=ax_big.transAxes,
+        fontsize=7,
+        rotation=45,
+    )
+
+    ax_top = fig.add_subplot(inner[0, 1])
+    ax_top.imshow(
+        entropy,
+        cmap="inferno",
+        vmin=0,
+        vmax=max_percentile,
+        interpolation=interpolation,
+    )
+    ax_top.axis("off")
+
+    ax_bottom = fig.add_subplot(inner[1, 1])
+    ax_bottom.imshow(measurement, **imshow_kwargs)
+    ax_bottom.axis("off")
+
+    pbar.add(1)
 
 
 # exts = [".png", ".pdf"]
