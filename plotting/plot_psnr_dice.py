@@ -66,6 +66,8 @@ METRIC_NAMES = {
     "psnr": "PSNR (→) [dB]",
     "ssim": "SSIM (→) [-]",
     "lpips": "LPIPS (←) [-]",
+    "mse": "MSE (←) [-]",  # on [0, 1] scale
+    "rmse": "RMSE (←) [-]",  # on [0, 1] scale
 }
 
 # Add this near the top of the file where other constants are defined
@@ -116,7 +118,13 @@ def df_to_dict(df: pd.DataFrame, metric_name: str, filter_nan=True):
     for _, row in df.iterrows():
         strategy = row["selection_strategy"]
         x_value = row["x_value"]
-        value = row[metric_name]
+        if metric_name.lower() == "rmse":
+            # scale [0, 255] to [0, 1]
+            value = np.sqrt(row["mse"] / (255 * 255))
+        elif metric_name.lower() == "mse":
+            value = row["mse"] / (255 * 255)
+        else:
+            value = row[metric_name]
         if filter_nan and (value is None or np.isnan(value).any()):
             continue
 
@@ -153,41 +161,6 @@ if __name__ == "__main__":
         scatter_kwargs={"alpha": 0.01, "s": 4},
         context="styles/ieee-tmi.mplstyle",
     )
-
-    # DICE plot
-    metric_name = "dice"
-    x_values = [2, 4, 7, 14]
-    formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
-    plotter.plot(
-        df_to_dict(combined_results, metric_name),
-        save_path=f"./echonet_{metric_name}_violin_plot.pdf",
-        x_label_values=x_values,
-        metric_name=formatted_metric_name,
-        groups_to_plot=STRATEGIES_TO_PLOT,
-        ylim=[0.58, 1.02],
-        legend_kwargs={
-            "loc": "outside upper center",
-            "ncol": 3,
-            "frameon": False,
-        },
-    )
-
-    # Individual metrics plots
-    x_values = [4, 7, 14, 28]
-    for metric_name in ["psnr", "lpips", "ssim"]:
-        formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
-        for ext in [".pdf", ".png"]:
-            plotter.plot(
-                df_to_dict(combined_results, metric_name),
-                save_path=f"./{metric_name}_violin_plot{ext}",
-                x_label_values=x_values,
-                metric_name=formatted_metric_name,
-                legend_kwargs={
-                    "loc": "outside upper center",
-                    "ncol": 3,
-                    "frameon": False,
-                },
-            )
 
     # Combined LPIPS and PSNR
     plt.close("all")
@@ -232,6 +205,43 @@ if __name__ == "__main__":
             plt.savefig(save_path)
             log.info(
                 f"Saved combined LPIPS and PSNR violin plot to {log.yellow(save_path)}"
+            )
+
+    # DICE plot
+    metric_name = "dice"
+    x_values = [2, 4, 7, 14]
+    formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+    plotter.plot(
+        df_to_dict(combined_results, metric_name),
+        save_path=f"./echonet_{metric_name}_violin_plot.pdf",
+        x_label_values=x_values,
+        metric_name=formatted_metric_name,
+        groups_to_plot=STRATEGIES_TO_PLOT,
+        ylim=[0.58, 1.02],
+        legend_kwargs={
+            "loc": "outside upper center",
+            "ncol": 3,
+            "frameon": False,
+        },
+        order_by=order_by,
+    )
+
+    # Individual metrics plots
+    x_values = [4, 7, 14, 28]
+    for metric_name in ["psnr", "lpips", "ssim", "rmse"]:
+        formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+        for ext in [".pdf", ".png"]:
+            plotter.plot(
+                df_to_dict(combined_results, metric_name),
+                save_path=f"./{metric_name}_violin_plot{ext}",
+                x_label_values=x_values,
+                metric_name=formatted_metric_name,
+                legend_kwargs={
+                    "loc": "outside upper center",
+                    "ncol": 3,
+                    "frameon": False,
+                },
+                order_by=order_by,
             )
 
     # Print results in a table format
