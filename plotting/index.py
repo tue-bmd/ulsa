@@ -1,6 +1,5 @@
 import concurrent.futures
 import os
-import pickle
 from pathlib import Path
 from typing import List
 
@@ -9,23 +8,16 @@ import pandas as pd
 import tqdm
 
 from zea import Config
-from zea.internal.cache import ZEA_CACHE_DIR
-from zea.internal.core import hash_elements
+from zea.internal.cache import cache_output
 
 DATA_ROOT = "/mnt/z/usbmd/Wessel/"
 DATA_FOLDER = Path(DATA_ROOT) / "eval_echonet_dynamic_test_set"
 
 
-def index_sweep_data(sweep_dirs: str | List[str], cache=True):
+@cache_output(verbose=True)
+def index_sweep_data(sweep_dirs: str | List[str]):
     if isinstance(sweep_dirs, str):
         sweep_dirs = [sweep_dirs]
-
-    hashed = hash_elements(sweep_dirs)
-    cache_path = ZEA_CACHE_DIR / f".index_sweep_data_{hashed}.pkl"
-    if cache and cache_path.exists():
-        print("Loading cached sweep index...")
-        with open(cache_path, "rb") as f:
-            return pickle.load(f)
 
     print("Discovering runs in sweep directories...")
     run_dirs = []
@@ -56,10 +48,6 @@ def index_sweep_data(sweep_dirs: str | List[str], cache=True):
             tqdm.tqdm(executor.map(process_run, run_dirs), total=len(run_dirs))
         )
         lookup_table = [r for r in results if r is not None]
-
-    if cache:
-        with open(cache_path, "wb") as f:
-            pickle.dump(lookup_table, f)
 
     return lookup_table
 
