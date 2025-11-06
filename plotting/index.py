@@ -6,7 +6,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 import scipy
-import tqdm
+from tqdm import tqdm
 
 from benchmark_active_sampling_ultrasound import get_config_value
 from ulsa.downstream_task import compute_dice_score
@@ -47,9 +47,7 @@ def index_sweep_data(sweep_dirs: str | List[str]):
     lookup_table = []
     print("Indexing runs...")
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        results = list(
-            tqdm.tqdm(executor.map(process_run, run_dirs), total=len(run_dirs))
-        )
+        results = list(tqdm(executor.map(process_run, run_dirs), total=len(run_dirs)))
         lookup_table = [r for r in results if r is not None]
 
     return lookup_table
@@ -144,6 +142,7 @@ def extract_run_dir(
     )
 
     # Use in-file ground truth and predicted masks for DICE
+    too_many_blobs = None
     if (
         "segmentation_mask_targets" in metrics
         and "segmentation_mask_reconstructions" in metrics

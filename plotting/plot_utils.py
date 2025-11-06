@@ -47,16 +47,35 @@ class ViolinPlotter:
         self.legend_bbox = legend_bbox
         self.figsize = figsize
         self.context = context
-        if scatter_kwargs is None:
-            scatter_kwargs = {
-                "alpha": 0.05,
-                "s": 7,
-            }
         self.scatter_kwargs = scatter_kwargs
         self.violin_kwargs = violin_kwargs or {
             "showmeans": True,
             "showextrema": False,
         }
+
+        # Given points
+        x = np.array([1, 500, 1e12])  # 1e12 as a proxy for infinity
+        y = np.array([0.9, 0.01, 1e-9])
+
+        # Assume c = 0 (since at infinity, alpha = 0)
+        # So: alpha = a / (n_points ** b)
+        # Take logs to linearize: log(alpha) = log(a) - b*log(n_points)
+        log_x = np.log(x)
+        log_y = np.log(y)
+        A = np.vstack([np.ones_like(log_x), -log_x]).T
+        sol, _, _, _ = np.linalg.lstsq(A, log_y, rcond=None)
+        log_a, b = sol
+        a = np.exp(log_a)
+
+        def alpha_func(n):
+            return a / (n**b)
+
+        self._scale_alpha_func = alpha_func
+
+    def _get_scatterer_kwargs(self, n_points):
+        if self.scatter_kwargs is not None:
+            return self.scatter_kwargs
+        return {"alpha": self._scale_alpha_func(n_points), "s": 4}
 
     def get_group_colors(self, keys):
         """
@@ -265,7 +284,7 @@ class ViolinPlotter:
                         [pos] * len(data),
                         data,
                         color=group_color,
-                        **self.scatter_kwargs,
+                        **self._get_scatterer_kwargs(len(data)),
                     )
 
                 # Add legend entry

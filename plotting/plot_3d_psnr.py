@@ -22,9 +22,8 @@ from plotting.plot_psnr_dice import (
     STRATEGY_COLORS,
     STRATEGY_NAMES,
     df_to_dict,
-    extract_and_combine_sweep_data,
+    extract_sweep_data,
     get_axis_label,
-    sort_by_names,
 )
 from plotting.plot_utils import OverlappingHistogramPlotter, ViolinPlotter
 
@@ -38,34 +37,27 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    TEMP_FILE = Path("/tmp/plot_3d_psnr.pkl")
-
     # Define your sweep paths here
     SWEEPS = [
         # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_07_30_075551_576866",
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_08_05_135605_502495",
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_08_08_073153_126915",
+        "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_08_05_135605_502495",
+        "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_08_08_073153_126915",
     ]
 
     keys_to_extract = ["psnr", "lpips"]
 
-    if TEMP_FILE.exists():
-        print(f"Loading existing combined results from {str(TEMP_FILE)}")
-        combined_results = pd.read_pickle(TEMP_FILE)
-    else:
-        combined_results = extract_and_combine_sweep_data(
-            SWEEPS,
-            keys_to_extract=keys_to_extract,
-            x_axis_key=args.x_axis,
-        )
-        combined_results.to_pickle(TEMP_FILE)
+    combined_results = extract_sweep_data(
+        SWEEPS,
+        keys_to_extract=keys_to_extract,
+        x_axis_key=args.x_axis,
+    )
 
     plotter = ViolinPlotter(
         xlabel="# Elevation Planes (out of 48)",
         group_names=STRATEGY_NAMES,
         group_colors=STRATEGY_COLORS,
         legend_loc="top",
-        scatter_kwargs={"alpha": 0.05, "s": 7},
+        # scatter_kwargs={"alpha": 0.05, "s": 7},
         context="styles/ieee-tmi.mplstyle",
     )
 
@@ -97,7 +89,7 @@ if __name__ == "__main__":
         xlabel=get_axis_label(args.x_axis),
         group_names=STRATEGY_NAMES,
         legend_loc="top",
-        scatter_kwargs={"alpha": 0.01, "s": 4},
+        # scatter_kwargs={"alpha": 0.01, "s": 4},
         context="styles/ieee-tmi.mplstyle",
     )
     plt.close("all")
