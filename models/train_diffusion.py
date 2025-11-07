@@ -22,12 +22,13 @@ import json
 
 import keras
 import tensorflow as tf
+from agent_callback import AgentCallback
 from keras import ops
 from keras.callbacks import Callback
 
 import wandb
 from wandb.integration.keras import WandbMetricsLogger
-from zea import Config, set_data_paths
+from zea import Config, Dataset, set_data_paths
 from zea.backend.tensorflow.dataloader import make_dataloader
 from zea.io_lib import load_image, save_to_gif
 from zea.models.base import BaseModel
@@ -315,6 +316,7 @@ def train_ddim(
             min_signal_rate=config.sampling.min_signal_rate,
             max_signal_rate=config.sampling.max_signal_rate,
             network_kwargs=config.model.get("network_kwargs", {}),
+            ema_val=config.optimization.get("ema_val", 0.999),
             guidance="dps",
             operator="inpainting",
         )
@@ -335,19 +337,19 @@ def train_ddim(
             config.optimization.get("skip_mismatch", False),
         )
 
-    checkpoint_path = Path(run_dir) / "checkpoints"
-    checkpoint_path.mkdir(exist_ok=True)
+    checkpoint_dir = Path(run_dir) / "checkpoints"
+    checkpoint_dir.mkdir(exist_ok=True)
 
     # save model architecture to run_dir/checkpoints/model.json
     # also includes the compile_config for optimizer and loss details
-    save_model_json(model, run_dir / "config.json")
+    save_model_json(model, checkpoint_dir / "config.json")
 
     # save the best model
-    checkpoint_file = str(
-        checkpoint_path / (str(model.get_config()["name"]) + "_{epoch}.weights.h5")
+    checkpoint_path = str(
+        checkpoint_dir / (str(model.get_config()["name"]) + "_{epoch}.weights.h5")
     )
     checkpoint_callback = keras.callbacks.ModelCheckpoint(
-        filepath=checkpoint_file,
+        filepath=checkpoint_path,
         save_weights_only=config.model.get("save_weights_only", True),
         monitor="i_loss",
         mode="min",
@@ -390,6 +392,20 @@ def train_ddim(
         StatefulProgbarLogger(),
     ]
 
+    if args.agent_callback:
+        agent_callback = AgentCallback(
+            args.agent_config,
+            dataset=Dataset.from_config(
+                config.data.val_folder.replace("{data_root}/", ""),
+                config.dataloader.key,
+                user=config.user,
+            ),
+            dynamic_range=config.dataloader.image_range,
+            save_dir=run_dir / "agent",
+            wandb_log=config.wandb,
+        )
+        callbacks += [agent_callback]
+
     if config.wandb:
         callbacks += [WandbMetricsLogger()]
     if "scheduler" in config.optimization:
@@ -415,12 +431,12 @@ def train_ddim(
     try:
         log.info("Trying to load model from checkpoint...")
         _ = DiffusionModel.from_checkpoint(
-            checkpoint_file.format(epoch=num_epochs),
+            checkpoint_path.format(epoch=num_epochs),
             skip_mismatch=config.optimization.get("skip_mismatch", False),
         )
     except Exception as e:
         log.warning(
-            f"Could not load model from checkpoint: {checkpoint_file.format(epoch=num_epochs)}. "
+            f"Could not load model from checkpoint: {checkpoint_path.format(epoch=num_epochs)}. "
             f"Error: {e}. Please check the checkpoint file."
         )
         pass
@@ -472,14 +488,28 @@ def parse_args():
         action="store_true",
         help="Whether or not to run the agent callback at the end of each epoch",
     )
+    parser.add_argument(
+        "--agent_config",
+        type=str,
+        default=None,
+        help="The agent_config to user for agent_callback. Must be specified if agent_callback is true.",
+    )
     return parser.parse_args()
+
+
+def validate_args(args):
+    assert not (args.agent_callback and args.agent_config is None), (
+        "An agent_config must be specified in order to user agent_callback."
+    )
 
 
 if __name__ == "__main__":
     # Load training config, args and data paths
     args = parse_args()
+    validate_args(args)
     data_paths = set_data_paths("users.yaml", local=False)
     training_config = Config.from_yaml(args.config)
+    training_config.user = {"data_root": data_paths["data_root"]}
 
     keras.utils.set_random_seed(training_config.seed)
     seed_gen = keras.random.SeedGenerator(training_config.seed)
