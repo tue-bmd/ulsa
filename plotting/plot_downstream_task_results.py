@@ -209,41 +209,6 @@ def load_yaml(filepath):
         return yaml.safe_load(f)
 
 
-def get_ground_truth_masks(fully_observed_path):
-    """Build dictionary mapping target filepaths to ground truth masks."""
-    gt_masks = {}
-
-    for run_dir in sorted(os.listdir(fully_observed_path)):
-        run_path = os.path.join(fully_observed_path, run_dir)
-        if not os.path.isdir(run_path):
-            continue
-
-        filepath_yaml = os.path.join(run_path, "target_filepath.yaml")
-        metrics_path = os.path.join(run_path, "metrics.npz")
-
-        if not (os.path.exists(filepath_yaml) and os.path.exists(metrics_path)):
-            continue
-
-        target_file = load_yaml(filepath_yaml)["target_filepath"]
-
-        # Load ground truth masks and corresponding images
-        metrics = np.load(metrics_path, allow_pickle=True)
-
-        # Create a dictionary for this sequence containing both masks and images
-        metadata = metrics["metadata"].item()
-        sequence_data = {
-            "masks": [mask[None] for mask in metadata["masks"]],
-            "x_scan_converted": [
-                x[None] for x in metadata["x_scan_converted"][..., None]
-            ],
-            "run_dir": Path(fully_observed_path) / run_dir,
-        }
-
-        gt_masks[target_file] = sequence_data
-
-    return gt_masks
-
-
 def filter_gt_masks_by_blobs(gt_masks, max_blobs=1, max_bad_frames=5, verbose=True):
     """
     Remove ground truth sequences where the number of blobs in the mask exceeds max_blobs

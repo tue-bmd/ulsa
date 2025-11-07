@@ -9,12 +9,11 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd  # pip install pandas
-import scipy.ndimage
+import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
-from zea import Config, init_device, log
+from zea import init_device, log
 
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
@@ -22,13 +21,13 @@ if __name__ == "__main__":
     sys.path.append("/ulsa")
 
 
-from benchmark_active_sampling_ultrasound import compute_dice_score, get_config_value
+from plotting.index import extract_sweep_data
 from plotting.plot_utils import ViolinPlotter, natural_sort
 
-DATA_ROOT = "/mnt/z/prjs0966"
-DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
-# DATA_ROOT = "/mnt/z/usbmd/Wessel/"
-# DATA_FOLDER = Path(DATA_ROOT) / "eval_echonet_dynamic_test_set"
+# DATA_ROOT = "/mnt/z/prjs0966"
+# DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
+DATA_ROOT = "/mnt/z/usbmd/Wessel/"
+DATA_FOLDER = Path(DATA_ROOT) / "eval_echonet_dynamic_test_set"
 SUBSAMPLED_PATHS = [
     DATA_FOLDER / "sharding_sweep_2025-08-05_14-35-11",
     DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
@@ -67,6 +66,8 @@ METRIC_NAMES = {
     "psnr": "PSNR (→) [dB]",
     "ssim": "SSIM (→) [-]",
     "lpips": "LPIPS (←) [-]",
+    "mse": "MSE (←) [-]",  # on [0, 1] scale
+    "rmse": "RMSE (←) [-]",  # on [0, 1] scale
 }
 
 # Add this near the top of the file where other constants are defined
@@ -76,183 +77,19 @@ AXIS_LABEL_MAP = {
 }
 
 
-def mask_has_too_many_blobs(mask_sequence, max_blobs=1, max_bad_frames=5):
-    """
-    Returns True if the mask sequence has more than max_blobs in more than max_bad_frames.
-    mask_sequence: np.ndarray or list, shape (T, H, W) or (T, H, W, 1) or list of (H, W)
-    """
-    if isinstance(mask_sequence, np.ndarray):
-        if mask_sequence.ndim == 4 and mask_sequence.shape[-1] == 1:
-            mask_sequence = [
-                mask_sequence[t, ..., 0] for t in range(mask_sequence.shape[0])
-            ]
-        elif mask_sequence.ndim == 3:
-            mask_sequence = [mask_sequence[t] for t in range(mask_sequence.shape[0])]
-        else:
-            mask_sequence = [mask_sequence]
-    bad_frame_count = 0
-    for mask in mask_sequence:
-        mask_arr = np.squeeze(mask)
-        labeled, num_blobs = scipy.ndimage.label(mask_arr > 0)
-        if num_blobs > max_blobs:
-            bad_frame_count += 1
-    return bad_frame_count > max_bad_frames
-
-
-def extract_sweep_data(
-    sweep_dir: str,
-    keys_to_extract=["mse", "psnr"],
-    x_axis_key="action_selection.n_actions",
-    strategies_to_plot=None,
-    include_only_these_files=None,
-    ef_lookup=None,
-    max_blobs=1,
-    max_bad_frames=5,
-):
-    """Load all the metrics from the run_benchmark function, using in-file ground truth masks."""
-
-    results = []
-    unique_files_skipped = set({})
-
-    # Loop over runs in the sweep directory
-    for run_dir in sorted(os.listdir(sweep_dir)):
-        run_path = os.path.join(sweep_dir, run_dir)
-        if not os.path.isdir(run_path):
-            continue
-
-        print(f"Processing run: {run_dir}", end="\r")
-
-        config_path = os.path.join(run_path, "config.yaml")
-        metrics_path = os.path.join(run_path, "metrics.npz")
-        filepath_yaml = os.path.join(run_path, "target_filepath.yaml")
-        if not all(
-            os.path.exists(p) for p in [config_path, metrics_path, filepath_yaml]
-        ):
-            continue
-
-        config = Config.from_yaml(config_path)
-        metrics = np.load(metrics_path, allow_pickle=True)
-        target_file = Config.from_yaml(filepath_yaml)["target_filepath"]
-
-        target_file = str(target_file).replace(
-            "/projects/0/prjs0966/data", "/mnt/z/Ultrasound-BMd/data"
-        )
-
-        if (
-            include_only_these_files is not None
-            and target_file not in include_only_these_files
-        ):
-            continue
-
-        x_value = get_config_value(config, x_axis_key)
-        if x_value is None:
-            log.warning(f"Skipping {run_path} due to missing x_axis_key: {x_axis_key}.")
-            continue
-
-        selection_strategy = config.get("action_selection", {}).get(
-            "selection_strategy"
-        )
-        if selection_strategy is None:
-            log.warning(
-                f"Skipping {run_path} due to missing selection_strategy: {selection_strategy}."
+def _log_too_many_blobs_count(results_df: pd.DataFrame):
+    unique_filestems = results_df["filestem"].unique()
+    unique_files_skipped = 0
+    for filestem in unique_filestems:
+        filestem_rows = results_df[results_df["filestem"] == filestem]
+        if filestem_rows["too_many_blobs"].any():
+            assert filestem_rows["too_many_blobs"].all(), (
+                "Inconsistent blob filtering results."
             )
-            continue
-
-        if (
-            strategies_to_plot is not None
-            and selection_strategy not in strategies_to_plot
-        ):
-            continue
-
-        filename = Path(target_file).stem
-        ef_value = (
-            ef_lookup[filename]
-            if ef_lookup is not None and filename in ef_lookup
-            else None
-        )
-
-        # Use in-file ground truth and predicted masks for DICE
-        if (
-            "segmentation_mask_targets" in metrics
-            and "segmentation_mask_reconstructions" in metrics
-        ):
-            gt_masks = np.array(metrics["segmentation_mask_targets"])
-            # Only keep if gt_masks pass the blob filter
-            if mask_has_too_many_blobs(
-                gt_masks, max_blobs=max_blobs, max_bad_frames=max_bad_frames
-            ):
-                mean_dice = None
-                log.info(
-                    f"Skipped file {target_file} since segmentation mask had too many blobs."
-                )
-                unique_files_skipped.add(target_file)
-            else:
-                pred_masks = np.array(metrics["segmentation_mask_reconstructions"])
-                dice_score = compute_dice_score(pred_masks, gt_masks)
-                mean_dice = np.mean(dice_score)
-        else:
-            mean_dice = None
-
-        metric_results = {}
-        for metric_name in keys_to_extract:
-            if metric_name not in metrics:
-                continue
-            metric_values = metrics[metric_name]
-            if isinstance(metric_values, np.ndarray) and metric_values.size > 0:
-                sequence_means = np.mean(metric_values, axis=-1)
-                metric_results[metric_name] = sequence_means
-
-        results.append(
-            {
-                "EF": ef_value,
-                "selection_strategy": selection_strategy,
-                "x_value": x_value,
-                "filepath": target_file,
-                "filename": filename,
-                "dice": mean_dice,
-                **metric_results,
-            }
-        )
-
+            unique_files_skipped += 1
     log.info(
-        f"Skipped a total of {len(unique_files_skipped)} files due to poor segmentation masks."
+        f"Skipped a total of {unique_files_skipped} files due to poor segmentation masks."
     )
-    return pd.DataFrame(results)
-
-
-def get_ground_truth_masks(fully_observed_path):
-    """Build dictionary mapping target filepaths to ground truth masks."""
-    gt_masks = {}
-
-    for run_dir in sorted(os.listdir(fully_observed_path)):
-        run_path = os.path.join(fully_observed_path, run_dir)
-        if not os.path.isdir(run_path):
-            continue
-
-        filepath_yaml = os.path.join(run_path, "target_filepath.yaml")
-        metrics_path = os.path.join(run_path, "metrics.npz")
-
-        if not (os.path.exists(filepath_yaml) and os.path.exists(metrics_path)):
-            continue
-
-        target_file = Config.from_yaml(filepath_yaml)["target_filepath"]
-
-        # Load ground truth masks and corresponding images
-        metrics = np.load(metrics_path, allow_pickle=True)
-
-        # Create a dictionary for this sequence containing both masks and images
-        metadata = metrics["metadata"].item()
-        sequence_data = {
-            "masks": [mask[None] for mask in metadata["masks"]],
-            "x_scan_converted": [
-                x[None] for x in metadata["x_scan_converted"][..., None]
-            ],
-            "run_dir": Path(fully_observed_path) / run_dir,
-        }
-
-        gt_masks[target_file] = sequence_data
-
-    return gt_masks
 
 
 def get_axis_label(key):
@@ -264,20 +101,6 @@ def get_axis_label(key):
 def sort_by_names(combined_results, names):
     """Sort combined results by strategy names."""
     return {k: combined_results[k] for k in names if k in combined_results}
-
-
-def extract_and_combine_sweep_data(sweep_dirs, *args, **kwargs):
-    combined_results = []
-
-    for sweep_dir in sweep_dirs:
-        try:
-            results = extract_sweep_data(sweep_dir, *args, **kwargs)
-            combined_results.append(results)
-
-        except Exception as e:
-            print(f"Failed to process {sweep_dir}: {e}")
-
-    return pd.concat(combined_results, ignore_index=True)  # ignore_index?
 
 
 def df_to_dict(df: pd.DataFrame, metric_name: str, filter_nan=True):
@@ -295,7 +118,13 @@ def df_to_dict(df: pd.DataFrame, metric_name: str, filter_nan=True):
     for _, row in df.iterrows():
         strategy = row["selection_strategy"]
         x_value = row["x_value"]
-        value = row[metric_name]
+        if metric_name.lower() == "rmse":
+            # scale [0, 255] to [0, 1]
+            value = np.sqrt(row["mse"] / (255 * 255))
+        elif metric_name.lower() == "mse":
+            value = row["mse"] / (255 * 255)
+        else:
+            value = row[metric_name]
         if filter_nan and (value is None or np.isnan(value).any()):
             continue
 
@@ -318,70 +147,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    TEMP_FILE = Path("/tmp/plot_psnr_dice.pkl")
-
-    if TEMP_FILE.exists():
-        print(f"Loading existing combined results from {str(TEMP_FILE)}")
-        combined_results = pd.read_pickle(TEMP_FILE)
-    else:
-        combined_results = extract_and_combine_sweep_data(
-            SUBSAMPLED_PATHS,
-            keys_to_extract=["mse", "psnr", "dice", "lpips", "ssim"],
-            x_axis_key=args.x_axis,
-        )
-        combined_results.to_pickle(TEMP_FILE)
-
-    plotter = ViolinPlotter(
-        xlabel=get_axis_label(args.x_axis),
-        group_names=STRATEGY_NAMES,
-        legend_loc="top",
-        scatter_kwargs={"alpha": 0.05, "s": 7},
-        context="styles/ieee-tmi.mplstyle",
+    combined_results = extract_sweep_data(
+        SUBSAMPLED_PATHS,
+        keys_to_extract=["mse", "psnr", "dice", "lpips", "ssim"],
+        x_axis_key=args.x_axis,
     )
+    _log_too_many_blobs_count(combined_results)
 
-    # DICE plot
-    metric_name = "dice"
-    x_values = [2, 4, 7, 14]
-    formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
-    plotter.plot(
-        df_to_dict(combined_results, metric_name),
-        save_path=f"./echonet_{metric_name}_violin_plot.pdf",
-        x_label_values=x_values,
-        metric_name=formatted_metric_name,
-        groups_to_plot=STRATEGIES_TO_PLOT,
-        ylim=[0.58, 1.02],
-        legend_kwargs={
-            "loc": "outside upper center",
-            "ncol": 3,
-            "frameon": False,
-        },
-    )
-
-    # PSNR plot
-    metric_name = "psnr"
-    x_values = [4, 7, 14, 28]
-    formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
-    for ext in [".pdf", ".png"]:
-        plotter.plot(
-            df_to_dict(combined_results, metric_name),
-            save_path=f"./{metric_name}_violin_plot{ext}",
-            x_label_values=x_values,
-            metric_name=formatted_metric_name,
-        )
-
-    # LPIPS plot
-    metric_name = "lpips"
-    x_values = [4, 7, 14, 28]
-    formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
-    for ext in [".pdf", ".png"]:
-        plotter.plot(
-            df_to_dict(combined_results, metric_name),
-            save_path=f"./{metric_name}_violin_plot{ext}",
-            x_label_values=x_values,
-            metric_name=formatted_metric_name,
-        )
-
-    # Combined LPIPS and PSNR
     plotter = ViolinPlotter(
         xlabel=get_axis_label(args.x_axis),
         group_names=STRATEGY_NAMES,
@@ -389,6 +161,8 @@ if __name__ == "__main__":
         scatter_kwargs={"alpha": 0.01, "s": 4},
         context="styles/ieee-tmi.mplstyle",
     )
+
+    # Combined LPIPS and PSNR
     plt.close("all")
     x_values = [7, 14, 28]
     with plt.style.context("styles/ieee-tmi.mplstyle"):
@@ -431,6 +205,43 @@ if __name__ == "__main__":
             plt.savefig(save_path)
             log.info(
                 f"Saved combined LPIPS and PSNR violin plot to {log.yellow(save_path)}"
+            )
+
+    # DICE plot
+    metric_name = "dice"
+    x_values = [2, 4, 7, 14]
+    formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+    plotter.plot(
+        df_to_dict(combined_results, metric_name),
+        save_path=f"./echonet_{metric_name}_violin_plot.pdf",
+        x_label_values=x_values,
+        metric_name=formatted_metric_name,
+        groups_to_plot=STRATEGIES_TO_PLOT,
+        ylim=[0.58, 1.02],
+        legend_kwargs={
+            "loc": "outside upper center",
+            "ncol": 3,
+            "frameon": False,
+        },
+        order_by=order_by,
+    )
+
+    # Individual metrics plots
+    x_values = [4, 7, 14, 28]
+    for metric_name in ["psnr", "lpips", "ssim", "rmse"]:
+        formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+        for ext in [".pdf", ".png"]:
+            plotter.plot(
+                df_to_dict(combined_results, metric_name),
+                save_path=f"./{metric_name}_violin_plot{ext}",
+                x_label_values=x_values,
+                metric_name=formatted_metric_name,
+                legend_kwargs={
+                    "loc": "outside upper center",
+                    "ncol": 3,
+                    "frameon": False,
+                },
+                order_by=order_by,
             )
 
     # Print results in a table format
