@@ -1,13 +1,14 @@
 import os
 
-os.environ["KERAS_BACKEND"] = "numpy"
+os.environ["KERAS_BACKEND"] = "jax"
+import zea
+
+zea.init_device()
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-import zea
 
 sys.path.append("/ulsa")
 from plotting.plot_utils import ViolinPlotter, write_roman
@@ -16,6 +17,7 @@ from zea.metrics import Metrics
 METRIC_NAMES = {
     "psnr": "PSNR [dB]",
     "ssim": "SSIM [-]",
+    "lpips": "LPIPS [-]",
 }
 
 
@@ -48,7 +50,7 @@ def main():
         "diverging": "Diverging",
     }
 
-    metric_names = ["psnr"]
+    metric_names = ["psnr", "lpips"]
     drop_first_n_frames = 3  # filter startup artifacts of temporal model
     metrics = Metrics(metric_names, image_range=[0, 255])
     group_names.pop("focused")
