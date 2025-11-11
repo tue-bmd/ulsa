@@ -293,6 +293,7 @@ def run_active_sampling(
                 flat_pfield=base_params["flat_pfield"][:, transmits],
                 n_tx=len(transmits),
                 rx_apo=base_params["rx_apo"][transmits],
+                tx_waveform_indices=base_params["tx_waveform_indices"][transmits],
             )
             params = pipeline.prepare_parameters(**params)
 
