@@ -19,11 +19,14 @@ import copy
 import math
 from pathlib import Path
 
+import jax.numpy as jnp
 import keras
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import FancyArrowPatch
 
+from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_side_gif
 
 
@@ -55,6 +58,7 @@ def plot_from_npz(
 
     measurements = results["measurements"]
     masks = results["masks"]
+    belief_distributions = results["belief_distributions"]
 
     measurements = keras.ops.where(
         masks > 0, measurements, color_to_value(reconstruction_range, "gray")
@@ -65,6 +69,15 @@ def plot_from_npz(
         scan_conversion_angles=np.rad2deg(results["theta_range"]),
     )
 
+    if not gif:
+        focused = focused[frame_idx, None]
+        diverging = diverging[frame_idx, None]
+        reconstructions = reconstructions[frame_idx, None]
+        measurements = measurements[frame_idx, None]
+        belief_distributions = belief_distributions[frame_idx, None]
+        frame_idx = 0
+
+    print("Postprocessing focused...")
     focused = postprocess_agent_results(
         focused,
         io_config,
@@ -72,6 +85,7 @@ def plot_from_npz(
         image_range=focused_dynamic_range,
         fill_value="transparent",
     )
+    print("Postprocessing diverging...")
     diverging = postprocess_agent_results(
         diverging,
         io_config,
@@ -79,6 +93,7 @@ def plot_from_npz(
         image_range=diverging_dynamic_range,
         fill_value="transparent",
     )
+    print("Postprocessing reconstructions...")
     reconstructions = postprocess_agent_results(
         reconstructions,
         io_config,
@@ -87,6 +102,7 @@ def plot_from_npz(
         reconstruction_sharpness_std=0.04,
         fill_value="transparent",
     )
+    print("Postprocessing measurements...")
     measurements = postprocess_agent_results(
         measurements,
         io_config,
@@ -99,6 +115,7 @@ def plot_from_npz(
         context = "styles/darkmode.mplstyle"
 
     if gif:
+        print("Creating GIF...")
         side_by_side_gif(
             save_path.with_suffix(".gif"),
             focused,
@@ -113,6 +130,19 @@ def plot_from_npz(
             fps=gif_fps,
         )
 
+    print("Postprocessing entropy...")
+    belief_distributions = belief_distributions[frame_idx]
+    entropy = jnp.squeeze(
+        pixelwise_entropy(belief_distributions[None], entropy_sigma=255), axis=0
+    )
+    entropy = postprocess_agent_results(
+        entropy,
+        io_config=io_config,
+        scan_convert_order=1,
+        image_range=[0, jnp.nanpercentile(entropy, 98.5)],
+        fill_value="transparent",
+    )
+
     with plt.style.context(context):
         kwargs = {
             "vmin": 0,
@@ -120,26 +150,73 @@ def plot_from_npz(
             "cmap": "gray",
             "interpolation": "nearest",
         }
-        fig, axs = plt.subplots(2, 2, figsize=(3.5, 2.8))
-        axs = axs.flatten()
-        axs[0].imshow(focused[frame_idx], **kwargs)
-        axs[0].set_title("Focused (90)")
 
-        axs[1].imshow(measurements[frame_idx], **kwargs)
-        axs[1].set_title("Acquisitions (11/90)")
+        grid_shape = (1, 3)
+        fig = plt.figure(figsize=(7.16, 1.6))
+        wspace = 0.04
+        wspace_inner = -0.2
+        hspace = 0.07
+        hspace_inner = 0.02
+        inner_grid_shape = (2, 2)
 
-        axs[3].imshow(reconstructions[frame_idx], **kwargs)
-        axs[3].set_title("Reconstruction (11/90)")
+        outer = gridspec.GridSpec(
+            *grid_shape,
+            figure=fig,
+            wspace=wspace,
+            hspace=hspace,
+            left=0.0,
+            right=1.0,
+            top=0.93,  # <1.0 to leave space for titles
+            bottom=0.0,
+            width_ratios=[1.0, 1.0, 1.5],
+        )
 
-        axs[2].imshow(diverging[frame_idx], **kwargs)
-        axs[2].set_title("Diverging (11)")
+        ax = fig.add_subplot(outer[0])
+        ax.imshow(focused[frame_idx], **kwargs)
+        ax.set_title("Focused (90)")
+        ax.axis("off")
 
+        ax = fig.add_subplot(outer[1])
+        ax.imshow(diverging[frame_idx], **kwargs)
+        ax.set_title("Diverging (11)")
+        ax.axis("off")
         if arrow is not None:
-            axs[3].add_patch(copy.copy(arrow))
-            axs[2].add_patch(copy.copy(arrow))
+            ax.add_patch(copy.copy(arrow))
 
-        for ax in axs:
-            ax.axis("off")
+        inner = gridspec.GridSpecFromSubplotSpec(
+            *inner_grid_shape,
+            subplot_spec=outer[2],
+            width_ratios=[2, 1],
+            height_ratios=[1, 1],
+            wspace=wspace_inner,
+            hspace=hspace_inner * inner_grid_shape[0],
+        )
+        # ax = fig.add_subplot(outer[2])
+        # ax.axis("off")
+        # ax.set_title("Reconstruction (11/90)")
+
+        ax_big = fig.add_subplot(inner[:, 0])
+        ax_big.imshow(reconstructions[frame_idx], **kwargs)
+        ax_big.set_title("Reconstruction (11/90)")
+        ax_big.axis("off")
+        if arrow is not None:
+            ax_big.add_patch(copy.copy(arrow))
+
+        ax_bottom = fig.add_subplot(inner[1, 1])
+        ax_bottom.imshow(measurements[frame_idx], **kwargs)
+        # ax_top.set_title("Acquisitions (11/90)")
+        ax_bottom.axis("off")
+
+        ax_top = fig.add_subplot(inner[0, 1])
+        ax_top.imshow(
+            entropy,
+            cmap="inferno",
+            vmin=0,
+            vmax=255,
+            interpolation="nearest",
+        )
+        ax_top.axis("off")
+        # ax_top.set_title("Entropy")
 
         for ext in exts:
             plt.savefig(save_path.with_suffix(ext))
@@ -183,7 +260,7 @@ def get_arrow(
 
 if __name__ == "__main__":
     PLOT_NPZ_PATH = (
-        "/mnt/z/usbmd/Wessel/eval_in_house_cardiac/20240701_P1_A4CH_0001_results.npz"
+        "/mnt/z/usbmd/Wessel/ulsa_paper_plots/20240701_P1_A4CH_0001_results.npz"
     )
 
     plot_from_npz(
@@ -192,4 +269,5 @@ if __name__ == "__main__":
         context="styles/ieee-tmi.mplstyle",
         frame_idx=24,
         arrow=get_arrow(),
+        gif=False,
     )
