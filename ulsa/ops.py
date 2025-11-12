@@ -353,19 +353,6 @@ class HistogramMatchingForModel(HistogramMatching):
         super().__init__(reference_image, **kwargs)
 
 
-class LogCompressNoClip(zea.ops.Operation):
-    """Logarithmic compression of data."""
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-
-        small_number = ops.convert_to_tensor(1e-16, dtype=data.dtype)
-        data = ops.where(data == 0, small_number, data)
-        compressed_data = 20 * ops.log10(data)
-
-        return {self.output_key: compressed_data}
-
-
 class Copy(zea.ops.Operation):
     """Copy the input data to the output key."""
 

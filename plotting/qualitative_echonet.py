@@ -155,7 +155,6 @@ for patient_id, patient_name in enumerate(patient_names):
         entropy = ops.squeeze(
             pixelwise_entropy(belief_distributions[None], entropy_sigma=255), axis=0
         )
-        # TODO: entropy not normalized to same scale for all images
         results.append((patient_id, i, reconstruction, measurement, entropy, psnr))
 
     target = postprocess_agent_results(

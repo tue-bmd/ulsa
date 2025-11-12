@@ -29,7 +29,7 @@ def beamforming(rx_apo=True) -> list:
         zea.ops.EnvelopeDetect(),
         zea.ops.Normalize(),
         ulsa.ops.GetAutoDynamicRange(),
-        ulsa.ops.LogCompressNoClip(),
+        zea.ops.LogCompress(clip=False),
     ]
 
 
