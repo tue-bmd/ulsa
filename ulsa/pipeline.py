@@ -5,7 +5,7 @@ import zea
 from zea import Pipeline
 
 
-def beamforming() -> list:
+def beamforming(rx_apo=True) -> list:
     """Create a pipeline for beamforming operations."""
     return [
         ulsa.ops.FirFilter(axis=-3, filter_key="bandpass_rf"),
@@ -17,7 +17,7 @@ def beamforming() -> list:
             [
                 zea.ops.TOFCorrection(),
                 # zea.ops.PfieldWeighting(),  # optional
-                ulsa.ops.Multiply("rx_apo"),
+                ulsa.ops.Multiply("rx_apo") if rx_apo else zea.ops.Identity(),
                 zea.ops.DelayAndSum(),
             ],
             chunks=10,
@@ -51,12 +51,13 @@ def make_pipeline(
     action_selection_shape,
     jit_options="ops",
     with_batch_dim=False,
+    rx_apo=True,
     **kwargs,
 ) -> Pipeline:
     if data_type == "data/raw_data":
         pipeline = zea.Pipeline(
             [
-                *beamforming(),
+                *beamforming(rx_apo=rx_apo),
                 ulsa.ops.ExpandDims(axis=-1),
                 ulsa.ops.TranslateDynamicRange(output_range),
                 *resize(action_selection_shape, output_shape),
