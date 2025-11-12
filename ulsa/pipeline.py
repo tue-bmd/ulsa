@@ -13,13 +13,19 @@ def beamforming() -> list:
         zea.ops.Demodulate(),
         ulsa.ops.LowPassFilter(complex_channels=True, axis=-2),  # optional
         zea.ops.Downsample(2),  # optional
-        zea.ops.PatchedGrid(
+        zea.ops.Map(
             [
                 zea.ops.TOFCorrection(),
                 # zea.ops.PfieldWeighting(),  # optional
+                ulsa.ops.Multiply("rx_apo"),
                 zea.ops.DelayAndSum(),
-            ]
+            ],
+            chunks=10,
+            # argnames=("flatgrid", "flat_pfield", "rx_apo"),
+            argnames=("flatgrid", "rx_apo"),
+            in_axes=(0, 1),
         ),
+        zea.ops.ReshapeGrid(),
         zea.ops.EnvelopeDetect(),
         zea.ops.Normalize(),
         ulsa.ops.GetAutoDynamicRange(),

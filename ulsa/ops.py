@@ -390,4 +390,17 @@ def lines_rx_apo(n_tx, grid_size_z, grid_size_x):
     for tx, line in zip(range(n_tx), range(0, grid_size_x, step)):
         rx_apo[tx, :, line : line + step] = 1.0
     rx_apo = rx_apo.reshape((n_tx, -1))
-    return rx_apo[..., None]  # shape (n_tx, n_pix, 1)
+    return rx_apo[..., None, None]  # shape (n_tx, n_pix, 1, 1)
+
+
+class Multiply(zea.ops.Operation):
+    """Multiply input data by a given factor."""
+
+    def __init__(self, other_key, **kwargs):
+        super().__init__(**kwargs)
+        self.other_key = other_key
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        multiplied_data = data * kwargs[self.other_key]
+        return {self.output_key: multiplied_data}

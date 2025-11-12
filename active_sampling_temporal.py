@@ -508,6 +508,7 @@ def active_sampling_single_file(
         n_frames = agent_config.io_config.get("frame_cutoff", "all")
         validation_sample_frames, scan, probe = preload_data(file, n_frames, data_type)
         scan.dynamic_range = dynamic_range
+        scan.t_peak = np.array(0.0)
 
     if getattr(scan, "theta_range", None) is not None:
         theta_range_deg = np.rad2deg(scan.theta_range)
