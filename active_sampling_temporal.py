@@ -119,6 +119,7 @@ from ulsa.pipeline import make_pipeline
 from ulsa.utils import select_transmits, update_scan_for_polar_grid
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
+from zea.metrics import Metrics
 from zea.tensor_ops import func_with_one_batch_dim, vmap
 
 
@@ -594,6 +595,19 @@ def active_sampling_single_file(
     )
 
 
+def compute_metrics(results, agent, metric_keys=["lpips", "psnr"]):
+    metrics = Metrics(
+        metrics=metric_keys,
+        image_range=[0, 255],
+    )
+    denormalized = results.to_uint8(agent.input_range)
+    metrics_results = metrics(denormalized.target_imgs, denormalized.reconstructions)
+    print("\nMETRICS:")
+    for k, v in metrics_results.items():
+        print(f"{k:>8}: {float(v):.4f}")
+    print("\n")
+
+
 def save_results(
     results,
     downstream_task,
@@ -611,6 +625,8 @@ def save_results(
     save_dir = Path(save_dir)
     run_dir, run_id = make_save_dir(save_dir)
     log.info(f"Run dir created at {log.yellow(run_dir)}")
+
+    compute_metrics(results, agent)
 
     # TODO: maybe more io_config to script args? Since this isn't relevant to benchmarking
     if agent_config.io_config.plot_frame_overview:
