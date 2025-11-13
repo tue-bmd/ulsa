@@ -356,7 +356,7 @@ def benchmark(
 
         denormalized = results.to_uint8(agent.input_range)
         metrics_results = metrics(
-            denormalized.target_imgs, denormalized.reconstructions
+            denormalized.target_imgs, denormalized.reconstructions, average_batch=False
         )
         all_metrics_results.append(metrics_results)
         if circle_augmentation is not None:
