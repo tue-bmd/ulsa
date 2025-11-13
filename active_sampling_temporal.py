@@ -294,6 +294,7 @@ def run_active_sampling(
                 flat_pfield=base_params["flat_pfield"][:, transmits],
                 n_tx=len(transmits),
                 rx_apo=base_params["rx_apo"][transmits],
+                tx_waveform_indices=base_params["tx_waveform_indices"][transmits],
             )
             params = pipeline.prepare_parameters(**params)
 
@@ -508,6 +509,7 @@ def active_sampling_single_file(
         n_frames = agent_config.io_config.get("frame_cutoff", "all")
         validation_sample_frames, scan, probe = preload_data(file, n_frames, data_type)
         scan.dynamic_range = dynamic_range
+        scan.t_peak = np.array(0.0)
 
     if getattr(scan, "theta_range", None) is not None:
         theta_range_deg = np.rad2deg(scan.theta_range)

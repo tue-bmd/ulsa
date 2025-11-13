@@ -158,7 +158,7 @@ if __name__ == "__main__":
         xlabel=get_axis_label(args.x_axis),
         group_names=STRATEGY_NAMES,
         legend_loc="top",
-        scatter_kwargs={"alpha": 0.01, "s": 4},
+        # scatter_kwargs={"alpha": 0.01, "s": 4},
         context="styles/ieee-tmi.mplstyle",
     )
 

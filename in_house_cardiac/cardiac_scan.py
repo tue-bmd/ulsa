@@ -30,7 +30,14 @@ def cardiac_scan(
     type="focused",  # "focused" or "diverging"
 ):
     shape = (resize_height, grid_width)
-    pipeline = make_pipeline("data/raw_data", None, shape, shape, jit_options="ops")
+    pipeline = make_pipeline(
+        "data/raw_data",
+        None,
+        shape,
+        shape,
+        jit_options="ops",
+        rx_apo=(type == "focused"),
+    )
     pipeline.append(zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)))
 
     with zea.File(target_sequence) as file:

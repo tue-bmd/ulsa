@@ -100,6 +100,7 @@ def eval_in_house_data(
         measurements=squeezed_results.measurements,
         masks=squeezed_results.masks,
         targets=squeezed_results.target_imgs,
+        belief_distributions=squeezed_results.belief_distributions,
         theta_range=focused_scan.theta_range,  # assumes theta range is the same for focused and diverging!
         reconstruction_range=agent.input_range,
         focused_dynamic_range=focused_scan.dynamic_range,
