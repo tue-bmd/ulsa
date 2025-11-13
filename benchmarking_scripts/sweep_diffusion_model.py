@@ -1,12 +1,19 @@
 """
 
-python benchmarking_scripts/sweep_num_particles.py \
-    --save_dir /mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/n_particles_choose_first \
+python benchmarking_scripts/sweep_diffusion_model.py \
+    --save_dir /mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/diffusion_model_path \
     --n_actions 7 14 28 \
     --limit_n_samples 20 \
     --limit_n_frames 100 \
     --selection_strategy greedy_entropy \
-    --n_particles 2 3 4 5 6
+    --diffusion_model_paths \
+        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_122343_057300_echonet_diffusion_1_frame/hub \
+        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_122428_505743_echonet_diffusion_2_frames/hub \
+        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_122443_731941_echonet_diffusion_3_frames/hub \
+        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_123033_778339_echonet_diffusion_4_frames/hub \
+        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_123045_908961_echonet_diffusion_5_frames/hub \
+        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_123115_976983_echonet_diffusion_6_frames/hub
+    
 
 """
 
@@ -51,11 +58,10 @@ def parse_args():
         default=[2, 4, 7, 14, 28],
     )
     parser.add_argument(
-        "--n_particles",
-        type=int,
+        "--diffusion_model_paths",
+        type=str,
         nargs="+",
-        help="List of n_particles values to sweep over, e.g. --n_actions 4 7 14",
-        default=[2, 3, 4, 5, 6],
+        help="List of diffusion model paths to sweep over",
     )
     parser.add_argument(
         "--save_dir",
@@ -116,8 +122,7 @@ if __name__ == "__main__":
         sweep_params={
             "action_selection.n_actions": args.n_actions,
             "action_selection.selection_strategy": args.selection_strategy,
-            "diffusion_inference.batch_size": args.n_particles,
-            # "diffusion_inference.reconstruction_method": ["mean"],
+            "diffusion_inference.run_dir": args.diffusion_model_paths,
         },
         limit_n_samples=args.limit_n_samples,  # set to None to use all samples
         limit_n_frames=args.limit_n_frames,  # makes sure every patient is equally represented

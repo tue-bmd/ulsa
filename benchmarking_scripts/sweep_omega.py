@@ -1,12 +1,12 @@
 """
 
-python benchmarking_scripts/sweep_num_particles.py \
-    --save_dir /mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/n_particles_choose_first \
+python benchmarking_scripts/sweep_omega.py \
+    --save_dir /mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/omega \
     --n_actions 7 14 28 \
     --limit_n_samples 20 \
     --limit_n_frames 100 \
     --selection_strategy greedy_entropy \
-    --n_particles 2 3 4 5 6
+    --omega 0.1 1 5 10 25 50
 
 """
 
@@ -51,11 +51,11 @@ def parse_args():
         default=[2, 4, 7, 14, 28],
     )
     parser.add_argument(
-        "--n_particles",
-        type=int,
+        "--omega",
+        type=float,
         nargs="+",
-        help="List of n_particles values to sweep over, e.g. --n_actions 4 7 14",
-        default=[2, 3, 4, 5, 6],
+        help="List of omega values to sweep over, e.g. --omega 0.1 1 5 10 25 50",
+        default=[0.1, 1, 5, 10, 25, 50],
     )
     parser.add_argument(
         "--save_dir",
@@ -116,8 +116,7 @@ if __name__ == "__main__":
         sweep_params={
             "action_selection.n_actions": args.n_actions,
             "action_selection.selection_strategy": args.selection_strategy,
-            "diffusion_inference.batch_size": args.n_particles,
-            # "diffusion_inference.reconstruction_method": ["mean"],
+            "diffusion_inference.guidance_kwargs.omega": args.omega,
         },
         limit_n_samples=args.limit_n_samples,  # set to None to use all samples
         limit_n_frames=args.limit_n_frames,  # makes sure every patient is equally represented
