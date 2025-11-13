@@ -1,0 +1,853 @@
+"""
+Plot the relationship between number of particles and PSNR for different n_actions values.
+"""
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import tqdm
+from rich.console import Console
+from rich.table import Table
+
+from zea import Config, init_device, log
+from zea.ops import translate
+
+if __name__ == "__main__":
+    os.environ["KERAS_BACKEND"] = "numpy"
+    init_device("cpu")
+    sys.path.append("/ulsa")
+
+from plotting.index import extract_sweep_data, index_sweep_data
+from plotting.plot_utils import natural_sort
+
+STRATEGY_NAMES = {
+    "greedy_entropy": "Active Perception",
+    "uniform_random": "Random",
+    "equispaced": "Equispaced",
+}
+
+METRIC_NAMES = {
+    "dice": "DICE (→) [-]",
+    "psnr": "PSNR (→) [dB]",
+    "ssim": "SSIM (→) [-]",
+    "lpips": "LPIPS (←) [-]",
+    "mse": "MSE (←) [-]",
+    "rmse": "RMSE (←) [-]",
+}
+
+# Colors for different n_actions values
+N_ACTIONS_COLORS = {
+    2: "#1f77b4",  # Blue
+    4: "#ff7f0e",  # Orange
+    7: "#2ca02c",  # Green
+    14: "#d62728",  # Red
+    28: "#9467bd",  # Purple
+}
+
+
+def plot_n_particles_vs_metric(
+    df: pd.DataFrame,
+    metric_name: str,
+    save_path: str,
+    strategy: str = "greedy_entropy",
+    context="styles/ieee-tmi.mplstyle",
+):
+    """Plot metric vs number of particles for different n_actions values.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the results.
+        metric_name (str): Name of the metric to plot.
+        save_path (str): Path to save the plot.
+        strategy (str): Selection strategy to plot.
+        context (str): Matplotlib style context.
+    """
+    # Filter for the specific strategy
+    df_strategy = df[df["selection_strategy"] == strategy].copy()
+
+    if df_strategy.empty:
+        log.error(f"No data found for strategy: {strategy}")
+        return
+
+    # Get unique values - now n_actions is directly in the DataFrame
+    n_particles_values = sorted(df_strategy["x_value"].unique())
+    n_actions_values = sorted(df_strategy["n_actions"].dropna().unique())
+
+    log.info(f"Found n_particles values: {n_particles_values}")
+    log.info(f"Found n_actions values: {n_actions_values}")
+
+    with plt.style.context(context):
+        fig, ax = plt.subplots(figsize=(7.16, 4))
+
+        for n_actions in n_actions_values:
+            df_subset = df_strategy[df_strategy["n_actions"] == n_actions]
+
+            means = []
+            stds = []
+            particles_used = []
+
+            for n_particles in n_particles_values:
+                df_n = df_subset[df_subset["x_value"] == n_particles]
+
+                if len(df_n) == 0:
+                    continue
+
+                if metric_name.lower() == "rmse":
+                    values = np.sqrt(df_n["mse"].values / (255 * 255))
+                elif metric_name.lower() == "mse":
+                    values = df_n["mse"].values / (255 * 255)
+                else:
+                    values = df_n[metric_name].values
+
+                # Filter NaN values
+                values = values[~np.isnan(values)]
+
+                if len(values) > 0:
+                    means.append(np.mean(values))
+                    stds.append(np.std(values))
+                    particles_used.append(n_particles)
+
+            if len(means) > 0:
+                color = N_ACTIONS_COLORS.get(int(n_actions), "#000000")
+
+                # Plot mean line
+                ax.plot(
+                    particles_used,
+                    means,
+                    marker="o",
+                    linewidth=2,
+                    markersize=6,
+                    label=f"{int(n_actions)} scan lines",
+                    color=color,
+                )
+
+                # Add standard deviation as shaded region
+                means_array = np.array(means)
+                stds_array = np.array(stds)
+                ax.fill_between(
+                    particles_used,
+                    means_array - stds_array,
+                    means_array + stds_array,
+                    alpha=0.2,
+                    color=color,
+                )
+
+        # Formatting
+        ax.set_xlabel("Number of Particles", fontsize=11)
+        formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
+        ax.set_ylabel(formatted_metric_name, fontsize=11)
+
+        strategy_display = STRATEGY_NAMES.get(strategy, strategy)
+
+        # Move legend outside the plot on the right side
+        ax.legend(
+            loc="center left",
+            bbox_to_anchor=(1.02, 0.5),
+            fontsize=9,
+            framealpha=0.95,
+            fancybox=True,
+        )
+
+        ax.grid(True, alpha=0.3)
+        ax.set_xticks(n_particles_values)
+
+        # Adjust layout to accommodate legend outside
+        plt.tight_layout()
+        plt.subplots_adjust(right=0.82)  # Leave space on the right for legend
+
+        # Save plot with bbox_inches='tight' to include the legend
+        for ext in [".pdf", ".png"]:
+            save_file = save_path.replace(".pdf", ext).replace(".png", ext)
+            plt.savefig(save_file, dpi=300, bbox_inches="tight")
+            log.info(f"Saved plot to {log.yellow(save_file)}")
+
+        plt.close()
+
+
+def print_results_table(df: pd.DataFrame, metric_name: str, strategy: str):
+    """Print results in a table format."""
+    df_strategy = df[df["selection_strategy"] == strategy].copy()
+
+    if df_strategy.empty:
+        log.error(f"No data found for strategy: {strategy}")
+        return
+
+    table = Table(
+        title=f"{metric_name.upper()} Results for {STRATEGY_NAMES.get(strategy, strategy)}",
+        show_lines=True,
+    )
+    table.add_column("N Actions", style="cyan", no_wrap=True)
+    table.add_column("N Particles", style="magenta")
+    table.add_column("Mean", style="green")
+    table.add_column("Std", style="yellow")
+    table.add_column("Count", style="white")
+
+    # Now n_actions is directly available in the DataFrame
+    n_actions_values = sorted(df_strategy["n_actions"].dropna().unique())
+    n_particles_values = sorted(df_strategy["x_value"].unique())
+
+    for n_actions in n_actions_values:
+        for n_particles in n_particles_values:
+            df_subset = df_strategy[
+                (df_strategy["n_actions"] == n_actions)
+                & (df_strategy["x_value"] == n_particles)
+            ]
+
+            if len(df_subset) == 0:
+                continue
+
+            if metric_name.lower() == "rmse":
+                values = np.sqrt(df_subset["mse"].values / (255 * 255))
+            elif metric_name.lower() == "mse":
+                values = df_subset["mse"].values / (255 * 255)
+            else:
+                values = df_subset[metric_name].values
+
+            values = values[~np.isnan(values)]
+
+            if len(values) > 0:
+                mean = np.mean(values)
+                std = np.std(values)
+                count = len(values)
+
+                table.add_row(
+                    str(int(n_actions)),
+                    str(int(n_particles)),
+                    f"{mean:.3f}",
+                    f"{std:.3f}",
+                    str(count),
+                )
+
+    console = Console()
+    console.print(table)
+
+
+def plot_variance_maps_grid(
+    sweep_path: str,
+    save_dir: Path,
+    n_runs_per_config: int = 1,
+    n_frames: int = 10,
+    strategy: str = "greedy_entropy",
+    n_actions: int = 7,
+    context="styles/ieee-tmi.mplstyle",
+):
+    """Plot a grid of variance maps for different numbers of particles.
+
+    Args:
+        sweep_path (str): Path to the sweep directory
+        save_dir (Path): Directory to save the plots
+        n_runs_per_config (int): Number of runs to plot per n_particles configuration
+        n_frames (int): Number of frames to show per row
+        strategy (str): Selection strategy to filter for
+        n_actions (int): Number of actions to filter for
+        context (str): Matplotlib style context
+    """
+    from matplotlib.gridspec import GridSpec
+
+    log.info(f"Loading runs for variance map visualization...")
+
+    # Index all runs
+    generator = index_sweep_data([sweep_path])
+
+    # Group runs by n_particles
+    runs_by_n_particles = {}
+
+    for run_path, target_file, filename in tqdm.tqdm(generator, desc="Indexing runs"):
+        config_path = run_path / "config.yaml"
+        metrics_path = run_path / "metrics.npz"
+
+        if not config_path.exists() or not metrics_path.exists():
+            continue
+
+        try:
+            config = Config.from_yaml(str(config_path))
+
+            # Filter by strategy and n_actions
+            if config.get("action_selection", {}).get("selection_strategy") != strategy:
+                continue
+
+            run_n_actions = config.get("action_selection", {}).get("n_actions")
+            if run_n_actions != n_actions:
+                continue
+
+            # Get n_particles from config
+            n_particles = config.get("diffusion_inference", {}).get("batch_size")
+
+            if n_particles is None:
+                continue
+
+            # Check if metrics has belief_distributions
+            metrics = np.load(str(metrics_path), allow_pickle=True)
+            if "belief_distributions" not in metrics:
+                continue
+
+            if n_particles not in runs_by_n_particles:
+                runs_by_n_particles[n_particles] = []
+
+            runs_by_n_particles[n_particles].append(
+                {
+                    "run_path": run_path,
+                    "metrics_path": metrics_path,
+                    "filename": filename,
+                    "config": config,
+                }
+            )
+
+        except Exception as e:
+            log.warning(f"Error processing {run_path}: {e}")
+            continue
+
+    if not runs_by_n_particles:
+        log.error("No runs found matching criteria")
+        return
+
+    log.info(f"Found runs for n_particles values: {sorted(runs_by_n_particles.keys())}")
+
+    # Plot for each run
+    n_particles_values = sorted(runs_by_n_particles.keys())
+
+    for run_idx in range(n_runs_per_config):
+        # Check if we have enough runs for this index
+        available_n_particles = [
+            n_p for n_p in n_particles_values if len(runs_by_n_particles[n_p]) > run_idx
+        ]
+
+        if not available_n_particles:
+            log.warning(f"Not enough runs for run_idx={run_idx}")
+            break
+
+        log.info(f"Creating variance map grid for run {run_idx + 1}...")
+
+        with plt.style.context(context):
+            # Create figure with gridspec
+            n_rows = len(available_n_particles)
+            n_cols = n_frames
+
+            fig = plt.figure(figsize=(n_frames * 1.5, n_rows * 1.5))
+            gs = GridSpec(
+                n_rows,
+                n_cols + 1,
+                figure=fig,
+                width_ratios=[1] * n_cols + [0.05],
+                hspace=0.1,
+                wspace=0.05,
+            )
+
+            # Track vmin/vmax across all variance maps for consistent colormap
+            all_variances = []
+            variance_data = []
+
+            # First pass: load all data and compute global vmin/vmax
+            for row_idx, n_particles in enumerate(available_n_particles):
+                run_info = runs_by_n_particles[n_particles][run_idx]
+
+                try:
+                    metrics = np.load(str(run_info["metrics_path"]), allow_pickle=True)
+                    belief_dist = metrics["belief_distributions"]
+
+                    # Compute variance: (n_frames, h, w, c)
+                    variance_maps = np.var(belief_dist, axis=1)
+
+                    # Take only first n_frames
+                    variance_maps = variance_maps[:n_frames]
+
+                    variance_data.append(
+                        (n_particles, variance_maps, run_info["filename"])
+                    )
+                    all_variances.extend(variance_maps.flatten())
+
+                except Exception as e:
+                    log.error(f"Error loading variance for {run_info['run_path']}: {e}")
+                    continue
+
+            if not variance_data:
+                log.error("No variance data could be loaded")
+                plt.close(fig)
+                continue
+
+            # Compute global vmin/vmax
+            vmin = np.percentile(all_variances, 1)
+            vmax = np.percentile(all_variances, 99.9)
+            # vmin = np.min(all_variances)
+            # vmax = np.max(all_variances)
+
+            # Second pass: plot the data
+            for row_idx, (n_particles, variance_maps, filename) in enumerate(
+                variance_data
+            ):
+                actual_n_frames = min(len(variance_maps), n_frames)
+
+                for col_idx in range(actual_n_frames):
+                    ax = fig.add_subplot(gs[row_idx, col_idx])
+
+                    # Get variance map for this frame
+                    var_map = variance_maps[col_idx]
+
+                    # Remove channel dimension if present
+                    if var_map.ndim == 3 and var_map.shape[-1] == 1:
+                        var_map = var_map[..., 0]
+
+                    # Plot variance map
+                    im = ax.imshow(var_map, cmap="viridis", vmin=vmin, vmax=vmax)
+                    ax.axis("off")
+
+                    # Add frame number at top of first row
+                    if row_idx == 0:
+                        ax.set_title(f"Frame {col_idx}", fontsize=8, pad=2)
+
+                    # Add n_particles label on leftmost column
+                    if col_idx == 0:
+                        ax.text(
+                            -0.1,
+                            0.5,
+                            f"$N_p$={n_particles}",
+                            transform=ax.transAxes,
+                            fontsize=9,
+                            rotation=90,
+                            verticalalignment="center",
+                            horizontalalignment="right",
+                        )
+
+                # Fill remaining columns if we have fewer frames
+                for col_idx in range(actual_n_frames, n_frames):
+                    ax = fig.add_subplot(gs[row_idx, col_idx])
+                    ax.axis("off")
+
+            # Add colorbar
+            cbar_ax = fig.add_subplot(gs[:, -1])
+            cbar = plt.colorbar(im, cax=cbar_ax)
+            cbar.set_label("Variance", fontsize=9)
+            cbar.ax.tick_params(labelsize=8)
+
+            # Save plot
+            patient_name = variance_data[0][2].replace(".avi", "").replace(".mp4", "")
+            for ext in [".pdf", ".png"]:
+                save_file = (
+                    save_dir
+                    / f"variance_maps_grid__n_actions={n_actions}__run{run_idx + 1}_{patient_name}{ext}"
+                )
+                plt.savefig(save_file, dpi=300, bbox_inches="tight")
+                log.info(f"Saved variance map grid to {log.yellow(save_file)}")
+
+            plt.close(fig)
+
+
+def plot_linewise_entropy_curves(
+    sweep_path: str,
+    save_dir: Path,
+    n_runs_per_config: int = 1,
+    n_frames: int = 10,
+    strategy: str = "greedy_entropy",
+    n_actions: int = 7,
+    entropy_sigma: float = 1.0,
+    context="styles/ieee-tmi.mplstyle",
+):
+    """Plot linewise entropy curves for different numbers of particles.
+
+    Args:
+        sweep_path (str): Path to the sweep directory
+        save_dir (Path): Directory to save the plots
+        n_runs_per_config (int): Number of runs to plot per n_particles configuration
+        n_frames (int): Number of frames to show
+        strategy (str): Selection strategy to filter for
+        n_actions (int): Number of actions to filter for
+        entropy_sigma (float): Sigma parameter for entropy computation
+        context (str): Matplotlib style context
+    """
+    # Import GreedyEntropy class
+    import sys
+
+    sys.path.append("/ulsa/zea")
+    from zea.agent.selection import GreedyEntropy
+
+    log.info(f"Loading runs for linewise entropy visualization...")
+
+    # Index all runs
+    generator = index_sweep_data([sweep_path])
+
+    # Group runs by n_particles
+    runs_by_n_particles = {}
+
+    for run_path, target_file, filename in tqdm.tqdm(generator, desc="Indexing runs"):
+        config_path = run_path / "config.yaml"
+        metrics_path = run_path / "metrics.npz"
+
+        if not config_path.exists() or not metrics_path.exists():
+            continue
+
+        try:
+            config = Config.from_yaml(str(config_path))
+
+            # Filter by strategy and n_actions
+            if config.get("action_selection", {}).get("selection_strategy") != strategy:
+                continue
+
+            run_n_actions = config.get("action_selection", {}).get("n_actions")
+            if run_n_actions != n_actions:
+                continue
+
+            # Get n_particles from config
+            n_particles = config.get("diffusion_inference", {}).get("batch_size")
+
+            if n_particles is None:
+                continue
+
+            # Check if metrics has belief_distributions
+            metrics = np.load(str(metrics_path), allow_pickle=True)
+            if "belief_distributions" not in metrics:
+                continue
+
+            if n_particles not in runs_by_n_particles:
+                runs_by_n_particles[n_particles] = []
+
+            runs_by_n_particles[n_particles].append(
+                {
+                    "run_path": run_path,
+                    "metrics_path": metrics_path,
+                    "filename": filename,
+                    "config": config,
+                }
+            )
+
+        except Exception as e:
+            log.warning(f"Error processing {run_path}: {e}")
+            continue
+
+    if not runs_by_n_particles:
+        log.error("No runs found matching criteria")
+        return
+
+    log.info(f"Found runs for n_particles values: {sorted(runs_by_n_particles.keys())}")
+
+    # Plot for each run
+    n_particles_values = sorted(runs_by_n_particles.keys())
+
+    for run_idx in range(n_runs_per_config):
+        # Check if we have enough runs for this index
+        available_n_particles = [
+            n_p for n_p in n_particles_values if len(runs_by_n_particles[n_p]) > run_idx
+        ]
+
+        if not available_n_particles:
+            log.warning(f"Not enough runs for run_idx={run_idx}")
+            break
+
+        log.info(f"Creating linewise entropy plots for run {run_idx + 1}...")
+
+        with plt.style.context(context):
+            # Create figure: one row per n_particles, one column per frame
+            n_rows = len(available_n_particles)
+            n_cols = n_frames
+
+            fig, axes = plt.subplots(
+                n_rows, n_cols, figsize=(n_cols * 2.5, n_rows * 2), squeeze=False
+            )
+
+            # Load entropy data for all n_particles
+            entropy_data = {}
+
+            for row_idx, n_particles in enumerate(available_n_particles):
+                run_info = runs_by_n_particles[n_particles][run_idx]
+
+                try:
+                    metrics = np.load(str(run_info["metrics_path"]), allow_pickle=True)
+                    belief_dist = metrics["belief_distributions"]
+
+                    # Get config info
+                    config = run_info["config"]
+                    n_possible_actions = config.get("action_selection", {}).get(
+                        "n_possible_actions", 112
+                    )
+                    img_height = belief_dist.shape[2]
+                    img_width = belief_dist.shape[3]
+
+                    # Initialize GreedyEntropy class with proper parameters
+                    entropy_model = GreedyEntropy(
+                        n_actions=n_actions,
+                        n_possible_actions=n_possible_actions,
+                        img_width=img_width,
+                        img_height=img_height,
+                        entropy_sigma=entropy_sigma,
+                    )
+
+                    # Take only first n_frames
+                    belief_dist = belief_dist[:n_frames]
+
+                    # Compute linewise entropy for each frame
+                    linewise_entropies = []
+                    for frame_idx in range(len(belief_dist)):
+                        particles = belief_dist[
+                            frame_idx : frame_idx + 1
+                        ]  # Keep batch dim
+
+                        # Use GreedyEntropy's compute_pixelwise_entropy method
+                        pixelwise_entropy = entropy_model.compute_pixelwise_entropy(
+                            translate(particles, (0, 255), (-1, 1))[..., 0]
+                        )
+
+                        # Sum over height to get linewise entropy
+                        linewise_entropy = np.sum(
+                            pixelwise_entropy, axis=1
+                        )  # Shape: (batch, width)
+                        linewise_entropies.append(
+                            linewise_entropy[0]
+                        )  # Remove batch dim
+
+                    entropy_data[n_particles] = {
+                        "linewise_entropies": linewise_entropies,
+                        "filename": run_info["filename"],
+                    }
+
+                except Exception as e:
+                    log.error(f"Error loading entropy for {run_info['run_path']}: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+                    continue
+
+            if not entropy_data:
+                log.error("No entropy data could be loaded")
+                plt.close(fig)
+                continue
+
+            # Track global min/max for consistent y-axis
+            all_entropies = []
+            for data in entropy_data.values():
+                for entropy in data["linewise_entropies"]:
+                    all_entropies.extend(entropy)
+
+            y_min = np.min(all_entropies)
+            y_max = np.max(all_entropies)
+            y_margin = (y_max - y_min) * 0.1
+
+            # Plot entropy curves: one row per n_particles, one column per frame
+            for row_idx, n_particles in enumerate(available_n_particles):
+                if n_particles not in entropy_data:
+                    # Fill row with empty plots if data failed to load
+                    for col_idx in range(n_cols):
+                        axes[row_idx, col_idx].axis("off")
+                    continue
+
+                data = entropy_data[n_particles]
+                color = N_ACTIONS_COLORS.get(n_particles, f"C{n_particles % 10}")
+
+                for col_idx in range(n_cols):
+                    ax = axes[row_idx, col_idx]
+
+                    if col_idx < len(data["linewise_entropies"]):
+                        entropy = data["linewise_entropies"][col_idx]
+                        x_vals = np.arange(len(entropy))
+
+                        ax.plot(
+                            x_vals,
+                            entropy,
+                            linewidth=1.5,
+                            alpha=0.8,
+                            color=color,
+                        )
+
+                        # Set consistent y-axis limits
+                        ax.set_ylim(y_min - y_margin, y_max + y_margin)
+
+                        # Labels
+                        if col_idx == 0:
+                            ax.set_ylabel(
+                                f"$N_p$={n_particles}", fontsize=10, fontweight="bold"
+                            )
+
+                        if row_idx == 0:
+                            ax.set_title(f"Frame {col_idx}", fontsize=9)
+
+                        if row_idx == n_rows - 1:
+                            ax.set_xlabel("Line Position", fontsize=8)
+                        else:
+                            ax.set_xticklabels([])
+
+                        ax.grid(True, alpha=0.3)
+                        ax.tick_params(labelsize=7)
+                    else:
+                        # No data for this frame
+                        ax.axis("off")
+
+            # Add overall title
+            patient_name = (
+                list(entropy_data.values())[0]["filename"]
+                .replace(".avi", "")
+                .replace(".mp4", "")
+            )
+            fig.suptitle(
+                f"Linewise Entropy Across Frames\n"
+                f"({STRATEGY_NAMES.get(strategy, strategy)}, {n_actions} scan lines, Run {run_idx + 1})",
+                fontsize=12,
+                y=0.995,
+            )
+
+            plt.tight_layout(rect=[0, 0, 1, 0.98])
+
+            # Save plot
+            for ext in [".pdf", ".png"]:
+                save_file = (
+                    save_dir
+                    / f"linewise_entropy__n_actions={n_actions}__run{run_idx + 1}_{patient_name}{ext}"
+                )
+                plt.savefig(save_file, dpi=300, bbox_inches="tight")
+                log.info(f"Saved linewise entropy plot to {log.yellow(save_file)}")
+
+            plt.close(fig)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--sweep-path",
+        type=str,
+        default="/mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/n_particles_choose_first/sweep_2025_11_04_100001_597713",
+        help="Path to the sweep directory",
+    )
+    parser.add_argument(
+        "--save-dir",
+        type=str,
+        default="./output",
+        help="Directory to save the plots",
+    )
+    parser.add_argument(
+        "--strategy",
+        type=str,
+        default="greedy_entropy",
+        choices=["greedy_entropy", "uniform_random", "equispaced"],
+        help="Selection strategy to plot",
+    )
+    parser.add_argument(
+        "--n_frames",
+        type=int,
+        default=None,
+        help="Use metrics on from the first N frames",
+    )
+    parser.add_argument(
+        "--metrics",
+        type=str,
+        nargs="+",
+        default=["psnr", "lpips", "mse"],
+        help="Metrics to plot",
+    )
+    parser.add_argument(
+        "--plot-variance-grids",
+        action="store_true",
+        help="Generate variance map grids",
+    )
+    parser.add_argument(
+        "--variance-n-runs",
+        type=int,
+        default=3,
+        help="Number of runs to plot variance maps for",
+    )
+    parser.add_argument(
+        "--variance-n-frames",
+        type=int,
+        default=10,
+        help="Number of frames to show in variance grids",
+    )
+    parser.add_argument(
+        "--variance-n-actions",
+        type=int,
+        default=7,
+        help="Number of actions to filter for in variance grids",
+    )
+    parser.add_argument(
+        "--plot-linewise-entropy",
+        action="store_true",
+        help="Generate linewise entropy curve plots",
+    )
+    parser.add_argument(
+        "--entropy-n-runs",
+        type=int,
+        default=3,
+        help="Number of runs to plot linewise entropy for",
+    )
+    parser.add_argument(
+        "--entropy-n-frames",
+        type=int,
+        default=10,
+        help="Number of frames to show in linewise entropy plots",
+    )
+    parser.add_argument(
+        "--entropy-n-actions",
+        type=int,
+        default=7,
+        help="Number of actions to filter for in linewise entropy plots",
+    )
+    parser.add_argument(
+        "--entropy-sigma",
+        type=float,
+        default=1.0,
+        help="Sigma parameter for entropy computation (default: 1.0)",
+    )
+    args = parser.parse_args()
+
+    # Create save directory
+    save_dir = Path(args.save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Plot linewise entropy curves if requested
+    if args.plot_linewise_entropy:
+        log.info("Generating linewise entropy curves...")
+        plot_linewise_entropy_curves(
+            sweep_path=args.sweep_path,
+            save_dir=save_dir,
+            n_runs_per_config=args.variance_n_runs,
+            n_frames=args.variance_n_frames,
+            strategy=args.strategy,
+            n_actions=args.variance_n_actions,
+            entropy_sigma=args.entropy_sigma,
+            context="styles/ieee-tmi.mplstyle",
+        )
+
+    # Plot variance grids if requested
+    if args.plot_variance_grids:
+        log.info("Generating variance map grids...")
+        plot_variance_maps_grid(
+            sweep_path=args.sweep_path,
+            save_dir=save_dir,
+            n_runs_per_config=args.variance_n_runs,
+            n_frames=args.variance_n_frames,
+            strategy=args.strategy,
+            n_actions=args.variance_n_actions,
+            context="styles/ieee-tmi.mplstyle",
+        )
+
+    # Original plotting code
+    log.info(f"Loading results from {args.sweep_path}")
+
+    # Extract sweep data
+    combined_results = extract_sweep_data(
+        [args.sweep_path],
+        keys_to_extract=args.metrics,
+        x_axis_key="diffusion_inference.batch_size",  # This is n_particles
+        config_keys_to_include=["action_selection.n_actions"],
+        n_frames=args.n_frames,
+    )
+
+    log.info(f"Loaded {len(combined_results)} results")
+
+    # Plot for each metric
+    for metric_name in args.metrics:
+        log.info(f"Plotting {metric_name} vs n_particles")
+
+        save_path = save_dir / f"n_particles_vs_{metric_name}_{args.strategy}.pdf"
+
+        plot_n_particles_vs_metric(
+            combined_results,
+            metric_name=metric_name,
+            save_path=str(save_path),
+            strategy=args.strategy,
+            context="styles/ieee-tmi.mplstyle",
+        )
+
+        # Print results table
+        print_results_table(combined_results, metric_name, args.strategy)
+
+    log.info("Done!")
