@@ -105,12 +105,20 @@ def extract_run_dir(
     run,
     keys_to_extract=["mse", "psnr"],
     x_axis_key="action_selection.n_actions",
+    config_keys_to_include=None,
     strategies_to_plot=None,
     include_only_these_files=None,
     ef_lookup=None,
     max_blobs=1,
     max_bad_frames=5,
+    n_frames=None,  # New parameter
 ):
+    if isinstance(config_keys_to_include, str):
+        config_keys_to_include = [config_keys_to_include]
+    if not isinstance(keys_to_extract, list):
+        raise ValueError(
+            "keys_to_extract must be a metric name or list of metric names."
+        )
     run_path, target_file, _ = run
     config_path = os.path.join(run_path, "config.yaml")
     metrics_path = os.path.join(run_path, "metrics.npz")
@@ -149,6 +157,16 @@ def extract_run_dir(
         and "segmentation_mask_reconstructions" in metrics
     ):
         gt_masks = np.array(metrics["segmentation_mask_targets"])
+
+        # Trim masks if n_frames is specified
+        if n_frames is not None:
+            if gt_masks.ndim > 0 and len(gt_masks) > 0:
+                gt_masks = gt_masks[:n_frames]
+            else:
+                log.warning(
+                    f"Cannot trim masks for {run_path}: masks are not a sequence"
+                )
+
         # Only keep if gt_masks pass the blob filter
         if mask_has_too_many_blobs(
             gt_masks, max_blobs=max_blobs, max_bad_frames=max_bad_frames
@@ -157,20 +175,69 @@ def extract_run_dir(
             too_many_blobs = True
         else:
             pred_masks = np.array(metrics["segmentation_mask_reconstructions"])
+
+            # Trim pred_masks if n_frames is specified
+            if n_frames is not None:
+                if pred_masks.ndim > 0 and len(pred_masks) > 0:
+                    pred_masks = pred_masks[:n_frames]
+                else:
+                    log.warning(
+                        f"Cannot trim pred_masks for {run_path}: masks are not a sequence"
+                    )
+
             dice_score = compute_dice_score(pred_masks, gt_masks)
             mean_dice = np.mean(dice_score)
             too_many_blobs = False
     else:
         mean_dice = None
+        too_many_blobs = False
 
     metric_results = {}
     for metric_name in keys_to_extract:
         if metric_name not in metrics:
             continue
         metric_values = metrics[metric_name]
-        if isinstance(metric_values, np.ndarray) and metric_values.size > 0:
+
+        # Handle n_frames trimming
+        if n_frames is not None:
+            if (
+                isinstance(metric_values, np.ndarray)
+                and metric_values.size > 0
+                and len(np.shape(metric_values)) > 0
+            ):
+                # Trim to first n_frames
+                metric_values = metric_values[:n_frames]
+            else:
+                # Not a sequence - issue warning
+                log.warning(
+                    f"Cannot trim metric '{metric_name}' for {run_path}: "
+                    f"n_frames={n_frames} specified but metric is not a sequence "
+                    f"(shape: {np.shape(metric_values)})"
+                )
+
+        if (
+            isinstance(metric_values, np.ndarray)
+            and metric_values.size > 0
+            and len(np.shape(metric_values)) > 0
+        ):
             sequence_means = np.mean(metric_values, axis=-1)
             metric_results[metric_name] = sequence_means
+        elif (
+            isinstance(metric_values, np.ndarray)
+            and metric_values.size > 0
+            and len(np.shape(metric_values)) == 0
+        ):
+            metric_results[metric_name] = float(metric_values)
+
+    # Extract additional config values if requested
+    config_values = {}
+    if config_keys_to_include is not None:
+        for config_key in config_keys_to_include:
+            value = get_config_value(config, config_key)
+            # Use the last part of the dotted key as the column name
+            # e.g., "action_selection.n_actions" -> "n_actions"
+            column_name = config_key.split(".")[-1]
+            config_values[column_name] = value
 
     return {
         "EF": ef_value,
@@ -180,13 +247,28 @@ def extract_run_dir(
         "filestem": filestem,
         "dice": mean_dice,
         "too_many_blobs": too_many_blobs,
+        "config": config,  # Include full config for reference
         **metric_results,
+        **config_values,  # Add extracted config values
     }
 
 
-@cache_output(verbose=True)
+# @cache_output(verbose=True)
 def extract_sweep_data(sweep_dirs: str, **kwargs):
-    """Load all the metrics from the run_benchmark function, using in-file ground truth masks."""
+    """Load all the metrics from the run_benchmark function, using in-file ground truth masks.
+
+    Args:
+        sweep_dirs (str or list): Path(s) to sweep directories
+        **kwargs: Additional arguments to pass to extract_run_dir, including:
+            - keys_to_extract (list): Metric names to extract
+            - x_axis_key (str): Config key to use for x-axis values
+            - config_keys_to_include (list): Additional config keys to include as columns
+            - strategies_to_plot (list): Selection strategies to include
+            - include_only_these_files (list): Filter by specific files
+            - ef_lookup (dict): Ejection fraction lookup table
+            - max_blobs (int): Maximum number of blobs allowed
+            - max_bad_frames (int): Maximum number of bad frames allowed
+    """
 
     generator = index_sweep_data(sweep_dirs)
     _extract_run_dir = lambda run: extract_run_dir(run, **kwargs)
@@ -194,7 +276,7 @@ def extract_sweep_data(sweep_dirs: str, **kwargs):
     print("Extracting sweep data...")
     with concurrent.futures.ThreadPoolExecutor() as executor:
         results = list(
-            tqdm(executor.map(_extract_run_dir, generator), total=len(generator))
+            tqdm.tqdm(executor.map(_extract_run_dir, generator), total=len(generator))
         )
     results = [r for r in results if r is not None]
     return pd.DataFrame(results)
