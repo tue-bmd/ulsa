@@ -8,6 +8,7 @@ users.yaml
 !derivations/*.pdf
 *.npy
 *.pkl
+*.ttf
 
 # Ignore everything in the output directory
 output/*
