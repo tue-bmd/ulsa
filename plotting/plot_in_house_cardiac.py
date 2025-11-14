@@ -41,6 +41,7 @@ def plot_from_npz(
     arrow=None,
     diverging_dynamic_range=None,
     focused_dynamic_range=None,
+    scan_convert_resolution=0.1,
 ):
     save_path = Path(save_path)
     results = np.load(path, allow_pickle=True)
@@ -84,6 +85,7 @@ def plot_from_npz(
         scan_convert_order=0,
         image_range=focused_dynamic_range,
         fill_value="transparent",
+        scan_convert_resolution=scan_convert_resolution,
     )
     print("Postprocessing diverging...")
     diverging = postprocess_agent_results(
@@ -92,6 +94,7 @@ def plot_from_npz(
         scan_convert_order=0,
         image_range=diverging_dynamic_range,
         fill_value="transparent",
+        scan_convert_resolution=scan_convert_resolution,
     )
     print("Postprocessing reconstructions...")
     reconstructions = postprocess_agent_results(
@@ -101,6 +104,7 @@ def plot_from_npz(
         image_range=reconstruction_range,
         reconstruction_sharpness_std=0.04,
         fill_value="transparent",
+        scan_convert_resolution=scan_convert_resolution,
     )
     print("Postprocessing measurements...")
     measurements = postprocess_agent_results(
@@ -109,6 +113,7 @@ def plot_from_npz(
         scan_convert_order=0,
         image_range=reconstruction_range,
         fill_value="transparent",
+        scan_convert_resolution=scan_convert_resolution,
     )
 
     if context is None:
@@ -141,9 +146,10 @@ def plot_from_npz(
         scan_convert_order=1,
         image_range=[0, jnp.nanpercentile(entropy, 98.5)],
         fill_value="transparent",
+        scan_convert_resolution=scan_convert_resolution,
     )
 
-    with plt.style.context(context):
+    with plt.style.context([context, {"figure.constrained_layout.use": False}]):
         kwargs = {
             "vmin": 0,
             "vmax": 255,
@@ -154,7 +160,7 @@ def plot_from_npz(
         grid_shape = (1, 3)
         fig = plt.figure(figsize=(7.16, 1.6))
         wspace = 0.04
-        wspace_inner = -0.2
+        wspace_inner = -0.1
         hspace = 0.07
         hspace_inner = 0.02
         inner_grid_shape = (2, 2)
@@ -166,9 +172,9 @@ def plot_from_npz(
             hspace=hspace,
             left=0.0,
             right=1.0,
-            top=0.93,  # <1.0 to leave space for titles
+            top=0.88,  # <1.0 to leave space for titles
             bottom=0.0,
-            width_ratios=[1.0, 1.0, 1.5],
+            width_ratios=[1.0, 1.0, 1.42],
         )
 
         ax = fig.add_subplot(outer[0])
