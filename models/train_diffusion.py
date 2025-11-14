@@ -22,12 +22,12 @@ import json
 
 import keras
 import tensorflow as tf
+import wandb
 from agent_callback import AgentCallback
 from keras import ops
 from keras.callbacks import Callback
-
-import wandb
 from wandb.integration.keras import WandbMetricsLogger
+
 from zea import Config, Dataset, set_data_paths
 from zea.backend.tensorflow.dataloader import make_dataloader
 from zea.io_lib import load_image, save_to_gif
