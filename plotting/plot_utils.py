@@ -9,6 +9,16 @@ from scipy.stats import gaussian_kde
 
 from zea import log
 
+METRIC_NAMES = {
+    "dice": "DICE (→) [-]",
+    "psnr": "PSNR (→) [dB]",
+    "ssim": "SSIM (→) [-]",
+    "lpips": "LPIPS (←) [-]",
+    "mse": "MSE (←) [-]",  # on [0, 1] scale
+    "rmse": "RMSE (←) [-]",  # on [0, 1] scale
+    "nrmse": "NRMSE (←) [-]",
+}
+
 
 def natural_sort(l: list):
     """Sort a list of strings or numbers in a natural order.

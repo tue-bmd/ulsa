@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
 
 from plotting.index import extract_sweep_data
-from plotting.plot_utils import ViolinPlotter, natural_sort
+from plotting.plot_utils import METRIC_NAMES, ViolinPlotter, natural_sort
 
 # DATA_ROOT = "/mnt/z/prjs0966"
 # DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
@@ -60,16 +60,6 @@ STRATEGIES_TO_PLOT = [
     "equispaced",
     # Add/remove as needed
 ]
-
-METRIC_NAMES = {
-    "dice": "DICE (→) [-]",
-    "psnr": "PSNR (→) [dB]",
-    "ssim": "SSIM (→) [-]",
-    "lpips": "LPIPS (←) [-]",
-    "mse": "MSE (←) [-]",  # on [0, 1] scale
-    "rmse": "RMSE (←) [-]",  # on [0, 1] scale
-    "nrmse": "NRMSE (←) [-]",
-}
 
 # Add this near the top of the file where other constants are defined
 AXIS_LABEL_MAP = {
