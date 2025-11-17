@@ -1,6 +1,6 @@
 docker run \
     -v ~/mounts:/mnt/z/ \
-    -v /mnt/USBMD_datasets:/mnt/USBMD_datasets \
+    -v /data/USBMD_datasets:/mnt/USBMD_datasets \
     -v ./:/ulsa \
     -w /ulsa \
     --gpus all \
