@@ -68,6 +68,7 @@ METRIC_NAMES = {
     "lpips": "LPIPS (←) [-]",
     "mse": "MSE (←) [-]",  # on [0, 1] scale
     "rmse": "RMSE (←) [-]",  # on [0, 1] scale
+    "nrmse": "NRMSE (←) [-]",
 }
 
 # Add this near the top of the file where other constants are defined
@@ -114,15 +115,19 @@ def df_to_dict(df: pd.DataFrame, metric_name: str, filter_nan=True):
     Returns:
         dict: Nested dictionary with selection strategies as keys and x_values as sub-keys.
     """
+    x_min, x_max = 0, 255
+
     result = {}
     for _, row in df.iterrows():
         strategy = row["selection_strategy"]
         x_value = row["x_value"]
         if metric_name.lower() == "rmse":
             # scale [0, 255] to [0, 1]
-            value = np.sqrt(row["mse"] / (255 * 255))
+            value = np.sqrt(row["mse"] / (x_max * x_max))
+        if metric_name.lower() == "nrmse":
+            value = np.sqrt(row["mse"]) / (x_max - x_min)
         elif metric_name.lower() == "mse":
-            value = row["mse"] / (255 * 255)
+            value = row["mse"] / (x_max * x_max)
         else:
             value = row[metric_name]
         if filter_nan and (value is None or np.isnan(value).any()):
@@ -228,7 +233,7 @@ if __name__ == "__main__":
 
     # Individual metrics plots
     x_values = [4, 7, 14, 28]
-    for metric_name in ["psnr", "lpips", "ssim", "rmse"]:
+    for metric_name in ["psnr", "lpips", "ssim", "nrmse"]:
         formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
         for ext in [".pdf", ".png"]:
             plotter.plot(
