@@ -275,7 +275,7 @@ def extract_sweep_data(sweep_dirs: str, **kwargs):
     print("Extracting sweep data...")
     with concurrent.futures.ThreadPoolExecutor() as executor:
         results = list(
-            tqdm.tqdm(executor.map(_extract_run_dir, generator), total=len(generator))
+            tqdm(executor.map(_extract_run_dir, generator), total=len(generator))
         )
     results = [r for r in results if r is not None]
     return pd.DataFrame(results)
