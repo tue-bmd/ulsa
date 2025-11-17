@@ -31,8 +31,8 @@ from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_sid
 
 
 def plot_from_npz(
-    path,
-    save_path,
+    run_dir,
+    plot_dir,
     exts=(".png", ".pdf"),
     gif=True,
     gif_fps=8,
@@ -42,20 +42,26 @@ def plot_from_npz(
     diverging_dynamic_range=None,
     focused_dynamic_range=None,
     scan_convert_resolution=0.1,
+    selection_strategy="greedy_entropy",
 ):
-    save_path = Path(save_path)
-    results = np.load(path, allow_pickle=True)
+    plot_dir = Path(plot_dir)
+    plot_path = plot_dir / selection_strategy
 
-    focused = results["focused"]
+    focused_results = np.load(run_dir / "focused.npz", allow_pickle=True)
+    diverging_results = np.load(run_dir / "diverging.npz", allow_pickle=True)
+    results = np.load(run_dir / f"{selection_strategy}.npz", allow_pickle=True)
+
+    focused = focused_results["reconstructions"]
+    diverging = diverging_results["reconstructions"]
+
     if focused_dynamic_range is None:
-        focused_dynamic_range = results["focused_dynamic_range"]
+        focused_dynamic_range = focused_results["dynamic_range"]
 
-    diverging = results["diverging"]
     if diverging_dynamic_range is None:
-        diverging_dynamic_range = results["diverging_dynamic_range"]
+        diverging_dynamic_range = diverging_results["dynamic_range"]
 
     reconstructions = results["reconstructions"]
-    reconstruction_range = results["reconstruction_range"]
+    reconstruction_range = results["dynamic_range"]
 
     measurements = results["measurements"]
     masks = results["masks"]
@@ -122,7 +128,7 @@ def plot_from_npz(
     if gif:
         print("Creating GIF...")
         side_by_side_gif(
-            save_path.with_suffix(".gif"),
+            plot_path.with_suffix(".gif"),
             focused,
             reconstructions,
             diverging,
@@ -225,9 +231,9 @@ def plot_from_npz(
         # ax_top.set_title("Entropy")
 
         for ext in exts:
-            plt.savefig(save_path.with_suffix(ext))
+            plt.savefig(plot_path.with_suffix(ext))
             zea.log.info(
-                f"Saved cardiac reconstruction plot to {zea.log.yellow(save_path.with_suffix(ext))}"
+                f"Saved cardiac reconstruction plot to {zea.log.yellow(plot_path.with_suffix(ext))}"
             )
 
 

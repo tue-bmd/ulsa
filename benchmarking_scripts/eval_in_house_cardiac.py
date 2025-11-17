@@ -21,7 +21,7 @@ def parse_args():
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="/mnt/z/usbmd/Wessel/eval_in_house_cardiac",
+        default="/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v2",
         help="Directory to save results.",
     )
     parser.add_argument(
@@ -54,21 +54,15 @@ def eval_in_house_data(
     fps=8,
     image_range=None,  # auto-dynamic range
     seed=42,
+    selection_strategies=None,
 ):
-    save_dir = Path(save_dir)
-    save_dir.mkdir(parents=True, exist_ok=True)
     zea.log.info(f"Processing {file.stem}...")
-    # Run active sampling on focused waves
-    results, _, _, _, _, agent, _, _ = active_sampling_single_file(
-        "configs/cardiac_112_3_frames.yaml",
-        target_sequence=str(file),
-        override_config=override_config,
-        image_range=image_range,
-        seed=seed,
-    )
 
-    # Unpack results
-    squeezed_results = results.squeeze(-1)
+    if selection_strategies is None:
+        selection_strategies = ["greedy_entropy", "equispaced", "uniform_random"]
+
+    save_dir = Path(save_dir) / file.stem
+    save_dir.mkdir(parents=True, exist_ok=True)
 
     # Run diverging waves (full dynamic range)
     zea.log.info("Running diverging waves...")
@@ -78,6 +72,12 @@ def eval_in_house_data(
         grid_width=90,
         resize_height=112,
         type="diverging",
+    )
+    np.savez(
+        save_dir / f"diverging.npz",
+        reconstructions=diverging,
+        theta_range=diverging_scan.theta_range,
+        dynamic_range=diverging_scan.dynamic_range,
     )
 
     # Run focused waves (full dynamic range)
@@ -89,30 +89,59 @@ def eval_in_house_data(
         resize_height=112,
         type="focused",
     )
-
-    # Save results (all as floats and not scan converted)
-    save_path = save_dir / f"{file.stem}_results.npz"
     np.savez(
-        save_path,
-        focused=focused,
-        diverging=diverging,
-        reconstructions=squeezed_results.reconstructions,
-        measurements=squeezed_results.measurements,
-        masks=squeezed_results.masks,
-        targets=squeezed_results.target_imgs,
-        belief_distributions=squeezed_results.belief_distributions,
-        theta_range=focused_scan.theta_range,  # assumes theta range is the same for focused and diverging!
-        reconstruction_range=agent.input_range,
-        focused_dynamic_range=focused_scan.dynamic_range,
-        diverging_dynamic_range=diverging_scan.dynamic_range,
+        save_dir / f"focused.npz",
+        reconstructions=focused,
+        theta_range=focused_scan.theta_range,
+        dynamic_range=focused_scan.dynamic_range,
     )
 
-    if not visualize:
-        return save_path
+    override_config = zea.Config(override_config)
+    if "action_selection" not in override_config:
+        override_config["action_selection"] = {}
 
-    plot_from_npz(save_path, save_path, gif_fps=fps)
+    for selection_strategy in selection_strategies:
+        print(f"Running active perception with {selection_strategy}...")
+        _override_config = override_config.copy()
 
-    return save_path
+        _override_config["action_selection"]["selection_strategy"] = selection_strategy
+
+        if selection_strategy == "equispaced":
+            _override_config["action_selection"]["kwargs"] = {
+                "assert_equal_spacing": False
+            }
+
+        # Run active sampling on focused waves
+        results, _, _, _, _, agent, _, _ = active_sampling_single_file(
+            "configs/cardiac_112_3_frames.yaml",
+            target_sequence=str(file),
+            override_config=_override_config,
+            image_range=image_range,
+            seed=seed,
+        )
+
+        # Unpack results
+        squeezed_results = results.squeeze(-1)
+
+        # Save results (all as floats and not scan converted)
+        np.savez(
+            save_dir / f"{selection_strategy}.npz",
+            reconstructions=squeezed_results.reconstructions,
+            measurements=squeezed_results.measurements,
+            masks=squeezed_results.masks,
+            targets=squeezed_results.target_imgs,
+            belief_distributions=squeezed_results.belief_distributions,
+            dynamic_range=agent.input_range,
+            theta_range=diverging_scan.theta_range,
+        )
+
+    print(f"Saved results to {save_dir}")
+
+    if visualize:
+        print("Creating plots...")
+        plot_from_npz(save_dir, save_dir, gif_fps=fps)
+
+    return save_dir
 
 
 def main():
@@ -126,7 +155,7 @@ def main():
 
     override_config = dict(io_config=dict(frame_cutoff=n_frames))
 
-    for file in files:
+    for file in sorted(files):
         eval_in_house_data(file, save_dir, n_frames, override_config)
 
 
