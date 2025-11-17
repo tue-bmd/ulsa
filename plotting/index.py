@@ -252,7 +252,7 @@ def extract_run_dir(
     }
 
 
-# @cache_output(verbose=True)
+@cache_output(verbose=True)
 def extract_sweep_data(sweep_dirs: str, **kwargs):
     """Load all the metrics from the run_benchmark function, using in-file ground truth masks.
 
