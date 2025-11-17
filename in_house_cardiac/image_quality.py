@@ -9,16 +9,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from skimage import exposure  # pip install scikit-image
 
 sys.path.append("/ulsa")
-from plotting.plot_utils import ViolinPlotter, write_roman
-from zea.metrics import Metrics
 
-METRIC_NAMES = {
-    "psnr": "PSNR [dB]",
-    "ssim": "SSIM [-]",
-    "lpips": "LPIPS [-]",
-}
+import ulsa.metrics  # for nrmse
+from plotting.plot_utils import METRIC_NAMES, ViolinPlotter, write_roman
+from zea.metrics import Metrics
 
 
 def df_to_dict(df: pd.DataFrame, metric_name: str):
@@ -50,7 +47,7 @@ def main():
         "diverging": "Diverging",
     }
 
-    metric_names = ["psnr", "lpips"]
+    metric_names = ["psnr", "lpips", "nrmse"]
     drop_first_n_frames = 3  # filter startup artifacts of temporal model
     metrics = Metrics(metric_names, image_range=[0, 255])
     group_names.pop("focused")
@@ -64,27 +61,28 @@ def main():
         rf = DATA_ROOT / f"{subject}_results.npz"
         results = np.load(rf, allow_pickle=True)
 
-        _focused = results["focused"][drop_first_n_frames:]
-        _focused = zea.display.to_8bit(
-            _focused, results["focused_dynamic_range"], pillow=False
+        focused = results["focused"][drop_first_n_frames:]
+        focused_uint8 = zea.display.to_8bit(
+            focused, results["focused_dynamic_range"], pillow=False
         )
-        _diverging = results["diverging"][drop_first_n_frames:]
-        _diverging = zea.display.to_8bit(
-            _diverging, results["diverging_dynamic_range"], pillow=False
+        diverging = results["diverging"][drop_first_n_frames:]
+        diverging = exposure.match_histograms(diverging, focused)
+        diverging_uint8 = zea.display.to_8bit(
+            diverging, results["focused_dynamic_range"], pillow=False
         )
-        _reconstructions = results["reconstructions"][drop_first_n_frames:]
-        _reconstructions = zea.display.to_8bit(
-            _reconstructions, results["reconstruction_range"], pillow=False
+        reconstructions = results["reconstructions"][drop_first_n_frames:]
+        reconstructions = zea.display.to_8bit(
+            reconstructions, results["reconstruction_range"], pillow=False
         )
 
-        assert _focused.shape == _diverging.shape == _reconstructions.shape, (
+        assert focused_uint8.shape == diverging_uint8.shape == reconstructions.shape, (
             "Shapes of focused, diverging and reconstructions must be the same."
         )
         div_res = metrics(
-            _focused[..., None], _diverging[..., None], average_batch=False
+            focused_uint8[..., None], diverging_uint8[..., None], average_batch=False
         )
         rec_res = metrics(
-            _focused[..., None], _reconstructions[..., None], average_batch=False
+            focused_uint8[..., None], reconstructions[..., None], average_batch=False
         )
         data_frame.append({"subject": subject_name, "strategy": "diverging", **div_res})
         data_frame.append(
