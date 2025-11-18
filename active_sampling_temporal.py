@@ -440,8 +440,11 @@ def preload_data(
     except:
         probe = None
 
-    # TODO: kind of hacky way to update the scan for the cardiac dataset
-    if "cardiac" in str(file.path):
+    if scan.selected_transmits != [] and scan.n_tx_total == 101:
+        log.info(
+            "Assuming the data file is from the in-house datasets consisting "
+            "of 11 diverging waves and 90 focused waves."
+        )
         select_transmits(scan, type=type)
         update_scan_for_polar_grid(scan)
 
