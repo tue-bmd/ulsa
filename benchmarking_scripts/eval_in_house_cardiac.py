@@ -22,6 +22,7 @@ def parse_args():
         "--save_dir",
         type=str,
         default="/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v2",
+        # default="/mnt/z/usbmd/Wessel/eval_phantom",
         help="Directory to save results.",
     )
     parser.add_argument(
@@ -34,13 +35,22 @@ def parse_args():
         "--folder",
         type=str,
         default="/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/",
+        # default="/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea",
         help="Folder containing the HDF5 files.",
     )
     parser.add_argument(
         "--pattern",
         type=str,
         default="*_A4CH_*.hdf5",
+        # default="*.hdf5",
         help="Pattern to match HDF5 files in the folder.",
+    )
+    parser.add_argument(
+        "frame_idx",
+        type=int,
+        default=24,
+        # default=19,
+        help="Frame index to plot.",
     )
     return parser.parse_args()
 
@@ -55,6 +65,7 @@ def eval_in_house_data(
     image_range=None,  # auto-dynamic range
     seed=42,
     selection_strategies=None,
+    frame_idx=24,
 ):
     zea.log.info(f"Processing {file.stem}...")
 
@@ -139,7 +150,7 @@ def eval_in_house_data(
 
     if visualize:
         print("Creating plots...")
-        plot_from_npz(save_dir, save_dir, gif_fps=fps)
+        plot_from_npz(save_dir, save_dir, gif_fps=fps, frame_idx=frame_idx)
 
     return save_dir
 
@@ -156,7 +167,9 @@ def main():
     override_config = dict(io_config=dict(frame_cutoff=n_frames))
 
     for file in sorted(files):
-        eval_in_house_data(file, save_dir, n_frames, override_config)
+        eval_in_house_data(
+            file, save_dir, n_frames, override_config, frame_idx=args.frame_idx
+        )
 
 
 def run_single_example():
