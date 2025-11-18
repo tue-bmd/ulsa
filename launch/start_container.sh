@@ -1,3 +1,5 @@
+# docker build -t ulsa:latest .
+
 docker run \
     -v ~/mounts:/mnt/z/ \
     -v /data/USBMD_datasets:/mnt/USBMD_datasets \
