@@ -1,3 +1,19 @@
+"""
+Evaluate in-house (cardiac) data using different sampling strategies.
+Also saves focused and diverging wave reconstructions.
+
+To run on phantom:
+    ./launch/start_container.sh \
+        python benchmarking_scripts/eval_in_house_cardiac.py \
+        --save_dir "/mnt/z/usbmd/Wessel/eval_phantom2/" \
+        --folder "/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea" \
+        --pattern "*.hdf5" --frame_idx 19
+
+To run on in-house cardiac data:
+    ./launch/start_container.sh \
+        python benchmarking_scripts/eval_in_house_cardiac.py
+"""
+
 import sys
 
 import zea
@@ -46,7 +62,7 @@ def parse_args():
         help="Pattern to match HDF5 files in the folder.",
     )
     parser.add_argument(
-        "frame_idx",
+        "--frame_idx",
         type=int,
         default=24,
         # default=19,
