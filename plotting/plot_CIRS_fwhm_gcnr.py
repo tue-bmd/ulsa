@@ -8,9 +8,9 @@ comparison figure with reconstructions and FWHM traces.
 
 Example usage:
     python plotting/plot_CIRS_fwhm_gcnr.py \
-        --data-dir "/mnt/z/usbmd/Wessel/eval_phantom/20251118_CIRS_0000" \
+        --data-dir "/mnt/z/usbmd/Wessel/eval_phantom2/20251118_CIRS_0000" \
         --save-dir ./output \
-        --frame-idx 3 \
+        --frame-idx 19 \
         --point1 54 60 \
         --point2 54 76
 
