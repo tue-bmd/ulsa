@@ -35,7 +35,7 @@ def beamforming(rx_apo=True) -> list:
 
 def resize(action_selection_shape: tuple, input_shape: tuple) -> list:
     """Resize to the shape that the prior model expects."""
-    ops = [ulsa.ops.Resize(size=action_selection_shape[:2])]
+    ops = [zea.keras_ops.Resize(size=action_selection_shape[:2], antialias=True)]
     if input_shape[:2] != action_selection_shape[:2]:
         pad = zea.ops.Pad(
             input_shape[:2], axis=(-3, -2), pad_kwargs=dict(mode="symmetric")
@@ -58,7 +58,7 @@ def make_pipeline(
         pipeline = zea.Pipeline(
             [
                 *beamforming(rx_apo=rx_apo),
-                ulsa.ops.ExpandDims(axis=-1),
+                zea.keras_ops.ExpandDims(axis=-1),
                 ulsa.ops.TranslateDynamicRange(output_range),
                 *resize(action_selection_shape, output_shape),
                 zea.keras_ops.Clip(
@@ -73,7 +73,7 @@ def make_pipeline(
     elif data_type == "data/image":
         pipeline = Pipeline(
             [
-                ulsa.ops.ExpandDims(axis=-1),
+                zea.keras_ops.ExpandDims(axis=-1),
                 ulsa.ops.TranslateDynamicRange(output_range),
                 *resize(action_selection_shape, output_shape),
             ],
@@ -84,7 +84,7 @@ def make_pipeline(
     elif data_type == "data/image_3D":
         pipeline = Pipeline(
             [
-                ulsa.ops.ExpandDims(axis=-1),
+                zea.keras_ops.ExpandDims(axis=-1),
                 ulsa.ops.TranslateDynamicRange(output_range),
                 # transpose so that azimuth dimension is on the outside, like a batch.
                 # then we simply apply the 2d DM along all azimuthal angles

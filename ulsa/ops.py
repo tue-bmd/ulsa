@@ -7,6 +7,7 @@ from keras import ops
 
 import zea.ops
 from zea.ops import translate
+from zea.tensor_ops import apply_along_axis
 
 NOISE_ESTIMATION_NORMALIZER = (
     0.6745  # Used for robust noise estimation from median absolute deviation
@@ -133,52 +134,6 @@ class TranslateDynamicRange(zea.ops.Operation):
         return {self.output_key: data}
 
 
-class ExpandDims(zea.ops.Operation):
-    """Expand dimensions of the input data."""
-
-    def __init__(self, axis=-1, **kwargs):
-        super().__init__(**kwargs)
-        self.axis = axis
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-        expanded_data = ops.expand_dims(data, axis=self.axis)
-        return {self.output_key: expanded_data}
-
-
-class Squeeze(zea.ops.Operation):
-    """Squeeze dimensions of the input data."""
-
-    def __init__(self, axis=-1, **kwargs):
-        super().__init__(**kwargs)
-        self.axis = axis
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-        squeezed_data = ops.squeeze(data, axis=self.axis)
-        return {self.output_key: squeezed_data}
-
-
-class Resize(zea.ops.Operation):
-    """Resize the input data to a specified shape."""
-
-    def __init__(self, size, interpolation="bilinear", antialias=True, **kwargs):
-        super().__init__(**kwargs)
-        self.size = size
-        self.interpolation = interpolation
-        self.antialias = antialias
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-        resized_data = ops.image.resize(
-            data,
-            size=self.size,
-            interpolation=self.interpolation,
-            antialias=self.antialias,
-        )
-        return {self.output_key: resized_data}
-
-
 class Sharpen(zea.ops.Operation):
     """Sharpen an image using unsharp masking."""
 
@@ -214,19 +169,6 @@ class WaveletDenoise(zea.ops.Operation):
             threshold_factor=self.threshold_factor,
         )
         return {self.output_key: denoised_signal}
-
-
-def apply_along_axis(func, axis, arr):
-    """Apply a function to 1-D slices along the given axis.
-
-    Based on [np.apply_along_axis](https://numpy.org/devdocs/reference/generated/numpy.apply_along_axis.html)
-    """
-    arr = ops.moveaxis(arr, axis, -1)
-    ndim = ops.ndim(arr)
-    for _ in range(ndim - 1):
-        func = jax.vmap(func)
-    result = func(arr)
-    return ops.moveaxis(result, -1, axis)
 
 
 class FirFilter(zea.ops.Operation):
