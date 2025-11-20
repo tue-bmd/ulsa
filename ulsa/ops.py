@@ -171,69 +171,6 @@ class WaveletDenoise(zea.ops.Operation):
         return {self.output_key: denoised_signal}
 
 
-class FirFilter(zea.ops.Operation):
-    def __init__(
-        self, axis=-3, complex_channels=False, filter_key="fir_filter_taps", **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.axis = axis
-        self.complex_channels = complex_channels
-        self.filter_key = filter_key
-
-    @property
-    def valid_keys(self):
-        """Get the valid keys for the `call` method."""
-        return self._valid_keys.union({self.filter_key})
-
-    def call(self, **kwargs):
-        signal = kwargs[self.key]
-        fir_filter_taps = kwargs.get(self.filter_key)
-
-        if self.complex_channels:
-            signal = zea.ops.channels_to_complex(signal)
-
-        def _convolve(signal):
-            """Apply the filter to the signal using correlation."""
-            return ops.correlate(signal, fir_filter_taps[::-1], mode="same")
-
-        filtered_signal = apply_along_axis(_convolve, self.axis, signal)
-
-        if self.complex_channels:
-            filtered_signal = zea.ops.complex_to_channels(filtered_signal)
-
-        return {self.output_key: filtered_signal}
-
-
-class LowPassFilter(FirFilter):
-    def __init__(self, num_taps=128, axis=-3, complex_channels=False):
-        super().__init__(
-            axis=axis,
-            complex_channels=complex_channels,
-            jittable=False,
-        )
-        self.num_taps = num_taps
-
-    def call(
-        self,
-        sampling_frequency=None,
-        center_frequency=None,
-        bandwidth=None,
-        factor=None,
-        **kwargs,
-    ):
-        if bandwidth is None:
-            bandwidth = sampling_frequency / factor
-
-        lpf = zea.ops.get_low_pass_iq_filter(
-            self.num_taps,
-            ops.convert_to_numpy(sampling_frequency).item(),
-            center_frequency,
-            bandwidth,
-        )
-        kwargs.pop("fir_filter_taps", None)  # Remove any existing fir_filter_taps
-        return super().call(fir_filter_taps=lpf, **kwargs)
-
-
 class HistogramMatching(zea.ops.Operation):
     """Histogram matching operation."""
 
