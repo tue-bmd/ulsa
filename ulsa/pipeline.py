@@ -8,10 +8,10 @@ from zea import Pipeline
 def beamforming(rx_apo=True) -> list:
     """Create a pipeline for beamforming operations."""
     return [
-        ulsa.ops.FirFilter(axis=-3, filter_key="bandpass_rf"),
+        zea.ops.FirFilter(axis=-3, filter_key="bandpass_rf"),
         ulsa.ops.WaveletDenoise(),  # optional
         zea.ops.Demodulate(),
-        ulsa.ops.LowPassFilter(complex_channels=True, axis=-2),  # optional
+        zea.ops.LowPassFilter(complex_channels=True, axis=-2),  # optional
         zea.ops.Downsample(2),  # optional
         zea.ops.Map(
             [
