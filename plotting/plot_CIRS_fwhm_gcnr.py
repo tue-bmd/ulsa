@@ -264,6 +264,7 @@ def plot_fwhm_gcnr(
     arrow_tip=None,
     arrow_length=30,
     arrow_angle=45,
+    overlays_on_all=False,  # New parameter
 ):
     import matplotlib.gridspec as gridspec
     import matplotlib.pyplot as plt
@@ -323,7 +324,7 @@ def plot_fwhm_gcnr(
             reconstructions_raw[strategy],
             scan_conversion_angles=scan_conversion_angles,
             fill_value=np.nan,
-            order=1,
+            order=0,
         )
 
     # Compute FWHM and GCNR for each strategy
@@ -380,12 +381,13 @@ def plot_fwhm_gcnr(
                 vmin=vmin,
                 vmax=vmax,
                 origin="upper",
+                interpolation="nearest",
             )
             ax.set_title(titles[strategy], fontsize=9, pad=2)
             ax.axis("off")
 
-            # Only show overlays on equispaced
-            if strategy == "equispaced":
+            # Show overlays on equispaced only, or on all if overlays_on_all is True
+            if strategy == "equispaced" or overlays_on_all:
                 # Draw FWHM measurement line overlay (thin dashed red, no dots)
                 ax.plot(
                     [point1[1], point2[1]],
@@ -452,9 +454,54 @@ def plot_fwhm_gcnr(
                 vmin=vmin,
                 vmax=vmax,
                 origin="upper",
+                interpolation="nearest",
             )
             ax.set_title(titles[strategy], fontsize=9, pad=2)
             ax.axis("off")
+
+            # Show overlays on all second row images if overlays_on_all is True
+            if overlays_on_all:
+                # Draw FWHM measurement line overlay (thin dashed red, no dots)
+                ax.plot(
+                    [point1[1], point2[1]],
+                    [point1[0], point2[0]],
+                    "r-",
+                    linewidth=0.8,
+                    alpha=0.7,
+                )
+
+                # Draw GCNR regions
+                circle_signal = Circle(
+                    (gcnr_center[1], gcnr_center[0]),
+                    gcnr_radius,
+                    fill=False,
+                    edgecolor="cyan",
+                    linestyle="--",
+                    linewidth=1,
+                    alpha=0.7,
+                )
+                ax.add_patch(circle_signal)
+
+                circle_annulus_inner = Circle(
+                    (gcnr_center[1], gcnr_center[0]),
+                    gcnr_annulus_inner,
+                    fill=False,
+                    edgecolor="yellow",
+                    linestyle="--",
+                    linewidth=1,
+                    alpha=0.7,
+                )
+                ax.add_patch(circle_annulus_inner)
+                circle_annulus_outer = Circle(
+                    (gcnr_center[1], gcnr_center[0]),
+                    gcnr_annulus_outer,
+                    fill=False,
+                    edgecolor="yellow",
+                    linestyle="--",
+                    linewidth=1,
+                    alpha=0.7,
+                )
+                ax.add_patch(circle_annulus_outer)
 
             # Store text position for later
             text_positions_row2.append((ax, strategy))
@@ -487,7 +534,7 @@ def plot_fwhm_gcnr(
         ax_fwhm.legend(
             loc="upper center",
             bbox_to_anchor=(0.5, -0.5),
-            fontsize=5,
+            fontsize=6,
             framealpha=0.9,
             ncol=2,
             columnspacing=0.8,  # Reduce horizontal spacing between columns
@@ -512,10 +559,10 @@ def plot_fwhm_gcnr(
             bbox = ax.get_position()
             # Position text to the right of the axes
             fig.text(
-                bbox.x1 - 0.09,  # Slightly to the right of axes
+                bbox.x1 - 0.08,  # Slightly to the right of axes
                 bbox.y1 - 0.04,  # Near top of axes
-                f"FWHM: {fwhm_vals[strategy]:.2f} mm\nGCNR: {gcnr_vals[strategy]:.2f}",
-                fontsize=5,
+                f"FWHM: {fwhm_vals[strategy]:.2f}\nGCNR: {gcnr_vals[strategy]:.2f}",
+                fontsize=6,
                 color="black",
                 ha="left",
                 va="top",
@@ -525,10 +572,10 @@ def plot_fwhm_gcnr(
         for ax, strategy in text_positions_row2:
             bbox = ax.get_position()
             fig.text(
-                bbox.x1 - 0.09,
+                bbox.x1 - 0.08,
                 bbox.y1 - 0.04,
-                f"FWHM: {fwhm_vals[strategy]:.2f} mm\nGCNR: {gcnr_vals[strategy]:.2f}",
-                fontsize=5,
+                f"FWHM: {fwhm_vals[strategy]:.2f}\nGCNR: {gcnr_vals[strategy]:.2f}",
+                fontsize=6,
                 color="black",
                 ha="left",
                 va="top",
@@ -651,6 +698,11 @@ if __name__ == "__main__":
         default=45,
         help="Arrow angle in degrees (default: 45, down and to the right)",
     )
+    parser.add_argument(
+        "--overlays-on-all",
+        action="store_true",
+        help="Show FWHM line and GCNR circles on all top row images (default: only on equispaced)",
+    )
     args = parser.parse_args()
 
     # Create save directory if it doesn't exist
@@ -678,6 +730,7 @@ if __name__ == "__main__":
         arrow_tip=tuple(args.arrow_tip) if args.arrow_tip is not None else None,
         arrow_length=args.arrow_length,
         arrow_angle=args.arrow_angle,
+        overlays_on_all=args.overlays_on_all,
     )
 
     log.info("Done!")
