@@ -28,9 +28,10 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, FancyArrowPatch
 
 from zea import init_device, log
 from zea.ops import translate
@@ -39,6 +40,8 @@ if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
     init_device("cpu")
     sys.path.append("/ulsa")
+
+from skimage import exposure
 
 from ulsa.io_utils import _scan_convert
 from zea.metrics import gcnr
@@ -61,6 +64,27 @@ STRATEGY_COLORS = {
 
 # Strategies that use original acquisitions (not reconstructed from subsampled data)
 ORIGINAL_ACQUISITONS = ["focused", "diverging"]
+
+
+def get_arrow_patch(row_tip, col_tip, length=30, angle_deg=45):
+    """Create a FancyArrowPatch for matplotlib at the specified tip, length, and angle."""
+    import math
+
+    angle_rad = math.radians(angle_deg)
+    # Calculate tail position
+    row_tail = row_tip - length * math.sin(angle_rad)
+    col_tail = col_tip - length * math.cos(angle_rad)
+    arrow_kwargs = {
+        "color": "purple",
+        "arrowstyle": "->",
+        "mutation_scale": 12,
+        "linewidth": 2,
+    }
+    return FancyArrowPatch(
+        (col_tail, row_tail),  # tail (x, y)
+        (col_tip, row_tip),  # tip (x, y)
+        **arrow_kwargs,
+    )
 
 
 def calculate_fwhm(point1, point2, reconstruction_sc, rho_max):
@@ -223,7 +247,7 @@ def calculate_gcnr(
     return gcnr_value
 
 
-def plot_fwhm_gcnr_comparison(
+def plot_fwhm_gcnr(
     data_dir: Path,
     save_dir: Path,
     frame_idx: int = 3,
@@ -236,384 +260,289 @@ def plot_fwhm_gcnr_comparison(
     rho_max: float = 80.0,
     vmin: float = -60.0,
     vmax: float = 0.0,
-    strategies: list = None,
     context="styles/ieee-tmi.mplstyle",
+    arrow_tip=None,
+    arrow_length=30,
+    arrow_angle=45,
 ):
-    """Plot scan-converted reconstructions with FWHM measurement line and FWHM trace comparison.
+    import matplotlib.gridspec as gridspec
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle
 
-    Creates a multi-panel figure with:
-    - Left: Colorbar for intensity scale
-    - Middle: Scan-converted reconstruction images for each strategy with measurement line overlay
-    - Right: Overlaid FWHM traces showing intensity profiles along the measurement line
-    - Far Right: GCNR bar plot
+    strategies_row1 = ["equispaced", "uniform_random", "greedy_entropy"]
+    strategies_row2 = ["focused", "diverging"]
+    all_strategies = strategies_row1 + strategies_row2
 
-    Args:
-        data_dir: Directory containing .npz files for each strategy
-        save_dir: Directory to save output plots
-        frame_idx: Frame index to visualize (default: 3)
-        point1: Tuple of (row, col) pixel indices for start point of measurement line
-        point2: Tuple of (row, col) pixel indices for end point of measurement line
-        gcnr_center: Tuple of (row, col) for GCNR region centers
-        gcnr_radius: Radius of inner circle for GCNR in pixels
-        gcnr_annulus_inner: Inner radius of annulus for GCNR in pixels
-        gcnr_annulus_outer: Outer radius of annulus for GCNR in pixels
-        rho_max: Maximum imaging depth in mm (default: 80.0)
-        vmin: Minimum intensity value for display in dB (default: -60.0)
-        vmax: Maximum intensity value for display in dB (default: 0.0)
-        strategies: List of strategy names to plot (default: all strategies)
-        context: Matplotlib style file to use (default: "styles/ieee-tmi.mplstyle")
-    """
-    if strategies is None:
-        strategies = [
-            "greedy_entropy",
-            "uniform_random",
-            "equispaced",
-            "focused",
-            "diverging",
-        ]
-
-    # Load reconstruction data for all strategies
+    # Load data
     data = {}
     theta_range = None
-
-    for strategy in strategies:
+    for strategy in all_strategies:
         npz_path = data_dir / f"{strategy}.npz"
         if npz_path.exists():
             npz_data = np.load(str(npz_path))
             data[strategy] = npz_data
-
-            # Extract theta_range (should be same for all strategies)
             if theta_range is None and "theta_range" in npz_data:
                 theta_range = npz_data["theta_range"]
-                log.info(f"Found theta_range: {theta_range}")
-
-            log.info(f"Loaded {strategy}: {npz_data['reconstructions'].shape}")
         else:
-            log.warning(f"File not found: {npz_path}")
-
-    if not data:
-        log.error("No data files found!")
-        return
-
-    # Default theta_range if not found in data files
+            print(f"File not found: {npz_path}")
     if theta_range is None:
-        theta_range = (-0.78539816, 0.78539816)  # -45 to 45 degrees in radians
-        log.warning(f"No theta_range found in data, using default: {theta_range}")
-
-    # Convert theta_range from radians to degrees for scan conversion
+        theta_range = (-0.78539816, 0.78539816)
     scan_conversion_angles = (np.rad2deg(theta_range[0]), np.rad2deg(theta_range[1]))
 
-    with plt.style.context(context):
-        # Create figure layout: colorbar + images + FWHM plot + GCNR plot
-        n_strategies = len(data)
-        fig_width = 0.3 + 2 * n_strategies + 4 + 2  # Added 2 for GCNR plot
-        fig = plt.figure(figsize=(fig_width, 2.5))
-
-        import matplotlib.gridspec as gridspec
-
-        # Create main grid: [images section, plots section]
-        gs_main = gridspec.GridSpec(
-            1,
-            2,
-            width_ratios=[0.05 + n_strategies, 2.5],  # Images vs plots
-            wspace=0.05,  # Small space between image section and plot section
+    # Always use greedy_entropy as reference for histogram matching
+    ref_data = data["greedy_entropy"]
+    if "greedy_entropy" not in ORIGINAL_ACQUISITONS:
+        reference_image = translate(
+            np.clip(ref_data["reconstructions"][frame_idx], -1, 1),
+            (-1, 1),
+            (-60, 0),
         )
+    else:
+        reference_image = ref_data["reconstructions"][frame_idx]
+    reference_image = np.clip(reference_image, vmin, vmax)
 
-        # Create sub-grid for images: [colorbar, image1, image2, ..., imageN]
-        gs_images = gridspec.GridSpecFromSubplotSpec(
-            1,
-            n_strategies + 1,
-            subplot_spec=gs_main[0],
-            width_ratios=[0.05] + [1] * n_strategies,
-            wspace=0.1,  # Tighter spacing between reconstruction images
-        )
-
-        # Create sub-grid for plots: [FWHM plot, GCNR plot]
-        gs_plots = gridspec.GridSpecFromSubplotSpec(
-            1,
-            2,
-            subplot_spec=gs_main[1],
-            width_ratios=[1.5, 1],
-            wspace=0.4,  # Wider spacing between FWHM and GCNR plots
-        )
-
-        # Convert reconstructions to dB scale and scan convert once per strategy
-        reconstructions_raw = {}
-        reconstructions_sc = {}
-
-        for strategy, strategy_data in data.items():
-            # Translate from [-1, 1] normalized range to [-60, 0] dB for reconstructed data
-            if strategy not in ORIGINAL_ACQUISITONS:
-                reconstruction = translate(
-                    np.clip(strategy_data["reconstructions"][frame_idx], -1, 1),
-                    (-1, 1),
-                    (-60, 0),
-                )
-            else:
-                # Original acquisitions are already in dB
-                reconstruction = strategy_data["reconstructions"][frame_idx]
-
-            # Clip all reconstructions to expected dynamic range
-            reconstructions_raw[strategy] = np.clip(reconstruction, -60, 0)
-
-            # Scan convert once and store
-            reconstruction_sc = _scan_convert(
-                reconstructions_raw[strategy],
-                scan_conversion_angles=scan_conversion_angles,
-                fill_value=np.nan,  # NaN for transparent background outside scan cone
-                order=1,
+    # Prepare reconstructions
+    reconstructions_raw = {}
+    reconstructions_sc = {}
+    for strategy in all_strategies:
+        strategy_data = data[strategy]
+        if strategy not in ORIGINAL_ACQUISITONS:
+            reconstruction = translate(
+                np.clip(strategy_data["reconstructions"][frame_idx], -1, 1),
+                (-1, 1),
+                (-60, 0),
             )
-            reconstructions_sc[strategy] = reconstruction_sc
+        else:
+            reconstruction = strategy_data["reconstructions"][frame_idx]
 
-        # Create colorbar in first column of images grid
-        cax = fig.add_subplot(gs_images[0])
-        import matplotlib.cm as cm
+        # Histogram match to greedy_entropy reference
+        reconstruction = exposure.match_histograms(reconstruction, reference_image)
 
-        norm = plt.Normalize(vmin=vmin, vmax=vmax)
-        sm = cm.ScalarMappable(cmap="gray", norm=norm)
-        sm.set_array([])
-        cbar = plt.colorbar(sm, cax=cax)
-        cbar.set_label("Intensity [dB]", fontsize=8, rotation=90, labelpad=5)
-        cbar.ax.tick_params(labelsize=7)
-
-        # Move colorbar ticks and label to the left side
-        cbar.ax.yaxis.set_ticks_position("left")
-        cbar.ax.yaxis.set_label_position("left")
-
-        # Adjust colorbar height to match images
-        pos_cbar = cax.get_position()
-        new_cbar_height = 0.45
-        new_cbar_bottom = pos_cbar.y0 + (pos_cbar.height - new_cbar_height) / 2
-        cax.set_position(
-            [pos_cbar.x0, new_cbar_bottom, pos_cbar.width, new_cbar_height]
+        reconstructions_raw[strategy] = np.clip(reconstruction, vmin, vmax)
+        reconstructions_sc[strategy] = _scan_convert(
+            reconstructions_raw[strategy],
+            scan_conversion_angles=scan_conversion_angles,
+            fill_value=np.nan,
+            order=1,
         )
 
-        # Plot scan-converted reconstructions (starting from column 1 after colorbar)
-        for idx, strategy in enumerate(data.keys()):
-            reconstruction_sc = reconstructions_sc[strategy]
+    # Compute FWHM and GCNR for each strategy
+    fwhm_vals = {}
+    gcnr_vals = {}
+    for strategy in all_strategies:
+        reconstruction_sc = reconstructions_sc[strategy]
+        trace_db, distances_mm, fwhm_val_mm = calculate_fwhm(
+            point1, point2, reconstruction_sc, rho_max
+        )
+        fwhm_vals[strategy] = fwhm_val_mm
+        gcnr_vals[strategy] = calculate_gcnr(
+            reconstruction_sc,
+            gcnr_center,
+            gcnr_radius,
+            gcnr_annulus_inner,
+            gcnr_annulus_outer,
+        )
 
-            ax = fig.add_subplot(gs_images[idx + 1])
+    # Plotting
+    with plt.style.context(context):
+        fig = plt.figure(
+            figsize=(7.16 / 2.0, 2.2)
+        )  # Single column width, slightly taller
+        gs = gridspec.GridSpec(
+            2,
+            3,
+            figure=fig,
+            wspace=0.04,
+            hspace=0.08,
+            left=0.0,
+            right=1.0,
+            top=0.98,
+            bottom=0.02,
+        )
+
+        # Titles for each strategy
+        titles = {
+            "greedy_entropy": "Active Perception (11/90)",
+            "uniform_random": "Random (11/90)",
+            "equispaced": "Equispaced (11/90)",
+            "focused": "Focused (90)",
+            "diverging": "Diverging (11)",
+        }
+
+        # Plot first row: reconstructions
+        text_positions_row1 = []  # Store positions for later
+        for col, strategy in enumerate(strategies_row1):
+            ax = fig.add_subplot(gs[0, col])
             im = ax.imshow(
-                reconstruction_sc,
+                reconstructions_sc[strategy],
                 cmap="gray",
-                aspect="equal",  # Maintain correct aspect ratio
+                aspect="equal",
                 vmin=vmin,
                 vmax=vmax,
                 origin="upper",
             )
-
-            strategy_display = STRATEGY_NAMES.get(strategy, strategy)
-            ax.set_title(strategy_display, fontsize=9, fontweight="bold")
-
-            # Draw FWHM measurement line overlay
-            ax.plot(
-                [point1[1], point2[1]],
-                [point1[0], point2[0]],
-                "r-",
-                linewidth=1,
-                alpha=0.4,
-            )
-            # Draw endpoint markers
-            ax.plot(
-                [point1[1], point2[1]],
-                [point1[0], point2[0]],
-                "ro",
-                markersize=2,
-                alpha=0.4,
-            )
-
-            # Draw GCNR regions
-            # Inner circle (signal region) - cyan dashed
-            circle_signal = Circle(
-                (gcnr_center[1], gcnr_center[0]),
-                gcnr_radius,
-                fill=False,
-                edgecolor="cyan",
-                linestyle="--",
-                linewidth=1,
-                alpha=0.6,
-            )
-            ax.add_patch(circle_signal)
-
-            # Inner annulus boundary - yellow dashed
-            circle_annulus_inner = Circle(
-                (gcnr_center[1], gcnr_center[0]),
-                gcnr_annulus_inner,
-                fill=False,
-                edgecolor="yellow",
-                linestyle="--",
-                linewidth=1,
-                alpha=0.6,
-            )
-            ax.add_patch(circle_annulus_inner)
-
-            # Outer annulus boundary - yellow dashed
-            circle_annulus_outer = Circle(
-                (gcnr_center[1], gcnr_center[0]),
-                gcnr_annulus_outer,
-                fill=False,
-                edgecolor="yellow",
-                linestyle="--",
-                linewidth=1,
-                alpha=0.6,
-            )
-            ax.add_patch(circle_annulus_outer)
-
+            ax.set_title(titles[strategy], fontsize=9, pad=2)
             ax.axis("off")
 
-        # Plot FWHM traces (first plot in plots grid)
-        ax_fwhm = fig.add_subplot(gs_plots[0])
+            # Only show overlays on equispaced
+            if strategy == "equispaced":
+                # Draw FWHM measurement line overlay (thin dashed red, no dots)
+                ax.plot(
+                    [point1[1], point2[1]],
+                    [point1[0], point2[0]],
+                    "r-",
+                    linewidth=0.8,
+                    alpha=0.7,
+                )
 
-        all_traces = []
-        for strategy in strategies:
-            if strategy not in data:
-                continue
+                # Draw GCNR regions
+                circle_signal = Circle(
+                    (gcnr_center[1], gcnr_center[0]),
+                    gcnr_radius,
+                    fill=False,
+                    edgecolor="cyan",
+                    linestyle="--",
+                    linewidth=1,
+                    alpha=0.7,
+                )
+                ax.add_patch(circle_signal)
 
-            # Use pre-computed scan-converted image
-            reconstruction_sc = reconstructions_sc[strategy]
+                circle_annulus_inner = Circle(
+                    (gcnr_center[1], gcnr_center[0]),
+                    gcnr_annulus_inner,
+                    fill=False,
+                    edgecolor="yellow",
+                    linestyle="--",
+                    linewidth=1,
+                    alpha=0.7,
+                )
+                ax.add_patch(circle_annulus_inner)
+                circle_annulus_outer = Circle(
+                    (gcnr_center[1], gcnr_center[0]),
+                    gcnr_annulus_outer,
+                    fill=False,
+                    edgecolor="yellow",
+                    linestyle="--",
+                    linewidth=1,
+                    alpha=0.7,
+                )
+                ax.add_patch(circle_annulus_outer)
 
-            trace_db, distances_mm, fwhm_val_mm = calculate_fwhm(
-                point1, point2, reconstruction_sc, rho_max
+            # Draw arrow on all first row images
+            if arrow_tip is not None:
+                arrow_patch = get_arrow_patch(
+                    row_tip=arrow_tip[0],
+                    col_tip=arrow_tip[1],
+                    length=arrow_length,
+                    angle_deg=arrow_angle,
+                )
+                ax.add_patch(arrow_patch)
+
+            # Store text position for later (in figure coordinates)
+            text_positions_row1.append((ax, strategy))
+
+        # Plot second row: focused, diverging, FWHM plot
+        text_positions_row2 = []  # Store positions for later
+        for col, strategy in enumerate(strategies_row2):
+            ax = fig.add_subplot(gs[1, col])
+            im = ax.imshow(
+                reconstructions_sc[strategy],
+                cmap="gray",
+                aspect="equal",
+                vmin=vmin,
+                vmax=vmax,
+                origin="upper",
             )
+            ax.set_title(titles[strategy], fontsize=9, pad=2)
+            ax.axis("off")
 
-            # Store trace for half-maximum calculation
-            all_traces.append(trace_db)
+            # Store text position for later
+            text_positions_row2.append((ax, strategy))
 
+        # FWHM plot in last column, second row
+        ax_fwhm = fig.add_subplot(gs[1, 2])
+        for strategy in all_strategies:
+            trace_db, distances_mm, _ = calculate_fwhm(
+                point1, point2, reconstructions_sc[strategy], rho_max
+            )
             color = STRATEGY_COLORS.get(strategy, "#000000")
-            strategy_display = STRATEGY_NAMES.get(strategy, strategy)
-
-            # Plot trace with FWHM value in legend
+            label = STRATEGY_NAMES.get(strategy, strategy)
             ax_fwhm.plot(
                 distances_mm,
                 trace_db,
-                linewidth=1.5,
+                linewidth=1.2,
                 color=color,
+                label=label,
                 marker="",
-                linestyle="-",
-                label=f"{strategy_display} ({fwhm_val_mm:.2f} mm)",
             )
-
-        # Add vertical line at center (0 mm)
-        ax_fwhm.axvline(
-            x=0,
-            color="gray",
-            linestyle=":",
-            linewidth=0.8,
-            alpha=0.3,
-        )
-
-        ax_fwhm.set_xlabel("Lateral distance from center [mm]", fontsize=9)
-        ax_fwhm.set_ylabel("Intensity [dB]", fontsize=9)
-
-        # Move y-axis to the right side
+        ax_fwhm.axvline(x=0, color="gray", linestyle=":", linewidth=0.8, alpha=0.3)
+        ax_fwhm.set_ylabel("Intensity [dB]", fontsize=6, labelpad=1)
+        ax_fwhm.set_xlabel("Distance [mm]", fontsize=6, labelpad=0.5)
+        ax_fwhm.set_ylim(-50, 5)
         ax_fwhm.yaxis.tick_right()
         ax_fwhm.yaxis.set_label_position("right")
-
-        ax_fwhm.set_ylim(-65, 5)
-        ax_fwhm.set_title(
-            "FWHM",
-            fontsize=9,
-            fontweight="bold",
-        )
-
+        ax_fwhm.set_title("FWHM", fontsize=9, fontweight="bold", pad=2)
         ax_fwhm.grid(True, alpha=0.3)
-        ax_fwhm.tick_params(labelsize=7)
-
-        # Adjust FWHM subplot height to match images
-        pos = ax_fwhm.get_position()
-        new_height = 0.45
-        new_bottom = pos.y0 + (pos.height - new_height) / 2
-        ax_fwhm.set_position([pos.x0, new_bottom, pos.width, new_height])
-
-        # Plot GCNR bar chart (second plot in plots grid)
-        ax_gcnr = fig.add_subplot(gs_plots[1])
-
-        gcnr_values = []
-        for strategy in strategies:
-            if strategy not in data:
-                continue
-
-            reconstruction_sc = reconstructions_sc[strategy]
-
-            # Calculate GCNR
-            gcnr_val = calculate_gcnr(
-                reconstruction_sc,
-                gcnr_center,
-                gcnr_radius,
-                gcnr_annulus_inner,
-                gcnr_annulus_outer,
-            )
-            gcnr_values.append(gcnr_val)
-
-        # Create bar chart
-        x_pos = np.arange(len(strategies))
-        colors = [STRATEGY_COLORS.get(s, "#000000") for s in strategies]
-
-        bars = ax_gcnr.bar(x_pos, gcnr_values, color=colors, alpha=0.7)
-
-        # Add GCNR values as text on top of bars
-        for i, (bar, val) in enumerate(zip(bars, gcnr_values)):
-            height = bar.get_height()
-            ax_gcnr.text(
-                bar.get_x() + bar.get_width() / 2.0,
-                height + 0.02,
-                f"{val:.2f}",
-                ha="center",
-                va="bottom",
-                fontsize=6,
-            )
-
-        ax_gcnr.set_ylabel("GCNR", fontsize=9)
-        ax_gcnr.set_title("GCNR", fontsize=9, fontweight="bold")
-        ax_gcnr.set_xticks([])  # Remove x-axis ticks and labels
-        ax_gcnr.grid(True, alpha=0.3, axis="y")
-        ax_gcnr.set_ylim([0, max(gcnr_values) * 1.15])  # Add space for text labels
-
-        # Move y-axis to the right side
-        ax_gcnr.yaxis.tick_right()
-        ax_gcnr.yaxis.set_label_position("right")
-
-        ax_gcnr.tick_params(labelsize=7)
-
-        # Adjust GCNR subplot height to match images
-        pos = ax_gcnr.get_position()
-        new_height = 0.45
-        new_bottom = pos.y0 + (pos.height - new_height) / 2
-        ax_gcnr.set_position([pos.x0, new_bottom, pos.width, new_height])
-
-        # Create shared legend to the right of GCNR plot
-        # Collect handles and labels from FWHM plot
-        handles, labels = ax_fwhm.get_legend_handles_labels()
-
-        # Add GCNR values to labels
-        legend_labels = []
-        for i, strategy in enumerate(strategies):
-            strategy_display = STRATEGY_NAMES.get(strategy, strategy)
-            fwhm_val = float(labels[i].split("(")[1].split(" mm")[0])
-            gcnr_val = gcnr_values[i]
-            legend_labels.append(
-                f"{strategy_display}: FWHM={fwhm_val:.2f} mm, GCNR={gcnr_val:.2f}"
-            )
-
-        # Place legend to the right of GCNR plot
-        ax_gcnr.legend(
-            handles,
-            legend_labels,
-            loc="center left",
-            bbox_to_anchor=(1.40, 0.5),
-            fontsize=6,
+        ax_fwhm.tick_params(labelsize=6, pad=1)
+        ax_fwhm.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.5),
+            fontsize=5,
             framealpha=0.9,
+            ncol=2,
+            columnspacing=0.8,  # Reduce horizontal spacing between columns
+            handletextpad=0.4,
         )
 
-        # Save figure in multiple formats
+        # Adjust FWHM plot position
+        pos = ax_fwhm.get_position()
+        ax_fwhm.set_position(
+            [
+                pos.x0 + 0.055,
+                pos.y0 + 0.225,
+                pos.width * 0.7,
+                pos.height * 0.4,
+            ]
+        )
+
+        # NOW add text using figure coordinates (after layout is finalized)
+        # This makes the text completely independent of axes layout
+        for ax, strategy in text_positions_row1:
+            # Get axes position in figure coordinates
+            bbox = ax.get_position()
+            # Position text to the right of the axes
+            fig.text(
+                bbox.x1 - 0.09,  # Slightly to the right of axes
+                bbox.y1 - 0.04,  # Near top of axes
+                f"FWHM: {fwhm_vals[strategy]:.2f} mm\nGCNR: {gcnr_vals[strategy]:.2f}",
+                fontsize=5,
+                color="black",
+                ha="left",
+                va="top",
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.7, pad=1),
+            )
+
+        for ax, strategy in text_positions_row2:
+            bbox = ax.get_position()
+            fig.text(
+                bbox.x1 - 0.09,
+                bbox.y1 - 0.04,
+                f"FWHM: {fwhm_vals[strategy]:.2f} mm\nGCNR: {gcnr_vals[strategy]:.2f}",
+                fontsize=5,
+                color="black",
+                ha="left",
+                va="top",
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.7, pad=1),
+            )
+
+        # Save with minimal padding
         for ext in [".pdf", ".png"]:
             save_file = (
                 save_dir
-                / f"fwhm_gcnr_comparison_frame{frame_idx}_p1_{point1[0]}_{point1[1]}__p2_{point2[0]}_{point2[1]}{ext}"
+                / f"fwhm_single_column_frame{frame_idx}_p1_{point1[0]}_{point1[1]}__p2_{point2[0]}_{point2[1]}{ext}"
             )
-            plt.savefig(save_file, dpi=300, bbox_inches="tight")
-            log.info(f"Saved FWHM+GCNR comparison to {log.yellow(save_file)}")
-
+            plt.savefig(save_file, dpi=300, bbox_inches="tight", pad_inches=0.02)
+            log.info(f"Saved single-column FWHM plot to {log.yellow(save_file)}")
         plt.close()
 
 
@@ -703,6 +632,25 @@ if __name__ == "__main__":
         default=None,
         help="List of strategies to plot (default: all available strategies)",
     )
+    parser.add_argument(
+        "--arrow-tip",
+        type=int,
+        nargs=2,
+        default=None,
+        help="Arrow tip position (row, col) in scan-converted image (default: None, disables arrow)",
+    )
+    parser.add_argument(
+        "--arrow-length",
+        type=float,
+        default=35,
+        help="Arrow length in pixels (default: 30)",
+    )
+    parser.add_argument(
+        "--arrow-angle",
+        type=float,
+        default=45,
+        help="Arrow angle in degrees (default: 45, down and to the right)",
+    )
     args = parser.parse_args()
 
     # Create save directory if it doesn't exist
@@ -713,7 +661,7 @@ if __name__ == "__main__":
 
     # Generate comparison plot
     log.info("Generating FWHM and GCNR comparison plot...")
-    plot_fwhm_gcnr_comparison(
+    plot_fwhm_gcnr(
         data_dir=data_dir,
         save_dir=save_dir,
         frame_idx=args.frame_idx,
@@ -726,8 +674,10 @@ if __name__ == "__main__":
         rho_max=args.rho_max,
         vmin=args.vmin,
         vmax=args.vmax,
-        strategies=args.strategies,
         context="styles/ieee-tmi.mplstyle",
+        arrow_tip=tuple(args.arrow_tip) if args.arrow_tip is not None else None,
+        arrow_length=args.arrow_length,
+        arrow_angle=args.arrow_angle,
     )
 
     log.info("Done!")
