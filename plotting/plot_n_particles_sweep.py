@@ -4,6 +4,8 @@ Plot the relationship between number of particles and PSNR for different n_actio
 
 import argparse
 import os
+
+os.environ["KERAS_BACKEND"] = "numpy"
 import sys
 from pathlib import Path
 
@@ -18,7 +20,6 @@ from zea import Config, init_device, log
 from zea.ops import translate
 
 if __name__ == "__main__":
-    os.environ["KERAS_BACKEND"] = "numpy"
     init_device("cpu")
     sys.path.append("/ulsa")
 
@@ -439,30 +440,34 @@ def plot_variance_maps_grid(
 def plot_linewise_entropy_curves(
     sweep_path: str,
     save_dir: Path,
-    n_runs_per_config: int = 1,
-    n_frames: int = 10,
     strategy: str = "greedy_entropy",
     n_actions: int = 7,
     entropy_sigma: float = 1.0,
     context="styles/ieee-tmi.mplstyle",
+    seed: int = 0,
 ):
     """Plot linewise entropy curves for different numbers of particles.
 
     Args:
         sweep_path (str): Path to the sweep directory
         save_dir (Path): Directory to save the plots
-        n_runs_per_config (int): Number of runs to plot per n_particles configuration
-        n_frames (int): Number of frames to show
         strategy (str): Selection strategy to filter for
         n_actions (int): Number of actions to filter for
         entropy_sigma (float): Sigma parameter for entropy computation
         context (str): Matplotlib style context
     """
     # Import GreedyEntropy class
+    import random
     import sys
+
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
 
     sys.path.append("/ulsa/zea")
     from zea.agent.selection import GreedyEntropy
+
+    # Set random seed for reproducibility
+    random.seed(seed)
 
     log.info(f"Loading runs for linewise entropy visualization...")
 
@@ -523,35 +528,55 @@ def plot_linewise_entropy_curves(
 
     log.info(f"Found runs for n_particles values: {sorted(runs_by_n_particles.keys())}")
 
-    # Plot for each run
+    # Get all n_particles values
     n_particles_values = sorted(runs_by_n_particles.keys())
 
-    for run_idx in range(n_runs_per_config):
-        # Check if we have enough runs for this index
-        available_n_particles = [
-            n_p for n_p in n_particles_values if len(runs_by_n_particles[n_p]) > run_idx
-        ]
+    # Find sequences that exist for all n_particles values
+    # Group by filename across all n_particles
+    sequences_by_filename = {}
+    for n_particles in n_particles_values:
+        for run_info in runs_by_n_particles[n_particles]:
+            filename = run_info["filename"]
+            if filename not in sequences_by_filename:
+                sequences_by_filename[filename] = {}
+            sequences_by_filename[filename][n_particles] = run_info
 
-        if not available_n_particles:
-            log.warning(f"Not enough runs for run_idx={run_idx}")
-            break
+    # Filter to only sequences that have all n_particles values
+    complete_sequences = {
+        filename: runs
+        for filename, runs in sequences_by_filename.items()
+        if len(runs) == len(n_particles_values)
+    }
 
-        log.info(f"Creating linewise entropy plots for run {run_idx + 1}...")
+    if not complete_sequences:
+        log.error("No sequences found with all n_particles values")
+        return
 
-        with plt.style.context(context):
-            # Create figure: one row per n_particles, one column per frame
-            n_rows = len(available_n_particles)
-            n_cols = n_frames
+    log.info(f"Found {len(complete_sequences)} complete sequences")
 
-            fig, axes = plt.subplots(
-                n_rows, n_cols, figsize=(n_cols * 2.5, n_rows * 2), squeeze=False
-            )
+    # Randomly select sequences
+    selected_filenames = random.sample(list(complete_sequences.keys()), 2)
 
-            # Load entropy data for all n_particles
-            entropy_data = {}
+    log.info(f"Selected sequences: {selected_filenames}")
 
-            for row_idx, n_particles in enumerate(available_n_particles):
-                run_info = runs_by_n_particles[n_particles][run_idx]
+    with plt.style.context(context):
+        # Create figure with 1 row, 2 columns + space for colorbar
+        fig, axes = plt.subplots(1, 2, figsize=(3.5, 1.25), sharey=True)
+
+        # Setup colormap for n_particles
+        norm = Normalize(vmin=min(n_particles_values), vmax=max(n_particles_values))
+        cmap = plt.cm.viridis
+        sm = ScalarMappable(norm=norm, cmap=cmap)
+        sm.set_array([])
+
+        for seq_idx, filename in enumerate(selected_filenames):
+            ax = axes[seq_idx]
+
+            # Collect entropy data for all n_particles for this sequence
+            entropy_curves = {}
+
+            for n_particles in n_particles_values:
+                run_info = complete_sequences[filename][n_particles]
 
                 try:
                     metrics = np.load(str(run_info["metrics_path"]), allow_pickle=True)
@@ -574,33 +599,21 @@ def plot_linewise_entropy_curves(
                         entropy_sigma=entropy_sigma,
                     )
 
-                    # Take only first n_frames
-                    belief_dist = belief_dist[:n_frames]
+                    # Use only the first frame
+                    particles = belief_dist[0:1]  # Keep batch dim
 
-                    # Compute linewise entropy for each frame
-                    linewise_entropies = []
-                    for frame_idx in range(len(belief_dist)):
-                        particles = belief_dist[
-                            frame_idx : frame_idx + 1
-                        ]  # Keep batch dim
+                    # Use GreedyEntropy's compute_pixelwise_entropy method
+                    pixelwise_entropy = entropy_model.compute_pixelwise_entropy(
+                        translate(particles, (0, 255), (-1, 1))[..., 0]
+                    )
 
-                        # Use GreedyEntropy's compute_pixelwise_entropy method
-                        pixelwise_entropy = entropy_model.compute_pixelwise_entropy(
-                            translate(particles, (0, 255), (-1, 1))[..., 0]
-                        )
-
-                        # Sum over height to get linewise entropy
-                        linewise_entropy = np.sum(
-                            pixelwise_entropy, axis=1
-                        )  # Shape: (batch, width)
-                        linewise_entropies.append(
-                            linewise_entropy[0]
-                        )  # Remove batch dim
-
-                    entropy_data[n_particles] = {
-                        "linewise_entropies": linewise_entropies,
-                        "filename": run_info["filename"],
-                    }
+                    # Sum over height to get linewise entropy
+                    linewise_entropy = np.sum(
+                        pixelwise_entropy, axis=1
+                    )  # Shape: (batch, width)
+                    entropy_curves[n_particles] = linewise_entropy[
+                        0
+                    ]  # Remove batch dim
 
                 except Exception as e:
                     log.error(f"Error loading entropy for {run_info['run_path']}: {e}")
@@ -609,95 +622,79 @@ def plot_linewise_entropy_curves(
                     traceback.print_exc()
                     continue
 
-            if not entropy_data:
-                log.error("No entropy data could be loaded")
-                plt.close(fig)
+            if not entropy_curves:
+                log.error(f"No entropy data could be loaded for sequence {filename}")
+                ax.axis("off")
                 continue
 
-            # Track global min/max for consistent y-axis
-            all_entropies = []
-            for data in entropy_data.values():
-                for entropy in data["linewise_entropies"]:
-                    all_entropies.extend(entropy)
-
-            y_min = np.min(all_entropies)
-            y_max = np.max(all_entropies)
-            y_margin = (y_max - y_min) * 0.1
-
-            # Plot entropy curves: one row per n_particles, one column per frame
-            for row_idx, n_particles in enumerate(available_n_particles):
-                if n_particles not in entropy_data:
-                    # Fill row with empty plots if data failed to load
-                    for col_idx in range(n_cols):
-                        axes[row_idx, col_idx].axis("off")
+            # Plot all curves on the same axes with low alpha
+            for n_particles in n_particles_values:
+                if n_particles not in entropy_curves:
                     continue
 
-                data = entropy_data[n_particles]
-                color = N_ACTIONS_COLORS.get(n_particles, f"C{n_particles % 10}")
+                entropy = entropy_curves[n_particles]
+                x_vals = np.arange(len(entropy))
+                color = cmap(norm(n_particles))
 
-                for col_idx in range(n_cols):
-                    ax = axes[row_idx, col_idx]
-
-                    if col_idx < len(data["linewise_entropies"]):
-                        entropy = data["linewise_entropies"][col_idx]
-                        x_vals = np.arange(len(entropy))
-
-                        ax.plot(
-                            x_vals,
-                            entropy,
-                            linewidth=1.5,
-                            alpha=0.8,
-                            color=color,
-                        )
-
-                        # Set consistent y-axis limits
-                        ax.set_ylim(y_min - y_margin, y_max + y_margin)
-
-                        # Labels
-                        if col_idx == 0:
-                            ax.set_ylabel(
-                                f"$N_p$={n_particles}", fontsize=10, fontweight="bold"
-                            )
-
-                        if row_idx == 0:
-                            ax.set_title(f"Frame {col_idx}", fontsize=9)
-
-                        if row_idx == n_rows - 1:
-                            ax.set_xlabel("Line Position", fontsize=8)
-                        else:
-                            ax.set_xticklabels([])
-
-                        ax.grid(True, alpha=0.3)
-                        ax.tick_params(labelsize=7)
-                    else:
-                        # No data for this frame
-                        ax.axis("off")
-
-            # Add overall title
-            patient_name = (
-                list(entropy_data.values())[0]["filename"]
-                .replace(".avi", "")
-                .replace(".mp4", "")
-            )
-            fig.suptitle(
-                f"Linewise Entropy Across Frames\n"
-                f"({STRATEGY_NAMES.get(strategy, strategy)}, {n_actions} scan lines, Run {run_idx + 1})",
-                fontsize=12,
-                y=0.995,
-            )
-
-            plt.tight_layout(rect=[0, 0, 1, 0.98])
-
-            # Save plot
-            for ext in [".pdf", ".png"]:
-                save_file = (
-                    save_dir
-                    / f"linewise_entropy__n_actions={n_actions}__run{run_idx + 1}_{patient_name}{ext}"
+                ax.plot(
+                    x_vals,
+                    entropy,
+                    linewidth=1.5,
+                    alpha=0.6,
+                    color=color,
+                    marker="",
+                    linestyle="-",
                 )
-                plt.savefig(save_file, dpi=300, bbox_inches="tight")
-                log.info(f"Saved linewise entropy plot to {log.yellow(save_file)}")
 
-            plt.close(fig)
+            # Formatting
+            ax.set_title(f"Sequence {seq_idx + 1}", fontsize=9)
+            ax.grid(True, alpha=0.3)
+            ax.tick_params(labelsize=8)
+
+        # Set y-label only on the leftmost plot
+        axes[0].set_ylabel("Entropy $\hat{H}^\ell$", fontsize=9)
+
+        # Add shared x-label at the bottom
+        fig.text(0.5, 0.02, "Line Index $\ell$", ha="center", fontsize=9)
+
+        # Adjust layout before adding colorbar
+        plt.tight_layout(rect=[0, 0, 0.92, 1])  # Leave space on right for colorbar
+        # Create discrete colormap
+        from matplotlib.colors import BoundaryNorm
+
+        # Create boundaries between n_particles values
+        boundaries = []
+        for i in range(len(n_particles_values)):
+            if i == 0:
+                boundaries.append(n_particles_values[i] - 0.5)
+            boundaries.append(n_particles_values[i] + 0.5)
+
+        # Create discrete norm and colormap
+        norm_discrete = BoundaryNorm(boundaries, cmap.N)
+        sm_discrete = ScalarMappable(norm=norm_discrete, cmap=cmap)
+        sm_discrete.set_array([])
+
+        # Add shared colorbar with discrete blocks
+        cbar = fig.colorbar(
+            sm_discrete, ax=axes, orientation="vertical", pad=0.02, aspect=15
+        )
+        cbar.set_label("$N_p$", fontsize=9)
+        cbar.set_ticks(n_particles_values)  # Set ticks to actual n_particles values
+        cbar.set_ticklabels([str(int(n)) for n in n_particles_values])  # Integer labels
+        cbar.ax.tick_params(labelsize=8)
+        cbar.ax.minorticks_off()
+
+        # plt.tight_layout()
+
+        # Save plot
+        for ext in [".pdf", ".png"]:
+            save_file = (
+                save_dir / f"linewise_entropy_comparison__n_actions={n_actions}{ext}"
+            )
+            plt.savefig(save_file, dpi=300, bbox_inches="tight")
+            log.info(f"Saved linewise entropy comparison to {log.yellow(save_file)}")
+
+        plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -798,8 +795,6 @@ if __name__ == "__main__":
         plot_linewise_entropy_curves(
             sweep_path=args.sweep_path,
             save_dir=save_dir,
-            n_runs_per_config=args.variance_n_runs,
-            n_frames=args.variance_n_frames,
             strategy=args.strategy,
             n_actions=args.variance_n_actions,
             entropy_sigma=args.entropy_sigma,
