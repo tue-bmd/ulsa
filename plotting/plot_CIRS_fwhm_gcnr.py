@@ -264,7 +264,8 @@ def plot_fwhm_gcnr(
     arrow_tip=None,
     arrow_length=30,
     arrow_angle=45,
-    overlays_on_all=False,  # New parameter
+    overlays_on_all=False,
+    include_fwhm_plot=False,  # New parameter
 ):
     import matplotlib.gridspec as gridspec
     import matplotlib.pyplot as plt
@@ -347,7 +348,7 @@ def plot_fwhm_gcnr(
     # Plotting
     with plt.style.context(context):
         fig = plt.figure(
-            figsize=(7.16 / 2.0, 2.2)
+            figsize=(7.16 / 2.0, 2.0)
         )  # Single column width, slightly taller
         gs = gridspec.GridSpec(
             2,
@@ -445,8 +446,15 @@ def plot_fwhm_gcnr(
 
         # Plot second row: focused, diverging, FWHM plot
         text_positions_row2 = []  # Store positions for later
-        for col, strategy in enumerate(strategies_row2):
-            ax = fig.add_subplot(gs[1, col])
+
+        for i, strategy in enumerate(strategies_row2):
+            if include_fwhm_plot:
+                # Use regular gridspec positions
+                ax = fig.add_subplot(gs[1, i])
+            else:
+                # Create axes using gridspec but we'll reposition them later
+                ax = fig.add_subplot(gs[1, i])
+
             im = ax.imshow(
                 reconstructions_sc[strategy],
                 cmap="gray",
@@ -506,61 +514,98 @@ def plot_fwhm_gcnr(
             # Store text position for later
             text_positions_row2.append((ax, strategy))
 
-        # FWHM plot in last column, second row
-        ax_fwhm = fig.add_subplot(gs[1, 2])
-        for strategy in all_strategies:
-            trace_db, distances_mm, _ = calculate_fwhm(
-                point1, point2, reconstructions_sc[strategy], rho_max
-            )
-            color = STRATEGY_COLORS.get(strategy, "#000000")
-            label = STRATEGY_NAMES.get(strategy, strategy)
-            ax_fwhm.plot(
-                distances_mm,
-                trace_db,
-                linewidth=1.2,
-                color=color,
-                label=label,
-                marker="",
-            )
-        ax_fwhm.axvline(x=0, color="gray", linestyle=":", linewidth=0.8, alpha=0.3)
-        ax_fwhm.set_ylabel("Intensity [dB]", fontsize=6, labelpad=1)
-        ax_fwhm.set_xlabel("Distance [mm]", fontsize=6, labelpad=0.5)
-        ax_fwhm.set_ylim(-50, 5)
-        ax_fwhm.yaxis.tick_right()
-        ax_fwhm.yaxis.set_label_position("right")
-        ax_fwhm.set_title("FWHM", fontsize=9, fontweight="bold", pad=2)
-        ax_fwhm.grid(True, alpha=0.3)
-        ax_fwhm.tick_params(labelsize=6, pad=1)
-        ax_fwhm.legend(
-            loc="upper center",
-            bbox_to_anchor=(0.5, -0.5),
-            fontsize=6,
-            framealpha=0.9,
-            ncol=2,
-            columnspacing=0.8,  # Reduce horizontal spacing between columns
-            handletextpad=0.4,
-        )
+        # If not including FWHM plot, reposition row 2 axes to be centered
+        if not include_fwhm_plot:
+            # Get positions of row 1 axes to calculate centering
+            row1_axes = [ax for ax, _ in text_positions_row1]
+            row1_positions = [ax.get_position() for ax in row1_axes]
 
-        # Adjust FWHM plot position
-        pos = ax_fwhm.get_position()
-        ax_fwhm.set_position(
-            [
-                pos.x0 + 0.055,
-                pos.y0 + 0.225,
-                pos.width * 0.7,
-                pos.height * 0.4,
-            ]
-        )
+            # Calculate centered positions for row 2
+            # First image: centered between columns 0 and 1 of row 1
+            # Second image: centered between columns 1 and 2 of row 1
+            offset1 = (row1_positions[0].x0 + row1_positions[1].x0) / 2
+            offset2 = (row1_positions[1].x0 + row1_positions[2].x0) / 2
+
+            # Use the width and height from the gridspec
+            img_width = row1_positions[0].width
+            img_height = row1_positions[0].height
+
+            for i, (ax, strategy) in enumerate(text_positions_row2):
+                pos = ax.get_position()
+                if i == 0:
+                    # Position between columns 0 and 1
+                    ax.set_position(
+                        [
+                            offset1,
+                            pos.y0,  # Keep original y position from gridspec
+                            img_width,
+                            img_height,
+                        ]
+                    )
+                else:
+                    # Position between columns 1 and 2
+                    ax.set_position(
+                        [
+                            offset2,
+                            pos.y0,  # Keep original y position from gridspec
+                            img_width,
+                            img_height,
+                        ]
+                    )
+
+        # FWHM plot in last column, second row (only if include_fwhm_plot is True)
+        if include_fwhm_plot:
+            ax_fwhm = fig.add_subplot(gs[1, 2])
+            for strategy in all_strategies:
+                trace_db, distances_mm, _ = calculate_fwhm(
+                    point1, point2, reconstructions_sc[strategy], rho_max
+                )
+                color = STRATEGY_COLORS.get(strategy, "#000000")
+                label = STRATEGY_NAMES.get(strategy, strategy)
+                ax_fwhm.plot(
+                    distances_mm,
+                    trace_db,
+                    linewidth=1.2,
+                    color=color,
+                    label=label,
+                    marker="",
+                )
+            ax_fwhm.axvline(x=0, color="gray", linestyle=":", linewidth=0.8, alpha=0.3)
+            ax_fwhm.set_ylabel("Intensity [dB]", fontsize=6, labelpad=1)
+            ax_fwhm.set_xlabel("Distance [mm]", fontsize=6, labelpad=0.5)
+            ax_fwhm.set_ylim(-50, 5)
+            ax_fwhm.yaxis.tick_right()
+            ax_fwhm.yaxis.set_label_position("right")
+            ax_fwhm.set_title("FWHM", fontsize=9, fontweight="bold", pad=2)
+            ax_fwhm.grid(True, alpha=0.3)
+            ax_fwhm.tick_params(labelsize=6, pad=1)
+            ax_fwhm.legend(
+                loc="upper center",
+                bbox_to_anchor=(0.5, -0.5),
+                fontsize=6,
+                framealpha=0.9,
+                ncol=2,
+                columnspacing=0.8,
+                handletextpad=0.4,
+            )
+
+            # Adjust FWHM plot position
+            pos = ax_fwhm.get_position()
+            ax_fwhm.set_position(
+                [
+                    pos.x0 + 0.055,
+                    pos.y0 + 0.225,
+                    pos.width * 0.7,
+                    pos.height * 0.4,
+                ]
+            )
 
         # NOW add text using figure coordinates (after layout is finalized)
-        # This makes the text completely independent of axes layout
         for ax, strategy in text_positions_row1:
-            # Get axes position in figure coordinates
             bbox = ax.get_position()
-            # Position text to the right of the axes
             fig.text(
-                bbox.x1 - 0.08,  # Slightly to the right of axes
-                bbox.y1 - 0.04,  # Near top of axes
+                bbox.x1 - 0.08,
+                bbox.y1 - 0.06,
                 f"FWHM: {fwhm_vals[strategy]:.2f}\nGCNR: {gcnr_vals[strategy]:.2f}",
                 fontsize=6,
                 color="black",
@@ -572,8 +617,8 @@ def plot_fwhm_gcnr(
         for ax, strategy in text_positions_row2:
             bbox = ax.get_position()
             fig.text(
-                bbox.x1 - 0.08,
-                bbox.y1 - 0.04,
+                bbox.x1 - 0.07,
+                bbox.y1 - 0.06,
                 f"FWHM: {fwhm_vals[strategy]:.2f}\nGCNR: {gcnr_vals[strategy]:.2f}",
                 fontsize=6,
                 color="black",
@@ -703,6 +748,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Show FWHM line and GCNR circles on all top row images (default: only on equispaced)",
     )
+    parser.add_argument(
+        "--include-fwhm-plot",
+        action="store_true",
+        default=False,
+        help="Include the FWHM plot in the bottom right (default: True)",
+    )
     args = parser.parse_args()
 
     # Create save directory if it doesn't exist
@@ -731,6 +782,7 @@ if __name__ == "__main__":
         arrow_length=args.arrow_length,
         arrow_angle=args.arrow_angle,
         overlays_on_all=args.overlays_on_all,
+        include_fwhm_plot=args.include_fwhm_plot,
     )
 
     log.info("Done!")
