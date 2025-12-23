@@ -6,8 +6,7 @@ import numpy as np
 from keras import ops
 
 import zea.ops
-from zea.ops import translate
-from zea.tensor_ops import apply_along_axis
+from zea.func import apply_along_axis, translate
 
 NOISE_ESTIMATION_NORMALIZER = (
     0.6745  # Used for robust noise estimation from median absolute deviation
@@ -265,6 +264,11 @@ class Multiply(zea.ops.Operation):
     def __init__(self, other_key, **kwargs):
         super().__init__(**kwargs)
         self.other_key = other_key
+
+    @property
+    def valid_keys(self) -> set:
+        """Get a set of all valid input keys for the operation."""
+        return self._valid_keys.union({self.other_key})
 
     def call(self, **kwargs):
         data = kwargs[self.key]
