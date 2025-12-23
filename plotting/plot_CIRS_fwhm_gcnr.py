@@ -87,84 +87,182 @@ def get_arrow_patch(row_tip, col_tip, length=30, angle_deg=45):
     )
 
 
-def calculate_fwhm(point1, point2, reconstruction_sc, rho_max):
-    """Compute FWHM trace along a line between two points in scan-converted image.
+def calculate_fwhm_multiple_lines(
+    point1, point2, reconstruction_sc, rho_max, num_lines=8, vertical_offsets=None
+):
+    """Compute FWHM traces along multiple parallel lines between two points.
+
+    Args:
+        point1: Tuple of (row, col) pixel indices for start point of topmost line
+        point2: Tuple of (row, col) pixel indices for end point of topmost line
+        reconstruction_sc: Scan-converted image in dB scale
+        rho_max: Maximum imaging depth in mm
+        num_lines: Number of parallel lines to analyze
+        vertical_offsets: List of vertical offsets from topmost line for each subsequent line.
+                         Should be of length (num_lines - 1). If None, defaults to uniform spacing of 2.
+
+    Returns:
+        tuple: (traces_db, distances_mm, fwhm_vals_mm, line_points)
+            - traces_db: List of intensity traces for each line
+            - distances_mm: Distance array in mm
+            - fwhm_vals_mm: List of FWHM values for each line
+            - line_points: List of (point1, point2) tuples for each line
+    """
+    from scipy.ndimage import map_coordinates
+
+    traces_db = []
+    fwhm_vals_mm = []
+    line_points = []
+    distances_mm = None
+
+    # Build cumulative offsets from the vertical_offsets list
+    if vertical_offsets is None:
+        # Default to uniform spacing of 2 pixels
+        cumulative_offsets = [i * 2 for i in range(num_lines)]
+    else:
+        # vertical_offsets specifies the distance from each line to the next
+        # Convert to cumulative offsets from the first line
+        cumulative_offsets = [0]
+        for offset in vertical_offsets:
+            cumulative_offsets.append(cumulative_offsets[-1] + offset)
+
+    for i in range(num_lines):
+        # Offset the points vertically (downward from the topmost line)
+        row_offset = cumulative_offsets[i]
+        line_point1 = (point1[0] + row_offset, point1[1])
+        line_point2 = (point2[0] + row_offset, point2[1])
+        line_points.append((line_point1, line_point2))
+
+        row1, col1 = line_point1
+        row2, col2 = line_point2
+        num_samples = 500
+
+        rows = np.linspace(row1, row2, num_samples)
+        cols = np.linspace(col1, col2, num_samples)
+
+        # Extract intensity values along the line using bilinear interpolation
+        coordinates = np.vstack([rows, cols])
+        trace_db = np.nan_to_num(
+            map_coordinates(
+                reconstruction_sc,
+                coordinates,
+                order=1,
+                mode="constant",
+                cval=np.nan,
+            )
+        )
+        traces_db.append(trace_db)
+
+        # Calculate physical distance in mm using scan geometry (only once)
+        if distances_mm is None:
+            y1, x1 = line_point1
+            y2, x2 = line_point2
+            sc_height, sc_width = reconstruction_sc.shape
+            scan_cone_apex = (sc_width // 2) + 1
+
+            # Calculate lateral distance using trigonometry
+            left_distance_from_center = scan_cone_apex - x1
+            theta_left = np.arctan(left_distance_from_center / y1)
+            left_distance_mm = (y1 / sc_height) * rho_max * np.tan(theta_left)
+            x1_x2_distance_mm = (
+                (x2 - x1) / left_distance_from_center
+            ) * left_distance_mm
+            total_distance_mm = x1_x2_distance_mm
+            distances_mm = np.linspace(
+                -total_distance_mm / 2, total_distance_mm / 2, num_samples
+            )
+
+        # Calculate FWHM in mm
+        trace_max = np.max(trace_db)
+        half_in_db = 3
+        indices_above_half_max = np.nonzero(trace_db >= trace_max - half_in_db)[0]
+        if len(indices_above_half_max) > 0:
+            fwhm_start = indices_above_half_max[0]
+            fwhm_end = indices_above_half_max[-1]
+            fwhm_val_mm = distances_mm[fwhm_end] - distances_mm[fwhm_start]
+        else:
+            fwhm_val_mm = 0.0
+        fwhm_vals_mm.append(fwhm_val_mm)
+
+    return traces_db, distances_mm, fwhm_vals_mm, line_points
+
+
+def calculate_fwhm(
+    point1, point2, reconstruction_sc, rho_max, num_lines=1, vertical_offsets=None
+):
+    """Compute FWHM trace along a line (or multiple lines) between two points in scan-converted image.
 
     Args:
         point1: Tuple of (row, col) pixel indices for start point
         point2: Tuple of (row, col) pixel indices for end point
         reconstruction_sc: Scan-converted image in dB scale
         rho_max: Maximum imaging depth in mm
+        num_lines: Number of parallel lines to analyze (default: 1)
+        vertical_offsets: List of vertical offsets from topmost line for each subsequent line.
+                         Should be of length (num_lines - 1). If None, defaults to uniform spacing of 2.
 
     Returns:
-        tuple: (trace_db, distances_mm, fwhm_val_mm)
+        tuple: (trace_db, distances_mm, fwhm_val_mm, line_points)
+            - If num_lines == 1: Returns single trace and FWHM value (backward compatible)
+            - If num_lines > 1: Returns mean FWHM across all lines and line_points for plotting
     """
-    # Compute FWHM trace along the measurement line
-    # Extract intensity values directly from scan-converted image
-    from scipy.ndimage import map_coordinates
+    if num_lines == 1:
+        # Original single-line behavior for backward compatibility
+        from scipy.ndimage import map_coordinates
 
-    row1, col1 = point1
-    row2, col2 = point2
-    num_samples = 500
+        row1, col1 = point1
+        row2, col2 = point2
+        num_samples = 500
 
-    rows = np.linspace(row1, row2, num_samples)
-    cols = np.linspace(col1, col2, num_samples)
+        rows = np.linspace(row1, row2, num_samples)
+        cols = np.linspace(col1, col2, num_samples)
 
-    # Extract intensity values along the line using bilinear interpolation
-    coordinates = np.vstack([rows, cols])
-    trace_db = np.nan_to_num(
-        map_coordinates(
-            reconstruction_sc,
-            coordinates,
-            order=1,
-            mode="constant",
-            cval=np.nan,
+        coordinates = np.vstack([rows, cols])
+        trace_db = np.nan_to_num(
+            map_coordinates(
+                reconstruction_sc,
+                coordinates,
+                order=1,
+                mode="constant",
+                cval=np.nan,
+            )
         )
-    )
 
-    # Calculate physical distance in mm using scan geometry
-    # Assumes horizontal line (same row) for simplified geometry
-    y1, x1 = point1
-    y2, x2 = point2
-    assert y1 == y2, "Points must be on the same row for horizontal line."
-    assert x1 < x2, "point1 must be to the left of point2."
-    sc_height, sc_width = reconstruction_sc.shape
-    scan_cone_apex = (sc_width // 2) + 1  # Center of scan cone at top
-    assert x2 < scan_cone_apex, "point2 must be left of scan cone apex."
+        y1, x1 = point1
+        y2, x2 = point2
+        sc_height, sc_width = reconstruction_sc.shape
+        scan_cone_apex = (sc_width // 2) + 1
 
-    # Calculate lateral distance using trigonometry
-    # Distance from apex to left point (in pixels)
-    left_distance_from_center = scan_cone_apex - x1
-    # Angle from apex to left point (in radians)
-    theta_left = np.arctan(left_distance_from_center / y1)
-    # Physical lateral distance from apex to left point (in mm)
-    left_distance_mm = (y1 / sc_height) * rho_max * np.tan(theta_left)
-    # Physical distance between the two points (in mm)
-    x1_x2_distance_mm = ((x2 - x1) / left_distance_from_center) * left_distance_mm
+        left_distance_from_center = scan_cone_apex - x1
+        theta_left = np.arctan(left_distance_from_center / y1)
+        left_distance_mm = (y1 / sc_height) * rho_max * np.tan(theta_left)
+        x1_x2_distance_mm = ((x2 - x1) / left_distance_from_center) * left_distance_mm
+        total_distance_mm = x1_x2_distance_mm
+        distances_mm = np.linspace(
+            -total_distance_mm / 2, total_distance_mm / 2, num_samples
+        )
 
-    # Create distance array centered at 0 for symmetric plotting
-    # Ranges from -total_distance_mm/2 to +total_distance_mm/2
-    total_distance_mm = x1_x2_distance_mm
-    distances_mm = np.linspace(
-        -total_distance_mm / 2, total_distance_mm / 2, num_samples
-    )
+        trace_max = np.max(trace_db)
+        half_in_db = 3
+        indices_above_half_max = np.nonzero(trace_db >= trace_max - half_in_db)[0]
+        if len(indices_above_half_max) > 0:
+            fwhm_start = indices_above_half_max[0]
+            fwhm_end = indices_above_half_max[-1]
+            fwhm_val_mm = distances_mm[fwhm_end] - distances_mm[fwhm_start]
+        else:
+            fwhm_val_mm = 0.0
 
-    # Calculate FWHM in mm
-    # Find the maximum intensity in the trace
-    trace_max = np.max(trace_db)
-    # Define half maximum as -3 dB from peak (since we're in dB scale)
-    half_in_db = 3
-    # Find all indices where intensity is at or above half maximum
-    indices_above_half_max = np.nonzero(trace_db >= trace_max - half_in_db)[0]
-    if len(indices_above_half_max) > 0:
-        fwhm_start = indices_above_half_max[0]
-        fwhm_end = indices_above_half_max[-1]
-        # Calculate FWHM as the distance between start and end points
-        fwhm_val_mm = distances_mm[fwhm_end] - distances_mm[fwhm_start]
+        return trace_db, distances_mm, fwhm_val_mm, [(point1, point2)]
     else:
-        fwhm_val_mm = 0.0
-
-    return trace_db, distances_mm, fwhm_val_mm
+        # Multiple lines
+        traces_db, distances_mm, fwhm_vals_mm, line_points = (
+            calculate_fwhm_multiple_lines(
+                point1, point2, reconstruction_sc, rho_max, num_lines, vertical_offsets
+            )
+        )
+        # Return mean FWHM across all lines
+        mean_fwhm = np.mean(fwhm_vals_mm)
+        return traces_db, distances_mm, mean_fwhm, line_points
 
 
 def extract_circular_region(image, center, radius):
@@ -265,14 +363,17 @@ def plot_fwhm_gcnr(
     arrow_length=30,
     arrow_angle=45,
     overlays_on_all=False,
-    include_fwhm_plot=False,  # New parameter
+    include_fwhm_plot=False,
+    num_fwhm_lines=1,
+    fwhm_line_offsets=None,
 ):
     import matplotlib.gridspec as gridspec
     import matplotlib.pyplot as plt
     from matplotlib.patches import Circle
 
-    strategies_row1 = ["equispaced", "uniform_random", "greedy_entropy"]
-    strategies_row2 = ["focused", "diverging"]
+    # 2x2 grid: top row = equispaced, random; bottom row = active perception, ground truth
+    strategies_row1 = ["equispaced", "uniform_random"]
+    strategies_row2 = ["greedy_entropy", "focused"]
     all_strategies = strategies_row1 + strategies_row2
 
     # Load data
@@ -331,12 +432,19 @@ def plot_fwhm_gcnr(
     # Compute FWHM and GCNR for each strategy
     fwhm_vals = {}
     gcnr_vals = {}
+    fwhm_line_points = {}  # Store line points for plotting
     for strategy in all_strategies:
         reconstruction_sc = reconstructions_sc[strategy]
-        trace_db, distances_mm, fwhm_val_mm = calculate_fwhm(
-            point1, point2, reconstruction_sc, rho_max
+        trace_db, distances_mm, fwhm_val_mm, line_points = calculate_fwhm(
+            point1,
+            point2,
+            reconstruction_sc,
+            rho_max,
+            num_lines=num_fwhm_lines,
+            vertical_offsets=fwhm_line_offsets,
         )
         fwhm_vals[strategy] = fwhm_val_mm
+        fwhm_line_points[strategy] = line_points
         gcnr_vals[strategy] = calculate_gcnr(
             reconstruction_sc,
             gcnr_center,
@@ -347,12 +455,10 @@ def plot_fwhm_gcnr(
 
     # Plotting
     with plt.style.context(context):
-        fig = plt.figure(
-            figsize=(7.16 / 2.0, 2.0)
-        )  # Single column width, slightly taller
+        fig = plt.figure(figsize=(3.5, 2.5))  # Single column width
         gs = gridspec.GridSpec(
             2,
-            3,
+            2,
             figure=fig,
             wspace=0.04,
             hspace=0.08,
@@ -367,258 +473,92 @@ def plot_fwhm_gcnr(
             "greedy_entropy": "Active Perception (11/90)",
             "uniform_random": "Random (11/90)",
             "equispaced": "Equispaced (11/90)",
-            "focused": "Focused (90)",
-            "diverging": "Diverging (11)",
+            "focused": "Ground Truth (90)",
         }
 
-        # Plot first row: reconstructions
-        text_positions_row1 = []  # Store positions for later
-        for col, strategy in enumerate(strategies_row1):
-            ax = fig.add_subplot(gs[0, col])
-            im = ax.imshow(
-                reconstructions_sc[strategy],
-                cmap="gray",
-                aspect="equal",
-                vmin=vmin,
-                vmax=vmax,
-                origin="upper",
-                interpolation="nearest",
-            )
-            ax.set_title(titles[strategy], fontsize=9, pad=2)
-            ax.axis("off")
+        # Store text positions for later
+        text_positions = []
 
-            # Show overlays on equispaced only, or on all if overlays_on_all is True
-            if strategy == "equispaced" or overlays_on_all:
-                # Draw FWHM measurement line overlay (thin dashed red, no dots)
-                ax.plot(
-                    [point1[1], point2[1]],
-                    [point1[0], point2[0]],
-                    "r-",
-                    linewidth=0.8,
-                    alpha=0.7,
+        # Plot all strategies in 2x2 grid
+        for row_idx, strategies_row in enumerate([strategies_row1, strategies_row2]):
+            for col_idx, strategy in enumerate(strategies_row):
+                ax = fig.add_subplot(gs[row_idx, col_idx])
+                im = ax.imshow(
+                    reconstructions_sc[strategy],
+                    cmap="gray",
+                    aspect="equal",
+                    vmin=vmin,
+                    vmax=vmax,
+                    origin="upper",
+                    interpolation="nearest",
                 )
+                ax.set_title(titles[strategy], fontsize=9, pad=2)
+                ax.axis("off")
 
-                # Draw GCNR regions
-                circle_signal = Circle(
-                    (gcnr_center[1], gcnr_center[0]),
-                    gcnr_radius,
-                    fill=False,
-                    edgecolor="cyan",
-                    linestyle="--",
-                    linewidth=1,
-                    alpha=0.7,
-                )
-                ax.add_patch(circle_signal)
+                # Show overlays on equispaced only, or on all if overlays_on_all is True
+                if strategy == "equispaced" or overlays_on_all:
+                    # Draw FWHM measurement lines overlay (thin dashed red, no dots)
+                    for line_p1, line_p2 in fwhm_line_points[strategy]:
+                        ax.plot(
+                            [line_p1[1], line_p2[1]],
+                            [line_p1[0], line_p2[0]],
+                            "r-",
+                            linewidth=0.8,
+                            alpha=0.5,
+                        )
 
-                circle_annulus_inner = Circle(
-                    (gcnr_center[1], gcnr_center[0]),
-                    gcnr_annulus_inner,
-                    fill=False,
-                    edgecolor="yellow",
-                    linestyle="--",
-                    linewidth=1,
-                    alpha=0.7,
-                )
-                ax.add_patch(circle_annulus_inner)
-                circle_annulus_outer = Circle(
-                    (gcnr_center[1], gcnr_center[0]),
-                    gcnr_annulus_outer,
-                    fill=False,
-                    edgecolor="yellow",
-                    linestyle="--",
-                    linewidth=1,
-                    alpha=0.7,
-                )
-                ax.add_patch(circle_annulus_outer)
-
-            # Draw arrow on all first row images
-            if arrow_tip is not None:
-                arrow_patch = get_arrow_patch(
-                    row_tip=arrow_tip[0],
-                    col_tip=arrow_tip[1],
-                    length=arrow_length,
-                    angle_deg=arrow_angle,
-                )
-                ax.add_patch(arrow_patch)
-
-            # Store text position for later (in figure coordinates)
-            text_positions_row1.append((ax, strategy))
-
-        # Plot second row: focused, diverging, FWHM plot
-        text_positions_row2 = []  # Store positions for later
-
-        for i, strategy in enumerate(strategies_row2):
-            if include_fwhm_plot:
-                # Use regular gridspec positions
-                ax = fig.add_subplot(gs[1, i])
-            else:
-                # Create axes using gridspec but we'll reposition them later
-                ax = fig.add_subplot(gs[1, i])
-
-            im = ax.imshow(
-                reconstructions_sc[strategy],
-                cmap="gray",
-                aspect="equal",
-                vmin=vmin,
-                vmax=vmax,
-                origin="upper",
-                interpolation="nearest",
-            )
-            ax.set_title(titles[strategy], fontsize=9, pad=2)
-            ax.axis("off")
-
-            # Show overlays on all second row images if overlays_on_all is True
-            if overlays_on_all:
-                # Draw FWHM measurement line overlay (thin dashed red, no dots)
-                ax.plot(
-                    [point1[1], point2[1]],
-                    [point1[0], point2[0]],
-                    "r-",
-                    linewidth=0.8,
-                    alpha=0.7,
-                )
-
-                # Draw GCNR regions
-                circle_signal = Circle(
-                    (gcnr_center[1], gcnr_center[0]),
-                    gcnr_radius,
-                    fill=False,
-                    edgecolor="cyan",
-                    linestyle="--",
-                    linewidth=1,
-                    alpha=0.7,
-                )
-                ax.add_patch(circle_signal)
-
-                circle_annulus_inner = Circle(
-                    (gcnr_center[1], gcnr_center[0]),
-                    gcnr_annulus_inner,
-                    fill=False,
-                    edgecolor="yellow",
-                    linestyle="--",
-                    linewidth=1,
-                    alpha=0.7,
-                )
-                ax.add_patch(circle_annulus_inner)
-                circle_annulus_outer = Circle(
-                    (gcnr_center[1], gcnr_center[0]),
-                    gcnr_annulus_outer,
-                    fill=False,
-                    edgecolor="yellow",
-                    linestyle="--",
-                    linewidth=1,
-                    alpha=0.7,
-                )
-                ax.add_patch(circle_annulus_outer)
-
-            # Store text position for later
-            text_positions_row2.append((ax, strategy))
-
-        # If not including FWHM plot, reposition row 2 axes to be centered
-        if not include_fwhm_plot:
-            # Get positions of row 1 axes to calculate centering
-            row1_axes = [ax for ax, _ in text_positions_row1]
-            row1_positions = [ax.get_position() for ax in row1_axes]
-
-            # Calculate centered positions for row 2
-            # First image: centered between columns 0 and 1 of row 1
-            # Second image: centered between columns 1 and 2 of row 1
-            offset1 = (row1_positions[0].x0 + row1_positions[1].x0) / 2
-            offset2 = (row1_positions[1].x0 + row1_positions[2].x0) / 2
-
-            # Use the width and height from the gridspec
-            img_width = row1_positions[0].width
-            img_height = row1_positions[0].height
-
-            for i, (ax, strategy) in enumerate(text_positions_row2):
-                pos = ax.get_position()
-                if i == 0:
-                    # Position between columns 0 and 1
-                    ax.set_position(
-                        [
-                            offset1,
-                            pos.y0,  # Keep original y position from gridspec
-                            img_width,
-                            img_height,
-                        ]
+                    # Draw GCNR regions
+                    circle_signal = Circle(
+                        (gcnr_center[1], gcnr_center[0]),
+                        gcnr_radius,
+                        fill=False,
+                        edgecolor="cyan",
+                        linestyle="--",
+                        linewidth=1,
+                        alpha=0.7,
                     )
-                else:
-                    # Position between columns 1 and 2
-                    ax.set_position(
-                        [
-                            offset2,
-                            pos.y0,  # Keep original y position from gridspec
-                            img_width,
-                            img_height,
-                        ]
+                    ax.add_patch(circle_signal)
+
+                    circle_annulus_inner = Circle(
+                        (gcnr_center[1], gcnr_center[0]),
+                        gcnr_annulus_inner,
+                        fill=False,
+                        edgecolor="yellow",
+                        linestyle="--",
+                        linewidth=1,
+                        alpha=0.7,
                     )
+                    ax.add_patch(circle_annulus_inner)
+                    circle_annulus_outer = Circle(
+                        (gcnr_center[1], gcnr_center[0]),
+                        gcnr_annulus_outer,
+                        fill=False,
+                        edgecolor="yellow",
+                        linestyle="--",
+                        linewidth=1,
+                        alpha=0.7,
+                    )
+                    ax.add_patch(circle_annulus_outer)
 
-        # FWHM plot in last column, second row (only if include_fwhm_plot is True)
-        if include_fwhm_plot:
-            ax_fwhm = fig.add_subplot(gs[1, 2])
-            for strategy in all_strategies:
-                trace_db, distances_mm, _ = calculate_fwhm(
-                    point1, point2, reconstructions_sc[strategy], rho_max
-                )
-                color = STRATEGY_COLORS.get(strategy, "#000000")
-                label = STRATEGY_NAMES.get(strategy, strategy)
-                ax_fwhm.plot(
-                    distances_mm,
-                    trace_db,
-                    linewidth=1.2,
-                    color=color,
-                    label=label,
-                    marker="",
-                )
-            ax_fwhm.axvline(x=0, color="gray", linestyle=":", linewidth=0.8, alpha=0.3)
-            ax_fwhm.set_ylabel("Intensity [dB]", fontsize=6, labelpad=1)
-            ax_fwhm.set_xlabel("Distance [mm]", fontsize=6, labelpad=0.5)
-            ax_fwhm.set_ylim(-50, 5)
-            ax_fwhm.yaxis.tick_right()
-            ax_fwhm.yaxis.set_label_position("right")
-            ax_fwhm.set_title("FWHM", fontsize=9, fontweight="bold", pad=2)
-            ax_fwhm.grid(True, alpha=0.3)
-            ax_fwhm.tick_params(labelsize=6, pad=1)
-            ax_fwhm.legend(
-                loc="upper center",
-                bbox_to_anchor=(0.5, -0.5),
-                fontsize=6,
-                framealpha=0.9,
-                ncol=2,
-                columnspacing=0.8,
-                handletextpad=0.4,
-            )
+                # Draw arrow if specified
+                if arrow_tip is not None:
+                    arrow_patch = get_arrow_patch(
+                        row_tip=arrow_tip[0],
+                        col_tip=arrow_tip[1],
+                        length=arrow_length,
+                        angle_deg=arrow_angle,
+                    )
+                    ax.add_patch(arrow_patch)
 
-            # Adjust FWHM plot position
-            pos = ax_fwhm.get_position()
-            ax_fwhm.set_position(
-                [
-                    pos.x0 + 0.055,
-                    pos.y0 + 0.225,
-                    pos.width * 0.7,
-                    pos.height * 0.4,
-                ]
-            )
+                # Store text position for later
+                text_positions.append((ax, strategy))
 
-        # NOW add text using figure coordinates (after layout is finalized)
-        for ax, strategy in text_positions_row1:
+        # Add FWHM/GCNR text using figure coordinates (after layout is finalized)
+        for ax, strategy in text_positions:
             bbox = ax.get_position()
             fig.text(
-                bbox.x1 - 0.08,
-                bbox.y1 - 0.06,
-                f"FWHM: {fwhm_vals[strategy]:.2f}\nGCNR: {gcnr_vals[strategy]:.2f}",
-                fontsize=6,
-                color="black",
-                ha="left",
-                va="top",
-                bbox=dict(facecolor="white", edgecolor="none", alpha=0.7, pad=1),
-            )
-
-        for ax, strategy in text_positions_row2:
-            bbox = ax.get_position()
-            fig.text(
-                bbox.x1 - 0.07,
-                bbox.y1 - 0.06,
+                bbox.x1 - 0.14,
+                bbox.y1 - 0.1,
                 f"FWHM: {fwhm_vals[strategy]:.2f}\nGCNR: {gcnr_vals[strategy]:.2f}",
                 fontsize=6,
                 color="black",
@@ -734,7 +674,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--arrow-length",
         type=float,
-        default=35,
+        default=25,
         help="Arrow length in pixels (default: 30)",
     )
     parser.add_argument(
@@ -753,6 +693,21 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
         help="Include the FWHM plot in the bottom right (default: True)",
+    )
+    parser.add_argument(
+        "--num-fwhm-lines",
+        type=int,
+        default=1,
+        help="Number of parallel FWHM measurement lines (default: 1)",
+    )
+    parser.add_argument(
+        "--fwhm-line-offsets",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Vertical offsets between consecutive FWHM lines in pixels. "
+        "Should have (num_fwhm_lines - 1) values. "
+        "Example: --fwhm-line-offsets 10 12 11 for 4 lines with varying spacing.",
     )
     args = parser.parse_args()
 
@@ -783,6 +738,8 @@ if __name__ == "__main__":
         arrow_angle=args.arrow_angle,
         overlays_on_all=args.overlays_on_all,
         include_fwhm_plot=args.include_fwhm_plot,
+        num_fwhm_lines=args.num_fwhm_lines,
+        fwhm_line_offsets=args.fwhm_line_offsets,
     )
 
     log.info("Done!")
