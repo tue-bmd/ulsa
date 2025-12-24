@@ -234,11 +234,12 @@ def run_active_sampling(
     # Prepare acquisition function
     if getattr(scan, "n_tx", None) is not None and scan.n_tx > 1:
         rx_apo = lines_rx_apo(scan.n_tx, scan.grid_size_z, scan.grid_size_x)
-        bandpass_rf = scipy.signal.firwin(
-            numtaps=128,
-            cutoff=np.array([0.5, 1.5]) * scan.center_frequency,
-            pass_zero="bandpass",
-            fs=scan.sampling_frequency,
+        width = 2e6  # Hz
+        f1 = scan.demodulation_frequency - width / 2
+        f2 = scan.demodulation_frequency + width / 2
+        # TODO: wide enough for fundemental?
+        bandpass_rf = zea.func.get_band_pass_filter(
+            128, scan.sampling_frequency, f1, f2
         )
         base_params = pipeline.prepare_parameters(
             scan=scan,

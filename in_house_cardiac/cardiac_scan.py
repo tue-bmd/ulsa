@@ -37,19 +37,18 @@ def cardiac_scan(
         jit_options="ops",
         rx_apo=(type == "focused"),
     )
-    pipeline.append(zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)))
+    pipeline.append(zea.ops.keras_ops.Squeeze(axis=-1))
 
     with zea.File(target_sequence) as file:
         raw_data_sequence, scan, _ = preload_data(
             file, n_frames, data_type="data/raw_data", type=type
         )
 
-    bandpass_rf = scipy.signal.firwin(
-        numtaps=128,
-        cutoff=np.array([0.5, 1.5]) * scan.center_frequency,
-        pass_zero="bandpass",
-        fs=scan.sampling_frequency,
-    )
+    width = 2e6  # Hz
+    f1 = scan.demodulation_frequency - width / 2
+    f2 = scan.demodulation_frequency + width / 2
+    # TODO: wide enough for fundemental?
+    bandpass_rf = zea.func.get_band_pass_filter(128, scan.sampling_frequency, f1, f2)
     scan.polar_limits = list(np.deg2rad([-45, 45]))
     scan.grid_size_x = grid_width
     scan.dynamic_range = None  # for auto-dynamic range

@@ -3,6 +3,7 @@ from typing import List
 
 import jax
 import keras
+import numpy as np
 from keras import ops
 from tqdm import tqdm
 
@@ -29,6 +30,11 @@ def select_transmits_from_pfield(pfield, transmits):
     return output
 
 
+def round_cm_down(x):
+    """Round down to the nearest centimeter."""
+    return np.floor(x * 100) / 100
+
+
 def update_scan_for_polar_grid(
     scan: Scan,
     pfield_kwargs=None,
@@ -47,6 +53,7 @@ def update_scan_for_polar_grid(
     scan.grid_size_x = scan.n_tx * ray_multiplier
     scan.polar_limits = scan.polar_angles.min(), scan.polar_angles.max()
     scan.pixels_per_wavelength = pixels_per_wavelength
+    scan.zlims = (round_cm_down(scan.zlims[0]), round_cm_down(scan.zlims[1]))
     if hasattr(scan, "n_ch"):
         delattr(scan, "n_ch")
     if harmonic_imaging:
