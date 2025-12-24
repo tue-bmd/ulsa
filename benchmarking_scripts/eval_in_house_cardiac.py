@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v2",
+        default="/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v3/",
         # default="/mnt/z/usbmd/Wessel/eval_phantom",
         help="Directory to save results.",
     )
@@ -50,14 +50,18 @@ def parse_args():
     parser.add_argument(
         "--folder",
         type=str,
-        default="/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/",
-        # default="/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea",
-        help="Folder containing the HDF5 files.",
+        nargs="+",
+        default=[
+            "/mnt/z/usbmd/Wessel/Verasonics/2026_USBMD_A4CH_S51/",
+            # "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/",
+            # "/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea",
+        ],
+        help="Folder(s) containing the HDF5 files. Can specify multiple folders.",
     )
     parser.add_argument(
         "--pattern",
         type=str,
-        default="*_A4CH_*.hdf5",
+        default="*_a4ch_line_dw_*.hdf5",
         # default="*.hdf5",
         help="Pattern to match HDF5 files in the folder.",
     )
@@ -91,12 +95,17 @@ def eval_in_house_data(
     save_dir = Path(save_dir) / file.stem
     save_dir.mkdir(parents=True, exist_ok=True)
 
+    # TODO: make this neater
+    with zea.File(file) as f:
+        n_focused_tx = np.where(f.scan().focus_distances > 0)[0].size
+        grid_width = n_focused_tx * 6
+
     # Run diverging waves (full dynamic range)
     zea.log.info("Running diverging waves...")
     diverging, diverging_scan = cardiac_scan(
         file,
         n_frames=n_frames,
-        grid_width=90,
+        grid_width=grid_width,
         resize_height=112,
         type="diverging",
     )
@@ -112,7 +121,7 @@ def eval_in_house_data(
     focused, focused_scan = cardiac_scan(
         file,
         n_frames=n_frames,
-        grid_width=90,
+        grid_width=grid_width,
         resize_height=112,
         type="focused",
     )
@@ -176,8 +185,10 @@ def main():
     save_dir = Path(args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    folder = Path(args.folder)
-    files = list(folder.glob(args.pattern))
+    folders = [Path(f) for f in args.folder]
+    files = []
+    for folder in folders:
+        files += list(folder.glob(args.pattern, case_sensitive=False))
     n_frames = args.n_frames  # all frames if None
 
     override_config = dict(io_config=dict(frame_cutoff=n_frames))

@@ -102,7 +102,7 @@ from keras.src import backend
 
 import zea.ops
 from ulsa import selection  # need to import this to update action selection registry
-from ulsa.agent import Agent, AgentState, hard_projection, setup_agent
+from ulsa.agent import Agent, AgentConfig, AgentState, hard_projection, setup_agent
 from ulsa.downstream_task import downstream_task_registry
 from ulsa.io_utils import (
     animate_overviews,
@@ -117,7 +117,7 @@ from ulsa.io_utils import (
 from ulsa.ops import lines_rx_apo
 from ulsa.pipeline import make_pipeline
 from ulsa.utils import update_scan_for_polar_grid
-from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
+from zea import File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
 from zea.func import func_with_one_batch_dim, vmap
 from zea.metrics import Metrics
@@ -226,7 +226,6 @@ def run_active_sampling(
     hard_project=False,
     verbose=True,
     post_pipeline: Pipeline = None,
-    pfield: np.ndarray = None,
 ) -> AgentResults:
     if verbose:
         log.info(log.blue("Running active sampling"))
@@ -234,12 +233,6 @@ def run_active_sampling(
 
     # Prepare acquisition function
     if getattr(scan, "n_tx", None) is not None and scan.n_tx > 1:
-        disabled_pfield = ops.ones((scan.grid_size_z * scan.grid_size_x, scan.n_tx))
-        if pfield is not None:
-            flat_pfield = pfield.reshape(scan.n_tx, -1).swapaxes(0, 1)
-            flat_pfield = ops.convert_to_tensor(flat_pfield)
-        else:
-            flat_pfield = disabled_pfield
         rx_apo = lines_rx_apo(scan.n_tx, scan.grid_size_z, scan.grid_size_x)
         bandpass_rf = scipy.signal.firwin(
             numtaps=128,
@@ -250,14 +243,10 @@ def run_active_sampling(
         base_params = pipeline.prepare_parameters(
             scan=scan,
             probe=probe,
-            flat_pfield=flat_pfield,
             rx_apo=rx_apo,
             bandwidth=2e6,
             bandpass_rf=bandpass_rf,
         )
-
-        # No pfield for target
-        target_pipeline_params = base_params | dict(flat_pfield=disabled_pfield)
 
         def acquire(
             full_data,
@@ -267,9 +256,7 @@ def run_active_sampling(
             target_pipeline_state: dict,
         ):
             # Run pipeline with full data
-            output = pipeline(
-                data=full_data, **(target_pipeline_params | target_pipeline_state)
-            )
+            output = pipeline(data=full_data, **(base_params | target_pipeline_state))
             target = output["data"]
 
             # We use the same maxval & dynamic range for target and measurements.
@@ -291,10 +278,10 @@ def run_active_sampling(
                 polar_angles=base_params["polar_angles"][transmits],
                 focus_distances=base_params["focus_distances"][transmits],
                 initial_times=base_params["initial_times"][transmits],
-                flat_pfield=base_params["flat_pfield"][:, transmits],
                 n_tx=len(transmits),
                 rx_apo=base_params["rx_apo"][transmits],
                 tx_waveform_indices=base_params["tx_waveform_indices"][transmits],
+                transmit_origins=base_params["transmit_origins"][transmits],
             )
             params = pipeline.prepare_parameters(**params)
 
@@ -332,21 +319,15 @@ def run_active_sampling(
             agent_state.target_pipeline_state,
         )
 
-        if agent.pfield is None:
-            # This is done to ensure that the measurements are 0 where the mask is 0.
-            # Otherwise, the measurements would contain -1 values there.
-            _measurements = measurements * current_mask
+        # This is done to ensure that the measurements are 0 where the mask is 0.
+        # Otherwise, the measurements would contain -1 values there.
+        _measurements = measurements * current_mask
 
         # 2. run perception and action selection via agent.recover
         reconstruction, new_agent_state = agent.recover(_measurements, agent_state)
 
-        if hard_project and agent.pfield is None:
+        if hard_project:
             reconstruction = hard_projection(reconstruction, _measurements)
-        elif hard_project and agent.pfield is not None:
-            raise NotImplementedError(
-                "Hard projection with pfield is not implemented yet. "
-                "Please set hard_project=False or use a different agent."
-            )
 
         new_agent_state.pipeline_state = pipeline_state
         new_agent_state.target_pipeline_state = target_pipeline_state
@@ -409,20 +390,6 @@ def run_active_sampling(
     )
 
 
-def fix_paths(agent_config, data_paths=None):
-    if data_paths is None:
-        data_paths = set_data_paths("users.yaml", local=False)
-    output_dir = data_paths["output"]
-    agent_config.diffusion_inference.run_dir = (
-        agent_config.diffusion_inference.run_dir.format(output_dir=output_dir)
-    )
-    if "data" in agent_config and "target_sequence" in agent_config.data:
-        agent_config.data.target_sequence = agent_config.data.target_sequence.format(
-            data_root=data_paths["data_root"]
-        )
-    return agent_config
-
-
 def preload_data(
     file: File,
     n_frames: int,  # if there are less than n_frames, it will load all frames
@@ -440,18 +407,16 @@ def preload_data(
     except:
         probe = None
 
-    if scan.selected_transmits != [] and scan.n_tx_total == 101:
-        log.info(
-            "Assuming the data file is from the in-house datasets consisting "
-            "of 11 diverging waves and 90 focused waves."
-        )
-        scan.set_transmits(type)
+    if scan.n_tx:  # TODO: does echonet still work?
+        log.info("Assuming the data file is from the in-house dataset!")
+        _type = "unfocused" if type == "diverging" else type
+        scan.set_transmits(_type)
         update_scan_for_polar_grid(scan)
 
     # slice(None) means all frames.
     if data_type in ["data/raw_data"]:
         validation_sample_frames = file.load_data(
-            data_type, [slice(n_frames), scan.selected_transmits]
+            data_type, (slice(n_frames), scan.selected_transmits)
         )
     else:
         validation_sample_frames = file.load_data(data_type, slice(n_frames))
@@ -467,7 +432,7 @@ def preload_data(
 
 
 def active_sampling_single_file(
-    agent_config: Config,
+    agent_config: str,
     target_sequence: str | Path = None,
     data_type: str = None,
     image_range: tuple = "unset",  # Set to None for auto-dynamic range
@@ -477,8 +442,7 @@ def active_sampling_single_file(
     data_paths = set_data_paths("users.yaml", local=False)
     data_root = data_paths["data_root"]
 
-    agent_config = Config.from_yaml(agent_config)
-    agent_config = fix_paths(agent_config, data_paths)
+    agent_config: AgentConfig = AgentConfig.from_yaml(agent_config)
     if override_config is not None:
         agent_config.update_recursive(override_config)
 
@@ -513,6 +477,7 @@ def active_sampling_single_file(
         validation_sample_frames, scan, probe = preload_data(file, n_frames, data_type)
         scan.dynamic_range = dynamic_range
         scan.t_peak = np.array(0.0)
+        agent_config.action_selection.set_n_tx(scan.n_tx)
 
     if getattr(scan, "theta_range", None) is not None:
         theta_range_deg = np.rad2deg(scan.theta_range)
@@ -521,19 +486,9 @@ def active_sampling_single_file(
         )
         agent_config.io_config.scan_conversion_angles = list(theta_range_deg)
 
-    if (
-        getattr(scan, "probe_geometry", None) is not None
-        and "pfield" in agent_config.action_selection
-    ):
-        scan.pfield_kwargs |= agent_config.action_selection.get("pfield", {})
-        pfield = scan.pfield
-    else:
-        pfield = None
-
     agent, agent_state = setup_agent(
         agent_config,
         seed=jax.random.PRNGKey(seed),
-        pfield=pfield,
         jit_mode="recover",
         # jit_mode=None,
     )
@@ -560,7 +515,6 @@ def active_sampling_single_file(
         probe=probe,
         hard_project=agent_config.diffusion_inference.hard_project,
         post_pipeline=post_pipeline,
-        pfield=pfield,
     )
 
     if agent_config.downstream_task is not None:

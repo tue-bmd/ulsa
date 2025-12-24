@@ -29,46 +29,11 @@ def select_transmits_from_pfield(pfield, transmits):
     return output
 
 
-def lines_to_pfield(
-    selected_lines,  # mask: [c, n_possible_actions]
-    pfield,
-    n_actions,
-    alpha=2.0,
-    threshold=0.06,
-):
-    transmits = zea.agent.masks.k_hot_to_indices(
-        selected_lines, n_actions
-    ).T  # (nonzero_w, c)
-    summed_pfield = select_transmits_from_pfield(
-        pfield**alpha, transmits
-    )  # (grid_size_z, grid_size_x, c)
-
-    # Normalize depth wise
-    # Each row of pixels must sum to grid_size_x (width of the image)
-    summed_pfield = summed_pfield / ops.sum(summed_pfield, axis=1, keepdims=True)
-
-    # Normalize to [0, 1]
-    max_vals = ops.max(summed_pfield, axis=(0, 1), keepdims=True)
-    # Avoid division by zero: only divide where max_vals > 0, else keep as zero
-    summed_pfield = ops.where(
-        max_vals > 0,
-        summed_pfield / max_vals,
-        ops.zeros_like(summed_pfield),
-    )
-
-    # Apply threshold
-    summed_pfield = ops.where(
-        summed_pfield < threshold, ops.zeros_like(summed_pfield), summed_pfield
-    )
-
-    return summed_pfield
-
-
 def update_scan_for_polar_grid(
     scan: Scan,
     pfield_kwargs=None,
     f_number=0,
-    ray_multiplier: int = 1,
+    ray_multiplier: int = 6,
     pixels_per_wavelength=2,
     harmonic_imaging: bool = False,
     apply_lens_correction: bool = True,
@@ -116,7 +81,7 @@ def load_subsampled_data(
     if data_type == "data/raw_data":
         # We can actually subsample the raw data here.
         transmits = selected_lines_to_transmits(selected_lines, n_actions)
-        measurement = file.load_data(data_type, [frame_nr, transmits])
+        measurement = file.load_data(data_type, (frame_nr, transmits))
     else:
         # Here we assume that every transmit event is a line.
         image_shape = file.shape(data_type)[1:]
