@@ -28,8 +28,7 @@ if __name__ == "__main__":
 
 from pathlib import Path
 
-from benchmark_active_sampling_ultrasound import run_benchmark
-from zea import Config
+from benchmark_active_sampling_ultrasound import AgentConfig, run_benchmark
 
 if __name__ == "__main__":
     if args.target_dir is not None:
@@ -39,7 +38,7 @@ if __name__ == "__main__":
     else:
         SAVE_DIR = data_paths.output / "ULSA_benchmarks" / "3d"
 
-    ulsa_agent_config = Config.from_yaml(Path("/ulsa/configs/elevation_3d.yaml"))
+    ulsa_agent_config = AgentConfig.from_yaml(Path("/ulsa/configs/elevation_3d.yaml"))
 
     # sweep_save_dir, all_metrics_results = run_benchmark(
     #     agent_config=ulsa_agent_config,

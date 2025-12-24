@@ -34,7 +34,7 @@ import numpy as np
 from matplotlib.patches import Circle, FancyArrowPatch
 
 from zea import init_device, log
-from zea.ops import translate
+from zea.func import translate
 
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"

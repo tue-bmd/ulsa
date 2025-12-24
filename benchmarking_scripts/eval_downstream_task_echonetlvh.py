@@ -10,9 +10,7 @@ if __name__ == "__main__":
 
 from pathlib import Path
 
-from zea import Config
-
-from benchmark_active_sampling_ultrasound import run_benchmark
+from benchmark_active_sampling_ultrasound import AgentConfig, run_benchmark
 
 if __name__ == "__main__":
     TARGET_DIR = Path("/mnt/z/Ultrasound-BMd/data/USBMD_datasets/echonetlvh/val")
@@ -20,10 +18,10 @@ if __name__ == "__main__":
         "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonetlvh_downstream_task/23_07_25_run1"
     )
 
-    ulsa_agent_dst_config = Config.from_yaml(
+    ulsa_agent_dst_config = AgentConfig.from_yaml(
         Path("/ulsa/configs/echonetlvh_3_frames_downstream_task.yaml")
     )
-    ulsa_agent_tig_config = Config.from_yaml(
+    ulsa_agent_tig_config = AgentConfig.from_yaml(
         Path("/ulsa/configs/echonetlvh_3_frames.yaml")
     )
 

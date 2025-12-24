@@ -63,7 +63,7 @@ def overlay_segmentation_on_image_batch(images, segmentation_masks, alpha=0.3):
 
 def map_range(img, from_range=(-1, 1), to_range=(0, 255)):
     img = ops.convert_to_numpy(img)
-    img = zea.ops.translate(img, from_range, to_range)
+    img = zea.func.translate(img, from_range, to_range)
     return np.clip(img, to_range[0], to_range[1])
 
 
@@ -340,7 +340,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
         x_sc = self.scan_convert_batch(x_resized)
         x_resized = ops.image.resize(x_sc[..., None], size=(224, 224))
         x_clipped = ops.clip(x_resized, -1, 1)
-        x_normalized = zea.ops.translate(
+        x_normalized = zea.func.translate(
             x_clipped, range_from=(-1, 1), range_to=(0, 255)
         )
         logits = self.model(x_normalized)
@@ -486,7 +486,7 @@ class EchoNetLVHSegmentation(DifferentiableDownstreamTask):
 
         images_resized = ops.image.resize(images_sc[..., None], size=(224, 224))
         images_clipped = ops.clip(images_resized, -1, 1)
-        images = zea.ops.translate(
+        images = zea.func.translate(
             images_clipped, range_from=(-1, 1), range_to=(0, 255)
         )
 

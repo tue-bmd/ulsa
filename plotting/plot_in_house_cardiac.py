@@ -31,8 +31,8 @@ from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_sid
 
 
 def plot_from_npz(
-    run_dir,
-    plot_dir,
+    run_dir: Path | str,
+    plot_dir: Path | str,
     exts=(".png", ".pdf"),
     gif=True,
     gif_fps=8,
@@ -44,6 +44,7 @@ def plot_from_npz(
     scan_convert_resolution=0.1,
     selection_strategy="greedy_entropy",
 ):
+    run_dir = Path(run_dir)
     plot_dir = Path(plot_dir)
     plot_path = plot_dir / selection_strategy
 
@@ -271,13 +272,16 @@ def get_arrow(
 
 
 if __name__ == "__main__":
+    # PLOT_NPZ_PATH = (
+    #     "/mnt/z/usbmd/Wessel/ulsa_paper_plots/20240701_P1_A4CH_0001_results.npz"
+    # )
     PLOT_NPZ_PATH = (
-        "/mnt/z/usbmd/Wessel/ulsa_paper_plots/20240701_P1_A4CH_0001_results.npz"
+        "/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v3/20251222_s1_a4ch_line_dw_0000"
     )
 
     plot_from_npz(
         PLOT_NPZ_PATH,
-        "output/in_house_cardiac.png",
+        "output/in_house_cardiac",
         context="styles/ieee-tmi.mplstyle",
         frame_idx=24,
         arrow=get_arrow(),

@@ -93,12 +93,11 @@ from keras import ops
 import zea
 from active_sampling_temporal import (
     apply_downstream_task,
-    fix_paths,
     make_pipeline,
     preload_data,
     run_active_sampling,
 )
-from ulsa.agent import reset_agent_state, setup_agent
+from ulsa.agent import AgentConfig, reset_agent_state, setup_agent
 from ulsa.downstream_task import downstream_task_registry
 from ulsa.io_utils import make_save_dir
 from zea import Config, Dataset, init_device, log, set_data_paths
@@ -344,7 +343,7 @@ def benchmark(
             post_pipeline=post_pipeline,
         )
 
-        target_sequence_preprocessed = zea.ops.translate(
+        target_sequence_preprocessed = zea.func.translate(
             target_sequence[..., None], dynamic_range, (-1, 1)
         )
         downstream_task, targets_dst, reconstructions_dst, _ = apply_downstream_task(
@@ -484,7 +483,7 @@ def get_shard_indices(shard_index, num_shards, *lengths):
 
 
 def run_benchmark(
-    agent_config,
+    agent_config: AgentConfig,
     target_dir,
     save_dir: Path,
     sweep_params,  # Now a single parameter that can be either dict or list
@@ -510,7 +509,7 @@ def run_benchmark(
             - List of parameter names to sweep using DEFAULT_SWEEP_VALUES
             - Dict with parameter names as keys and lists of values to sweep over
     """
-    agent_config = fix_paths(agent_config)
+    agent_config.fix_paths()
 
     sweep_configs, sweep_details = setup_sweep(agent_config, sweep_params)
 
@@ -593,7 +592,7 @@ if __name__ == "__main__":
     print(f"Using {keras.backend.backend()} backend 🔥")
     data_paths = set_data_paths("users.yaml", local=False)
 
-    agent_config = Config.from_yaml(args.agent_config)
+    agent_config = AgentConfig.from_yaml(args.agent_config)
     sweep_save_dir, metrics_results = run_benchmark(
         agent_config=agent_config,
         target_dir=args.target_dir.format(data_root=data_paths["data_root"]),

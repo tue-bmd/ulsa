@@ -443,6 +443,7 @@ def active_sampling_single_file(
     data_root = data_paths["data_root"]
 
     agent_config: AgentConfig = AgentConfig.from_yaml(agent_config)
+    agent_config.fix_paths()
     if override_config is not None:
         agent_config.update_recursive(override_config)
 
@@ -526,7 +527,7 @@ def active_sampling_single_file(
 
     if downstream_task is not None:
         # Load downstream task model and apply to targets and reconstructions for comparison
-        targets_normalized = zea.ops.translate(
+        targets_normalized = zea.func.translate(
             validation_sample_frames, range_from=dynamic_range, range_to=(-1, 1)
         )
         downstream_task, targets_dst, reconstructions_dst, beliefs_dst = (

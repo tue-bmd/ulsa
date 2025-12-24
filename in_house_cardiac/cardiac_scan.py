@@ -26,15 +26,14 @@ def cardiac_scan(
     target_sequence,
     n_frames,
     grid_width=90,
-    resize_height=112,
+    resize_to=(112, 112),
     type="focused",  # "focused" or "diverging"
 ):
-    shape = (resize_height, grid_width)
     pipeline = make_pipeline(
         "data/raw_data",
         None,
-        shape,
-        shape,
+        resize_to,
+        resize_to,
         jit_options="ops",
         rx_apo=(type == "focused"),
     )

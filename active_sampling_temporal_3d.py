@@ -101,20 +101,17 @@ import jax
 from keras.src import backend
 
 import zea.ops
-from active_sampling_temporal import (
-    fix_paths,
-    run_active_sampling,
-)
+from active_sampling_temporal import run_active_sampling
 from elevation_interpolation.tools import (
     TITLE_LOOKUP,
     animate_slices_from_3d_volumes,
     plot_slices_from_3d_volumes,
     postprocess_3d_data,
 )
-from ulsa.agent import reset_agent_state, setup_agent
-from zea import Config, File, Pipeline, log, set_data_paths
+from ulsa.agent import AgentConfig, reset_agent_state, setup_agent
+from zea import File, Pipeline, log, set_data_paths
+from zea.func import translate
 from zea.io_lib import load_image, save_to_gif
-from zea.ops import translate
 from zea.visualize import plot_biplanes, set_mpl_style
 
 
@@ -313,8 +310,8 @@ if __name__ == "__main__":
     save_dir = args.save_dir.format(output_dir=output_dir)
     save_dir = Path(save_dir)
 
-    agent_config = Config.from_yaml(args.agent_config)
-    agent_config = fix_paths(agent_config, data_paths)
+    agent_config = AgentConfig.from_yaml(args.agent_config)
+    agent_config.fix_paths()
     if args.override_config is not None:
         agent_config.update_recursive(args.override_config)
 

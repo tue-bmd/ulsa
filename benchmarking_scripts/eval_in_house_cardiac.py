@@ -106,7 +106,6 @@ def eval_in_house_data(
         file,
         n_frames=n_frames,
         grid_width=grid_width,
-        resize_height=112,
         type="diverging",
     )
     np.savez(
@@ -122,7 +121,6 @@ def eval_in_house_data(
         file,
         n_frames=n_frames,
         grid_width=grid_width,
-        resize_height=112,
         type="focused",
     )
     np.savez(

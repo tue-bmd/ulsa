@@ -60,8 +60,7 @@ from pathlib import Path
 
 import keras
 
-from benchmark_active_sampling_ultrasound import run_benchmark
-from zea import Config
+from benchmark_active_sampling_ultrasound import AgentConfig, run_benchmark
 
 
 def parse_args():
@@ -127,7 +126,7 @@ if __name__ == "__main__":
 
     TARGET_DIR = data_paths.data_root / "USBMD_datasets" / "echonet_legacy" / args.split
 
-    ulsa_agent_config = Config.from_yaml("/ulsa/configs/echonet_3_frames.yaml")
+    ulsa_agent_config = AgentConfig.from_yaml("/ulsa/configs/echonet_3_frames.yaml")
 
     sweep_save_dir, all_metrics_results = run_benchmark(
         agent_config=ulsa_agent_config,
