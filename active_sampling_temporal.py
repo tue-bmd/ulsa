@@ -116,11 +116,11 @@ from ulsa.io_utils import (
 )
 from ulsa.ops import lines_rx_apo
 from ulsa.pipeline import make_pipeline
-from ulsa.utils import select_transmits, update_scan_for_polar_grid
+from ulsa.utils import update_scan_for_polar_grid
 from zea import Config, File, Pipeline, Probe, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
+from zea.func import func_with_one_batch_dim, vmap
 from zea.metrics import Metrics
-from zea.tensor_ops import func_with_one_batch_dim, vmap
 
 
 def simple_scan(f, init, xs, length=None, disable_tqdm=False):
@@ -445,7 +445,7 @@ def preload_data(
             "Assuming the data file is from the in-house datasets consisting "
             "of 11 diverging waves and 90 focused waves."
         )
-        select_transmits(scan, type=type)
+        scan.set_transmits(type)
         update_scan_for_polar_grid(scan)
 
     # slice(None) means all frames.

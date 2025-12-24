@@ -274,3 +274,26 @@ class Multiply(zea.ops.Operation):
         data = kwargs[self.key]
         multiplied_data = data * kwargs[self.other_key]
         return {self.output_key: multiplied_data}
+
+
+class UndoTGC(zea.ops.Operation):
+    def __init__(self, axis, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+
+    def call(self, tgc_gain_curve, **kwargs):
+        data = kwargs[self.key]
+        data = zea.func.apply_along_axis(lambda x: x / tgc_gain_curve, self.axis, data)
+        return {self.output_key: data}
+
+
+class ApplyAlongAxis(zea.ops.Operation):
+    def __init__(self, axis, fn: callable, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+        self.fn = fn
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        data = zea.func.apply_along_axis(self.fn, self.axis, data)
+        return {self.output_key: data}

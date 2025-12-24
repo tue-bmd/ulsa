@@ -11,13 +11,6 @@ import zea
 from ulsa.pipeline import beamforming
 from zea import Scan
 
-# Some constants for the in-house cardiac dataset.
-FOCUSED_TRANSMITS_LIMS = (0, 90)
-DIVERGING_TRANSMITS_LIMS = (90, 101)
-
-FOCUSED_TRANSMITS = np.arange(*FOCUSED_TRANSMITS_LIMS)
-DIVERGING_TRANSMITS = np.arange(*DIVERGING_TRANSMITS_LIMS)
-
 
 def select_transmits_from_pfield(pfield, transmits):
     # pfield: (n_tx, grid_size_z, grid_size_x)
@@ -72,26 +65,38 @@ def lines_to_pfield(
     return summed_pfield
 
 
-def select_transmits(scan, type="focused"):
-    if type == "focused":
-        scan.selected_transmits = FOCUSED_TRANSMITS
-    elif type == "diverging":
-        scan.selected_transmits = DIVERGING_TRANSMITS
-    else:
-        raise ValueError(f"Unknown scan type: {type}. Use 'focused' or 'diverging'.")
-
-
 def update_scan_for_polar_grid(
-    scan: Scan, pfield_kwargs=None, f_number=0, ray_multiplier: int = 1
+    scan: Scan,
+    pfield_kwargs=None,
+    f_number=0,
+    ray_multiplier: int = 1,
+    pixels_per_wavelength=2,
+    harmonic_imaging: bool = False,
+    apply_lens_correction: bool = True,
 ):
     """Update the scan object for line scanning."""
     if pfield_kwargs is None:
         pfield_kwargs = {}
-    scan.pfield_kwargs = {"downsample": 1, "downmix": 1} | pfield_kwargs
+    scan.pfield_kwargs = {"downsample": 1, "downmix": 1, "norm": False} | pfield_kwargs
     scan.f_number = float(f_number)
     scan.grid_type = "polar"
     scan.grid_size_x = scan.n_tx * ray_multiplier
     scan.polar_limits = scan.polar_angles.min(), scan.polar_angles.max()
+    scan.pixels_per_wavelength = pixels_per_wavelength
+    if hasattr(scan, "n_ch"):
+        delattr(scan, "n_ch")
+    if harmonic_imaging:
+        center_frequency = scan.demodulation_frequency / 2
+        print(
+            f"Harmonic imaging: Setting transmit frequency to {center_frequency * 1e-6:.2f} MHz"
+        )
+        scan.center_frequency = center_frequency
+
+    # For Philips S5-1 probes!
+    if apply_lens_correction:
+        scan.apply_lens_correction = True
+        scan.lens_thickness = 1e-3
+        scan.lens_sound_speed = 1000
 
 
 def copy_transmits_from_scan(scan: zea.Scan, transmits) -> zea.Scan:
