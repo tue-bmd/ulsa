@@ -3,7 +3,6 @@ from typing import List
 
 import jax
 import keras
-import numpy as np
 from keras import ops
 from tqdm import tqdm
 

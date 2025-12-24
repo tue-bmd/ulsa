@@ -26,8 +26,8 @@ from zea.agent.selection import (
 )
 from zea.backend import jit
 from zea.config import Config
+from zea.func import split_seed
 from zea.models.diffusion import DiffusionModel
-from zea.tensor_ops import split_seed
 
 DEBUGGING = False
 

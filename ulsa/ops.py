@@ -7,6 +7,7 @@ from keras import ops
 
 import zea.ops
 from zea.func import apply_along_axis, translate
+from zea.internal.core import DataTypes
 
 NOISE_ESTIMATION_NORMALIZER = (
     0.6745  # Used for robust noise estimation from median absolute deviation
@@ -89,7 +90,7 @@ class GetAutoDynamicRange(zea.ops.Operation):
     Only works when dynamic range is not already set in the parameters."""
 
     def __init__(self, low_pct=18, high_pct=95, exclude_zeros=True, **kwargs):
-        super().__init__(input_data_type=zea.ops.DataTypes.ENVELOPE_DATA, **kwargs)
+        super().__init__(input_data_type=DataTypes.ENVELOPE_DATA, **kwargs)
         self.low_pct = low_pct
         self.high_pct = high_pct
         self.exclude_zeros = exclude_zeros
