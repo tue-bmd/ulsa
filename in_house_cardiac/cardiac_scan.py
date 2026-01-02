@@ -24,17 +24,17 @@ from zea.io_lib import save_to_gif
 
 def cardiac_scan(
     target_sequence,
-    n_frames,
-    grid_width=90,
-    resize_to=(112, 112),
+    n_frames=None,
+    grid_width=None,
+    resize_to=None,
     type="focused",  # "focused" or "diverging"
+    bandwidth=2e6,  # TODO: wide enough for fundemental?
+    polar_limits=None,
 ):
     pipeline = make_pipeline(
         "data/raw_data",
-        None,
-        resize_to,
-        resize_to,
-        jit_options="ops",
+        output_shape=resize_to,
+        action_selection_shape=resize_to,
         rx_apo=(type == "focused"),
     )
     pipeline.append(zea.ops.keras_ops.Squeeze(axis=-1))
@@ -44,13 +44,21 @@ def cardiac_scan(
             file, n_frames, data_type="data/raw_data", type=type
         )
 
-    width = 2e6  # Hz
-    f1 = scan.demodulation_frequency - width / 2
-    f2 = scan.demodulation_frequency + width / 2
-    # TODO: wide enough for fundemental?
-    bandpass_rf = zea.func.get_band_pass_filter(128, scan.sampling_frequency, f1, f2)
-    scan.polar_limits = list(np.deg2rad([-45, 45]))
-    scan.grid_size_x = grid_width
+    bandpass_rf = zea.func.get_band_pass_filter(
+        128,
+        scan.sampling_frequency,
+        scan.demodulation_frequency - bandwidth / 2,
+        scan.demodulation_frequency + bandwidth / 2,
+    )
+    if polar_limits is not None:
+        scan.polar_limits = list(polar_limits)
+    else:
+        scan.polar_limits = list(np.deg2rad([-45, 45]))
+    if grid_width is not None:
+        scan.grid_size_x = grid_width
+    else:
+        scan.grid_size_x = scan.n_tx * 6  # default
+
     scan.dynamic_range = None  # for auto-dynamic range
 
     if type == "focused":
@@ -62,19 +70,13 @@ def cardiac_scan(
     else:
         kwargs = {}
 
-    # TODO: fix minval to 0?
     params = pipeline.prepare_parameters(
-        scan=scan, bandwidth=2e6, bandpass_rf=bandpass_rf, **kwargs
+        scan=scan, bandwidth=bandwidth, bandpass_rf=bandpass_rf, minval=0, **kwargs
     )
 
-    images = []
-    for raw_data in tqdm(raw_data_sequence):
-        output = pipeline(data=raw_data, **params)
-        image = output.pop("data")
-        params["maxval"] = output.pop("maxval")
-        params["dynamic_range"] = output.pop("dynamic_range")
-        images.append(ops.convert_to_numpy(image))
-    images = np.stack(images, axis=0)
+    images, _ = pipeline.run(
+        raw_data_sequence, keep_keys=["maxval", "dynamic_range"], **params
+    )
 
     scan.dynamic_range = params["dynamic_range"]
     return images, scan

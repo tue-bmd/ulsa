@@ -107,6 +107,7 @@ def eval_in_house_data(
         n_frames=n_frames,
         grid_width=grid_width,
         type="diverging",
+        resize_to=(112, 112),
     )
     np.savez(
         save_dir / f"diverging.npz",
@@ -122,6 +123,7 @@ def eval_in_house_data(
         n_frames=n_frames,
         grid_width=grid_width,
         type="focused",
+        resize_to=(112, 112),
     )
     np.savez(
         save_dir / f"focused.npz",

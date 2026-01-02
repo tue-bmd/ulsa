@@ -40,7 +40,7 @@ def update_scan_for_polar_grid(
     pfield_kwargs=None,
     f_number=0,
     ray_multiplier: int = 6,
-    pixels_per_wavelength=2,
+    pixels_per_wavelength=4,
     harmonic_imaging: bool = False,
     apply_lens_correction: bool = True,
 ):
