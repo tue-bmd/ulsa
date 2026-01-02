@@ -412,7 +412,15 @@ def preload_data(
         log.info("Assuming the data file is from the in-house dataset!")
         _type = "unfocused" if type == "diverging" else type
         scan.set_transmits(_type)
-        update_scan_for_polar_grid(scan)
+
+        # TODO: remove this hack after reconverting the data files
+        if "2025" in file.name:
+            log.warning("Detected harmonic imaging dataset based on filename.")
+            harmonic_imaging = True
+        else:
+            log.warning("Assuming fundamental imaging dataset.")
+            harmonic_imaging = False
+        update_scan_for_polar_grid(scan, harmonic_imaging=harmonic_imaging)
 
     # slice(None) means all frames.
     if data_type in ["data/raw_data"]:

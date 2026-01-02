@@ -38,7 +38,7 @@ def round_cm_down(x):
 def update_scan_for_polar_grid(
     scan: Scan,
     pfield_kwargs=None,
-    f_number=0,
+    f_number=0.3,
     ray_multiplier: int = 6,
     pixels_per_wavelength=4,
     harmonic_imaging: bool = False,
@@ -47,7 +47,13 @@ def update_scan_for_polar_grid(
     """Update the scan object for line scanning."""
     if pfield_kwargs is None:
         pfield_kwargs = {}
-    scan.pfield_kwargs = {"downsample": 1, "downmix": 1, "norm": False} | pfield_kwargs
+    scan.pfield_kwargs = {
+        "downsample": 1,
+        "downmix": 1,
+        "percentile": 1,
+        "alpha": 0.5,
+        "norm": False,
+    } | pfield_kwargs
     scan.f_number = float(f_number)
     scan.grid_type = "polar"
     scan.grid_size_x = scan.n_tx * ray_multiplier

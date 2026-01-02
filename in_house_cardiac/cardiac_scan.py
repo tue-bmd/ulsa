@@ -56,29 +56,24 @@ def cardiac_scan(
         scan.polar_limits = list(np.deg2rad([-45, 45]))
     if grid_width is not None:
         scan.grid_size_x = grid_width
-    else:
-        scan.grid_size_x = scan.n_tx * 6  # default
 
     scan.dynamic_range = None  # for auto-dynamic range
 
+    params = {}
     if type == "focused":
-        kwargs = {
-            "rx_apo": ulsa.ops.lines_rx_apo(
-                scan.n_tx, scan.grid_size_z, scan.grid_size_x
-            )
-        }
-    else:
-        kwargs = {}
+        params["rx_apo"] = ulsa.ops.lines_rx_apo(
+            scan.n_tx, scan.grid_size_z, scan.grid_size_x
+        )
 
     params = pipeline.prepare_parameters(
-        scan=scan, bandwidth=bandwidth, bandpass_rf=bandpass_rf, minval=0, **kwargs
+        scan=scan, bandwidth=bandwidth, bandpass_rf=bandpass_rf, minval=0, **params
     )
 
-    images, _ = pipeline.run(
+    images, output = pipeline.run(
         raw_data_sequence, keep_keys=["maxval", "dynamic_range"], **params
     )
 
-    scan.dynamic_range = params["dynamic_range"]
+    scan.dynamic_range = output["dynamic_range"]
     return images, scan
 
 

@@ -21,7 +21,7 @@ class Pipeline(ZeaPipeline):
         verbose: bool = True,
         to_numpy: bool = True,
         selected_transmits=None,
-        **kwargs,
+        **params,
     ):
         # If Scan is provided, prepare parameters
         if scan is not None:
@@ -32,7 +32,7 @@ class Pipeline(ZeaPipeline):
             elif scan._selected_transmits is not None:
                 selected_transmits = scan._selected_transmits
 
-            params = self.prepare_parameters(scan=scan, **kwargs)
+            params = self.prepare_parameters(scan=scan, **params)
 
         # If no keep_keys provided, default to ["maxval"]
         if keep_keys is None:
@@ -147,16 +147,15 @@ def make_pipeline(
     **kwargs,
 ) -> Pipeline:
     if data_type == "data/raw_data":
-        pipeline = zea.Pipeline(
+        pipeline = Pipeline(
             [
                 *beamforming(rx_apo=rx_apo),
                 zea.ops.keras_ops.ExpandDims(axis=-1),
                 ulsa.ops.TranslateDynamicRange(output_range),
                 *resize(action_selection_shape, output_shape),
-                zea.ops.keras_ops.Clip(
-                    x_min=output_range[0] if output_range else None,
-                    x_max=output_range[1] if output_range else None,
-                ),  # for resize and dynamic range clipping
+                zea.ops.keras_ops.Clip(x_min=output_range[0], x_max=output_range[1])
+                if output_range is not None
+                else zea.ops.Identity(),
             ],
             with_batch_dim=with_batch_dim,
             jit_options=jit_options,
