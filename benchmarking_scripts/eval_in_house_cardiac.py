@@ -213,7 +213,7 @@ def run_single_example():
     )
     plot_from_npz(
         path,
-        "output/in_house_cardiac.png",
+        "output/in_house_cardiac",
         gif=False,
         context="styles/ieee-tmi.mplstyle",
         diverging_dynamic_range=[-70, -30],
@@ -222,7 +222,29 @@ def run_single_example():
     )
 
 
+def run_harmonic_example():
+    acq = "20251222_s3_a4ch_line_dw_0000"
+    path = eval_in_house_data(
+        Path(f"/mnt/z/usbmd/Wessel/Verasonics/2026_USBMD_A4CH_S51/{acq}.hdf5"),
+        Path("/mnt/z/usbmd/Wessel/ulsa_paper_plots_v2"),
+        n_frames=None,
+        override_config=dict(io_config=dict(frame_cutoff=None)),
+        visualize=False,
+        image_range=[-60, -10],
+        seed=0,
+    )
+    plot_from_npz(
+        path,
+        "output/in_house_cardiac",
+        gif=False,
+        context="styles/ieee-tmi.mplstyle",
+        diverging_dynamic_range=[-60, -10],
+        focused_dynamic_range=[-60, -10],
+    )
+
+
 if __name__ == "__main__":
     main()  # run all a4ch
 
     # run_single_example()
+    # run_harmonic_example()
