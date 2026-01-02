@@ -247,15 +247,9 @@ def run_active_sampling(
             minval=0,
         )
 
-        def acquire(
-            full_data,
-            mask,
-            selected_lines,
-            pipeline_state: dict,
-            target_pipeline_state: dict,
-        ):
+        def acquire(full_data, mask, pipeline_state: dict):
             # Run pipeline with full data
-            output = pipeline(data=full_data, **(base_params | target_pipeline_state))
+            output = pipeline(data=full_data, **(base_params | pipeline_state))
             target = output["data"]
 
             # We use the same maxval & dynamic range for target and measurements.
@@ -265,30 +259,13 @@ def run_active_sampling(
             maxval = output["maxval"]
             dynamic_range = output["dynamic_range"]
             pipeline_state = {"maxval": maxval, "dynamic_range": dynamic_range}
-            target_pipeline_state = {"maxval": maxval, "dynamic_range": dynamic_range}
 
-            # Select transmits
-            transmits = k_hot_to_indices(selected_lines, n_actions)
-            transmits = ops.squeeze(transmits, 0)
-            selected_data = full_data[transmits]
-            params = pipeline_state | dict(
-                t0_delays=base_params["t0_delays"][transmits],
-                tx_apodizations=base_params["tx_apodizations"][transmits],
-                polar_angles=base_params["polar_angles"][transmits],
-                focus_distances=base_params["focus_distances"][transmits],
-                initial_times=base_params["initial_times"][transmits],
-                n_tx=len(transmits),
-                rx_apo=base_params["rx_apo"][transmits],
-                tx_waveform_indices=base_params["tx_waveform_indices"][transmits],
-                transmit_origins=base_params["transmit_origins"][transmits],
-            )
-            params = pipeline.prepare_parameters(**params)
+            # This is done to ensure that the measurements are 0 where the mask is 0.
+            # Assumes the pipeline beamforms the data to individual lines.
+            # In this repo we use `rx_apo` to achieve this.
+            measurements = target * mask
 
-            # Run pipeline with selected lines
-            output = pipeline(data=selected_data, **(base_params | params))
-            measurements = output["data"]
-
-            return measurements, target, pipeline_state, target_pipeline_state
+            return measurements, target, pipeline_state
 
     else:
         if scan is not None:
@@ -299,37 +276,25 @@ def run_active_sampling(
         def acquire(
             full_data,
             mask,
-            selected_lines,
             pipeline_state: dict,
-            target_pipeline_state: dict,
         ):
             target = pipeline(data=full_data, **params, **pipeline_state)["data"]
-            return target * mask, target, {}, {}
+            return target * mask, target, {}
 
     def perception_action_step(agent_state: AgentState, target_data):
         # 1. Acquire measurements
         current_mask = agent_state.mask[..., -1, None]
-        selected_lines = agent_state.selected_lines[None]  # (1, n_tx)
-        measurements, target_img, pipeline_state, target_pipeline_state = acquire(
-            target_data,
-            current_mask,
-            selected_lines,
-            agent_state.pipeline_state,
-            agent_state.target_pipeline_state,
+        measurements, target_img, pipeline_state = acquire(
+            target_data, current_mask, agent_state.pipeline_state
         )
 
-        # This is done to ensure that the measurements are 0 where the mask is 0.
-        # Otherwise, the measurements would contain -1 values there.
-        _measurements = measurements * current_mask
-
         # 2. run perception and action selection via agent.recover
-        reconstruction, new_agent_state = agent.recover(_measurements, agent_state)
+        reconstruction, new_agent_state = agent.recover(measurements, agent_state)
 
         if hard_project:
-            reconstruction = hard_projection(reconstruction, _measurements)
+            reconstruction = hard_projection(reconstruction, measurements)
 
         new_agent_state.pipeline_state = pipeline_state
-        new_agent_state.target_pipeline_state = target_pipeline_state
         return (
             new_agent_state,
             (
