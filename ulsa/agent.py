@@ -59,7 +59,11 @@ class ActionSelectionConfig(Cfg):
     def set_n_tx(self, n_tx: int):
         if self.n_possible_actions == "n_tx":
             self.n_possible_actions = n_tx
-        self.shape = [s if s != "n_tx" else n_tx for s in self.shape]
+
+        # For example: this converts [112, "2*n_tx"] to [112, 112] if n_tx=56
+        self.shape = [
+            s if "n_tx" not in str(s) else eval(s, {"n_tx": n_tx}) for s in self.shape
+        ]
 
 
 @dataclass

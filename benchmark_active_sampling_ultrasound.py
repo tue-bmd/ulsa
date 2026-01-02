@@ -316,7 +316,7 @@ def benchmark(
     all_metrics_results = []
     for i, file_index in enumerate(file_indices):
         file = dataset[file_index]
-        target_sequence, scan, probe = preload_data(file, n_frames, dataset.key)
+        target_sequence, scan, _ = preload_data(file, n_frames, dataset.key)
         scan.dynamic_range = dynamic_range
 
         if circle_augmentation is not None:
@@ -337,7 +337,6 @@ def benchmark(
             agent_config.action_selection.n_actions,
             pipeline,
             scan,
-            probe,
             hard_project=agent_config.diffusion_inference.hard_project,
             verbose=False,
             post_pipeline=post_pipeline,

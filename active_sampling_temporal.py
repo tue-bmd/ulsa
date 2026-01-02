@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
-import scipy
 from tqdm import tqdm
 
 
@@ -117,7 +116,7 @@ from ulsa.io_utils import (
 from ulsa.ops import lines_rx_apo
 from ulsa.pipeline import make_pipeline
 from ulsa.utils import update_scan_for_polar_grid
-from zea import File, Pipeline, Probe, Scan, log, set_data_paths
+from zea import File, Pipeline, Scan, log, set_data_paths
 from zea.agent.masks import k_hot_to_indices
 from zea.func import func_with_one_batch_dim, vmap
 from zea.metrics import Metrics
@@ -222,10 +221,10 @@ def run_active_sampling(
     n_actions: int,
     pipeline: Pipeline = None,
     scan: Scan = None,
-    probe: Probe = None,
     hard_project=False,
     verbose=True,
     post_pipeline: Pipeline = None,
+    bandwidth: float = 2e6,
 ) -> AgentResults:
     if verbose:
         log.info(log.blue("Running active sampling"))
@@ -234,19 +233,18 @@ def run_active_sampling(
     # Prepare acquisition function
     if getattr(scan, "n_tx", None) is not None and scan.n_tx > 1:
         rx_apo = lines_rx_apo(scan.n_tx, scan.grid_size_z, scan.grid_size_x)
-        width = 2e6  # Hz
-        f1 = scan.demodulation_frequency - width / 2
-        f2 = scan.demodulation_frequency + width / 2
-        # TODO: wide enough for fundemental?
         bandpass_rf = zea.func.get_band_pass_filter(
-            128, scan.sampling_frequency, f1, f2
+            128,
+            scan.sampling_frequency,
+            scan.demodulation_frequency - bandwidth / 2,
+            scan.demodulation_frequency + bandwidth / 2,
         )
         base_params = pipeline.prepare_parameters(
             scan=scan,
-            probe=probe,
             rx_apo=rx_apo,
-            bandwidth=2e6,
+            bandwidth=bandwidth,
             bandpass_rf=bandpass_rf,
+            minval=0,
         )
 
         def acquire(
@@ -397,16 +395,11 @@ def preload_data(
     data_type="data/image",
     type="focused",  # 'focused' or 'diverging'
 ):
-    # Get scan and probe from the file
+    # Get scan from file
     try:
         scan = file.scan()
     except:
         scan = None
-
-    try:
-        probe = file.probe()
-    except:
-        probe = None
 
     if scan.n_tx:  # TODO: does echonet still work?
         log.info("Assuming the data file is from the in-house dataset!")
@@ -437,7 +430,7 @@ def preload_data(
     #     crop_az = (data_n_az // 2) - slice_az
     #     validation_sample_frames = validation_sample_frames[:,:,crop_az:-crop_az,:]
 
-    return validation_sample_frames, scan, probe
+    return validation_sample_frames, scan
 
 
 def active_sampling_single_file(
@@ -484,9 +477,8 @@ def active_sampling_single_file(
     dataset_path = target_sequence.format(data_root=data_root)
     with File(dataset_path) as file:
         n_frames = agent_config.io_config.get("frame_cutoff", "all")
-        validation_sample_frames, scan, probe = preload_data(file, n_frames, data_type)
+        validation_sample_frames, scan = preload_data(file, n_frames, data_type)
         scan.dynamic_range = dynamic_range
-        scan.t_peak = np.array(0.0)
         agent_config.action_selection.set_n_tx(scan.n_tx)
 
     if getattr(scan, "theta_range", None) is not None:
@@ -522,7 +514,6 @@ def active_sampling_single_file(
         n_actions=agent_config.action_selection.n_actions,
         pipeline=pipeline,
         scan=scan,
-        probe=probe,
         hard_project=agent_config.diffusion_inference.hard_project,
         post_pipeline=post_pipeline,
     )

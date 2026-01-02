@@ -40,7 +40,7 @@ def cardiac_scan(
     pipeline.append(zea.ops.keras_ops.Squeeze(axis=-1))
 
     with zea.File(target_sequence) as file:
-        raw_data_sequence, scan, _ = preload_data(
+        raw_data_sequence, scan = preload_data(
             file, n_frames, data_type="data/raw_data", type=type
         )
 
