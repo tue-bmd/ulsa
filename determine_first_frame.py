@@ -11,14 +11,14 @@ from ulsa.utils import update_scan_for_polar_grid
 if __name__ == "__main__":
     zea.init_device()
 
+# Pipeline with Lee filter to reduce speckle noise
+pipeline = Pipeline(beamforming(rx_apo=True), with_batch_dim=False)
+pipeline.append(zea.ops.keras_ops.ExpandDims(axis=-1))
+pipeline.append(zea.ops.LeeFilter(sigma=5))
+pipeline.append(zea.ops.keras_ops.Squeeze(axis=-1))
+
 
 def get_first_frame(file: zea.File, scan: zea.Scan, top_cropping=50, **params):
-    # Pipeline with Lee filter to reduce speckle noise
-    pipeline = Pipeline(beamforming(rx_apo=True), with_batch_dim=False)
-    pipeline.append(zea.ops.keras_ops.ExpandDims(axis=-1))
-    pipeline.append(zea.ops.LeeFilter(sigma=5))
-    pipeline.append(zea.ops.keras_ops.Squeeze(axis=-1))
-
     data_array, _ = pipeline.run(file, scan, **params)
 
     data_array = zea.func.translate(data_array, (-60, 0), (0, 1))
@@ -52,12 +52,7 @@ if __name__ == "__main__":
             scan = file.scan()
 
             scan.set_transmits("focused")
-            update_scan_for_polar_grid(
-                scan,
-                harmonic_imaging=True,
-                pixels_per_wavelength=1,
-                ray_multiplier=3,
-            )
+            update_scan_for_polar_grid(scan, pixels_per_wavelength=1, ray_multiplier=3)
 
             width = 2e6  # Hz
             f1 = scan.demodulation_frequency - width / 2

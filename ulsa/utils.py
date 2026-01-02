@@ -41,7 +41,6 @@ def update_scan_for_polar_grid(
     f_number=0.3,
     ray_multiplier: int = 6,
     pixels_per_wavelength=4,
-    harmonic_imaging: bool = False,
     apply_lens_correction: bool = True,
 ):
     """Update the scan object for line scanning."""
@@ -62,12 +61,6 @@ def update_scan_for_polar_grid(
     scan.zlims = (round_cm_down(scan.zlims[0]), round_cm_down(scan.zlims[1]))
     if hasattr(scan, "n_ch"):
         delattr(scan, "n_ch")
-    if harmonic_imaging:
-        center_frequency = scan.demodulation_frequency / 2
-        print(
-            f"Harmonic imaging: Setting transmit frequency to {center_frequency * 1e-6:.2f} MHz"
-        )
-        scan.center_frequency = center_frequency
 
     # For Philips S5-1 probes!
     if apply_lens_correction:

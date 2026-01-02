@@ -52,7 +52,7 @@ def parse_args():
         type=str,
         nargs="+",
         default=[
-            "/mnt/z/usbmd/Wessel/Verasonics/2026_USBMD_A4CH_S51/",
+            "/mnt/z/usbmd/Wessel/Verasonics/2026_USBMD_A4CH_S51_V2/",
             # "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/",
             # "/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea",
         ],
@@ -225,7 +225,7 @@ def run_single_example():
 def run_harmonic_example():
     acq = "20251222_s3_a4ch_line_dw_0000"
     path = eval_in_house_data(
-        Path(f"/mnt/z/usbmd/Wessel/Verasonics/2026_USBMD_A4CH_S51/{acq}.hdf5"),
+        Path(f"/mnt/z/usbmd/Wessel/Verasonics/2026_USBMD_A4CH_S51_V2/{acq}.hdf5"),
         Path("/mnt/z/usbmd/Wessel/ulsa_paper_plots_v2"),
         n_frames=None,
         override_config=dict(io_config=dict(frame_cutoff=None)),
