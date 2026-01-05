@@ -77,7 +77,7 @@ def cardiac_scan(
         raw_data_sequence, keep_keys=["maxval", "dynamic_range"], **params
     )
 
-    scan.dynamic_range = output["dynamic_range"]
+    scan.dynamic_range = ops.convert_to_numpy(output["dynamic_range"]).tolist()
     return images, scan
 
 
