@@ -19,13 +19,18 @@ pipeline.append(zea.ops.keras_ops.Squeeze(axis=-1))
 
 
 def get_first_frame(file: zea.File, scan: zea.Scan, top_cropping=50, **params):
+    # TODO: top_cropping should be relative to image size
+
     data_array, _ = pipeline.run(file, scan, **params)
 
     data_array = zea.func.translate(data_array, (-60, 0), (0, 1))
     data_array = np.clip(data_array, 0, 1)
 
+    # Add last frame at the beginning to capture changes from last to first frame
+    data_array = np.concatenate([data_array[-1:], data_array], axis=0)
+
     diff = np.abs(np.diff(data_array, axis=0))[:, top_cropping:].mean(axis=(1, 2))
-    first_frame_idx = diff.argmax() + 1
+    first_frame_idx = diff.argmax()
 
     n_frames = file.n_frames
     indices = np.arange(first_frame_idx, first_frame_idx + n_frames) % n_frames
