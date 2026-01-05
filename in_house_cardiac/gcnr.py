@@ -16,40 +16,13 @@ import zea
 
 sys.path.append("/ulsa")
 from plotting.plot_utils import ViolinPlotter, write_roman
+from ulsa.metrics import gcnr_per_frame
 
 METRIC_LABEL = "Relative gCNR [-]"
 
 
 def filter_dict_of_arrays(d: dict, condition):
     return {k: condition(v) for k, v in d.items()}
-
-
-def gcnr_per_frame(images, mask1, mask2):
-    """
-    Calculate gCNR for each frame in the images array.
-
-    Parameters:
-    - images: numpy array of shape (frames, h, w)
-    - mask1: boolean mask for the first region of shape (frames, h, w)
-    - mask2: boolean mask for the second region of shape (frames, h, w)
-
-    Returns:
-    - List of gCNR values for each frame
-    """
-
-    def single_gcnr(img, m1, m2):
-        return zea.metrics.gcnr(img[m1], img[m2])
-
-    vectorized_gcnr = np.vectorize(single_gcnr, signature="(h,w),(h,w),(h,w)->()")
-    return vectorized_gcnr(images, mask1, mask2)
-
-
-def gcnr_valve(images, blacks, valve, selected_frames):
-    images = images[selected_frames]
-    blacks = blacks[selected_frames]
-
-    gcnr = gcnr_per_frame(images, blacks, valve)
-    return gcnr
 
 
 def swap_layer(d: dict):
