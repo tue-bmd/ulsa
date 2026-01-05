@@ -30,12 +30,16 @@ def cardiac_scan(
     type="focused",  # "focused" or "diverging"
     bandwidth=2e6,  # TODO: wide enough for fundemental?
     polar_limits=None,
+    low_pct=18,
+    high_pct=95,
 ):
     pipeline = make_pipeline(
         "data/raw_data",
         output_shape=resize_to,
         action_selection_shape=resize_to,
         rx_apo=(type == "focused"),
+        low_pct=low_pct,
+        high_pct=high_pct,
     )
     pipeline.append(zea.ops.keras_ops.Squeeze(axis=-1))
 

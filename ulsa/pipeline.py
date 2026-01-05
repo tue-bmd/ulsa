@@ -96,7 +96,7 @@ class Pipeline(ZeaPipeline):
         zea.io_lib.save_video(data_array, save_path, fps=frames_per_second)
 
 
-def beamforming(rx_apo=True) -> list:
+def beamforming(rx_apo=True, low_pct=18, high_pct=95) -> list:
     """Create a pipeline for beamforming operations."""
     return [
         zea.ops.FirFilter(axis=-3, filter_key="bandpass_rf"),
@@ -118,7 +118,7 @@ def beamforming(rx_apo=True) -> list:
         zea.ops.ReshapeGrid(),
         zea.ops.EnvelopeDetect(),
         zea.ops.Normalize(),
-        ulsa.ops.GetAutoDynamicRange(),
+        ulsa.ops.GetAutoDynamicRange(low_pct=low_pct, high_pct=high_pct),
         zea.ops.LogCompress(clip=False),
     ]
 
@@ -144,12 +144,14 @@ def make_pipeline(
     jit_options="ops",
     with_batch_dim=False,
     rx_apo=True,
+    low_pct=18,
+    high_pct=95,
     **kwargs,
 ) -> Pipeline:
     if data_type == "data/raw_data":
         pipeline = Pipeline(
             [
-                *beamforming(rx_apo=rx_apo),
+                *beamforming(rx_apo=rx_apo, low_pct=low_pct, high_pct=high_pct),
                 zea.ops.keras_ops.ExpandDims(axis=-1),
                 ulsa.ops.TranslateDynamicRange(output_range),
                 *resize(action_selection_shape, output_shape),

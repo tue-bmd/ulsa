@@ -397,6 +397,7 @@ def active_sampling_single_file(
     image_range: tuple = "unset",  # Set to None for auto-dynamic range
     seed: int = 42,
     override_config=None,
+    **kwargs,
 ):
     data_paths = set_data_paths("users.yaml", local=False)
     data_root = data_paths["data_root"]
@@ -457,6 +458,7 @@ def active_sampling_single_file(
         output_range=agent.input_range,
         output_shape=agent.input_shape,
         action_selection_shape=agent_config.action_selection.shape,
+        **kwargs,
     )
 
     post_pipeline = Pipeline(

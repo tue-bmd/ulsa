@@ -29,6 +29,7 @@ import numpy as np
 
 from active_sampling_temporal import active_sampling_single_file
 from in_house_cardiac.cardiac_scan import cardiac_scan
+from in_house_cardiac.to_itk import npz_to_itk
 from plotting.plot_in_house_cardiac import get_arrow, plot_from_npz
 
 
@@ -72,6 +73,20 @@ def parse_args():
         # default=19,
         help="Frame index to plot.",
     )
+    parser.add_argument(
+        "--low_pct",
+        type=float,
+        # default=18,
+        default=44,
+        help="Low percentile for dynamic range calculation.",
+    )
+    parser.add_argument(
+        "--high_pct",
+        type=float,
+        # default=95,
+        default=99.99,
+        help="High percentile for dynamic range calculation.",
+    )
     return parser.parse_args()
 
 
@@ -86,6 +101,8 @@ def eval_in_house_data(
     seed=42,
     selection_strategies=None,
     frame_idx=24,
+    low_pct=18,
+    high_pct=95,
 ):
     zea.log.info(f"Processing {file.stem}...")
 
@@ -108,6 +125,8 @@ def eval_in_house_data(
         grid_width=grid_width,
         type="diverging",
         resize_to=(112, 112),
+        low_pct=low_pct,
+        high_pct=high_pct,
     )
     np.savez(
         save_dir / f"diverging.npz",
@@ -124,11 +143,20 @@ def eval_in_house_data(
         grid_width=grid_width,
         type="focused",
         resize_to=(112, 112),
+        low_pct=low_pct,
+        high_pct=high_pct,
     )
     np.savez(
         save_dir / f"focused.npz",
         reconstructions=focused,
         theta_range=focused_scan.theta_range,
+        dynamic_range=focused_scan.dynamic_range,
+    )
+
+    # For annotation purposes, also save as itk
+    npz_to_itk(
+        save_dir / f"focused.npz",
+        save_dir / f"focused.nii.gz",
         dynamic_range=focused_scan.dynamic_range,
     )
 
@@ -154,6 +182,8 @@ def eval_in_house_data(
             override_config=_override_config,
             image_range=image_range,
             seed=seed,
+            low_pct=low_pct,
+            high_pct=high_pct,
         )
 
         # Unpack results
@@ -195,7 +225,13 @@ def main():
 
     for file in sorted(files):
         eval_in_house_data(
-            file, save_dir, n_frames, override_config, frame_idx=args.frame_idx
+            file,
+            save_dir,
+            n_frames,
+            override_config,
+            frame_idx=args.frame_idx,
+            low_pct=args.low_pct,
+            high_pct=args.high_pct,
         )
 
 
