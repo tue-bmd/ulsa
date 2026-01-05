@@ -18,7 +18,7 @@ def auto_dynamic_range(data, low_pct=44, high_pct=99.99):
     return (low_val, high_val)
 
 
-def npz_to_itk(npz_path, itk_path, dynamic_range=None):
+def npz_to_itk(npz_path, itk_path, dynamic_range=None, resolution=0.3):
     data = np.load(npz_path, allow_pickle=True)
     reconstuctions = data["reconstructions"]
     theta_range = data["theta_range"]
@@ -31,7 +31,7 @@ def npz_to_itk(npz_path, itk_path, dynamic_range=None):
         reconstuctions,
         (0, reconstuctions.shape[1]),
         theta_range,
-        resolution=0.1,
+        resolution=resolution,
         fill_value=dynamic_range[0],
         order=0,
     )
