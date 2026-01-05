@@ -111,7 +111,7 @@ def plot_from_npz(
         io_config,
         scan_convert_order=0,
         image_range=reconstruction_range,
-        reconstruction_sharpness_std=0.04,
+        reconstruction_sharpness_std=0.02,
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
     )

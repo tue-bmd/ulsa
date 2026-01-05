@@ -117,25 +117,7 @@ def eval_in_house_data(
         n_focused_tx = np.where(f.scan().focus_distances > 0)[0].size
         grid_width = n_focused_tx * 6
 
-    # Run diverging waves (full dynamic range)
-    zea.log.info("Running diverging waves...")
-    diverging, diverging_scan = cardiac_scan(
-        file,
-        n_frames=n_frames,
-        grid_width=grid_width,
-        type="diverging",
-        resize_to=(112, 112),
-        low_pct=low_pct,
-        high_pct=high_pct,
-    )
-    np.savez(
-        save_dir / f"diverging.npz",
-        reconstructions=diverging,
-        theta_range=diverging_scan.theta_range,
-        dynamic_range=diverging_scan.dynamic_range,
-    )
-
-    # Run focused waves (full dynamic range)
+    # Run focused waves (stores full dynamic range)
     zea.log.info("Running focused waves...")
     focused, focused_scan = cardiac_scan(
         file,
@@ -151,6 +133,24 @@ def eval_in_house_data(
         reconstructions=focused,
         theta_range=focused_scan.theta_range,
         dynamic_range=focused_scan.dynamic_range,
+    )
+
+    # Run diverging waves (stores full dynamic range)
+    zea.log.info("Running diverging waves...")
+    diverging, diverging_scan = cardiac_scan(
+        file,
+        n_frames=n_frames,
+        grid_width=grid_width,
+        type="diverging",
+        resize_to=(112, 112),
+        low_pct=low_pct,
+        high_pct=high_pct,
+    )
+    np.savez(
+        save_dir / f"diverging.npz",
+        reconstructions=diverging,
+        theta_range=diverging_scan.theta_range,
+        dynamic_range=focused_scan.dynamic_range,  # NOTE: uses focused dynamic range!
     )
 
     # For annotation purposes, also save as itk

@@ -18,24 +18,34 @@ def auto_dynamic_range(data, low_pct=44, high_pct=99.99):
     return (low_val, high_val)
 
 
-def npz_to_itk(npz_path, itk_path, dynamic_range=None, resolution=0.3):
+def npz_to_itk(npz_path, itk_path, dynamic_range="file", resolution=0.3):
     data = np.load(npz_path, allow_pickle=True)
     reconstuctions = data["reconstructions"]
     theta_range = data["theta_range"]
-    if dynamic_range is None:
+
+    if dynamic_range == "file":
         dynamic_range = data["dynamic_range"]
     elif dynamic_range == "auto":
         dynamic_range = auto_dynamic_range(reconstuctions, low_pct=44, high_pct=99.99)
-    reconstuctions = np.clip(reconstuctions, dynamic_range[0], dynamic_range[1])
+
+    if dynamic_range is not None:
+        reconstuctions = np.clip(reconstuctions, dynamic_range[0], dynamic_range[1])
+        fill_value = dynamic_range[0]
+    else:
+        fill_value = reconstuctions.min()
+
     reconstuctions, _ = zea.display.scan_convert_2d(
         reconstuctions,
         (0, reconstuctions.shape[1]),
         theta_range,
         resolution=resolution,
-        fill_value=dynamic_range[0],
+        fill_value=fill_value,
         order=0,
     )
-    reconstuctions = zea.display.to_8bit(reconstuctions, dynamic_range, pillow=False)
+    if dynamic_range is not None:
+        reconstuctions = zea.display.to_8bit(
+            reconstuctions, dynamic_range, pillow=False
+        )
 
     sitk.WriteImage(
         sitk.GetImageFromArray(reconstuctions),
@@ -45,7 +55,7 @@ def npz_to_itk(npz_path, itk_path, dynamic_range=None, resolution=0.3):
 
 if __name__ == "__main__":
     npz_to_itk(
-        "/mnt/z/usbmd/Wessel/ulsa_paper_plots_v2/20251222_s3_a4ch_line_dw_0000/focused.npz",
-        "/mnt/z/usbmd/Wessel/ulsa_paper_plots_v2/20251222_s3_a4ch_line_dw_0000/focused.nii.gz",
-        dynamic_range="auto",
+        "/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v3/20251222_s2_a4ch_line_dw_0000/diverging.npz",
+        "/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v3/20251222_s2_a4ch_line_dw_0000/diverging.nii.gz",
+        dynamic_range=None,
     )
