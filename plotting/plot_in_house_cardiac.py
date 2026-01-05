@@ -51,6 +51,8 @@ def plot_from_npz(
     focused_results = np.load(run_dir / "focused.npz", allow_pickle=True)
     diverging_results = np.load(run_dir / "diverging.npz", allow_pickle=True)
     results = np.load(run_dir / f"{selection_strategy}.npz", allow_pickle=True)
+    n_actions = results["n_actions"].item()
+    n_possible_actions = results["n_possible_actions"].item()
 
     focused = focused_results["reconstructions"]
     diverging = diverging_results["reconstructions"]
@@ -135,7 +137,7 @@ def plot_from_npz(
             diverging,
             labels=[
                 "Focused (90)",
-                "Reconstruction (11/90)",
+                f"Reconstruction ({n_actions}/{n_possible_actions})",
                 "Diverging (11)",
             ],
             context=context,
@@ -206,18 +208,18 @@ def plot_from_npz(
         )
         # ax = fig.add_subplot(outer[2])
         # ax.axis("off")
-        # ax.set_title("Reconstruction (11/90)")
+        # ax.set_title(f"Reconstruction ({n_actions}/{n_possible_actions})")
 
         ax_big = fig.add_subplot(inner[:, 0])
         ax_big.imshow(reconstructions[frame_idx], **kwargs)
-        ax_big.set_title("Reconstruction (11/90)")
+        ax_big.set_title(f"Reconstruction ({n_actions}/{n_possible_actions})")
         ax_big.axis("off")
         if arrow is not None:
             ax_big.add_patch(copy.copy(arrow))
 
         ax_bottom = fig.add_subplot(inner[1, 1])
         ax_bottom.imshow(measurements[frame_idx], **kwargs)
-        # ax_top.set_title("Acquisitions (11/90)")
+        # ax_top.set_title(f"Acquisitions ({n_actions}/{n_possible_actions})")
         ax_bottom.axis("off")
 
         ax_top = fig.add_subplot(inner[0, 1])

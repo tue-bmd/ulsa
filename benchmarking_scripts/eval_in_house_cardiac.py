@@ -53,7 +53,7 @@ def parse_args():
         type=str,
         nargs="+",
         default=[
-            "/mnt/z/usbmd/Wessel/Verasonics/2026_USBMD_A4CH_S51_V2/",
+            "/mnt/datasets/2026_USBMD_A4CH_S51_V2/",
             # "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/",
             # "/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea",
         ],
@@ -154,11 +154,7 @@ def eval_in_house_data(
     )
 
     # For annotation purposes, also save as itk
-    npz_to_itk(
-        save_dir / f"focused.npz",
-        save_dir / f"focused.nii.gz",
-        dynamic_range=focused_scan.dynamic_range,
-    )
+    npz_to_itk(save_dir / f"focused.npz", save_dir / f"focused.nii.gz")
 
     override_config = zea.Config(override_config)
     if "action_selection" not in override_config:
@@ -176,7 +172,7 @@ def eval_in_house_data(
             }
 
         # Run active sampling on focused waves
-        results, _, _, _, _, agent, _, _ = active_sampling_single_file(
+        results, _, _, _, _, agent, agent_config, _ = active_sampling_single_file(
             "configs/cardiac_112_3_frames.yaml",
             target_sequence=str(file),
             override_config=_override_config,
@@ -199,6 +195,8 @@ def eval_in_house_data(
             belief_distributions=squeezed_results.belief_distributions,
             dynamic_range=agent.input_range,
             theta_range=diverging_scan.theta_range,
+            n_possible_actions=agent_config.action_selection.n_possible_actions,
+            n_actions=agent_config.action_selection.n_actions,
         )
 
     print(f"Saved results to {save_dir}")
