@@ -3,7 +3,8 @@ for cardiac imaging data."""
 
 import os
 
-os.environ["KERAS_BACKEND"] = "numpy"
+if __name__ == "__main__":
+    os.environ["KERAS_BACKEND"] = "numpy"
 import sys
 from collections import OrderedDict
 from itertools import product
@@ -23,6 +24,14 @@ METRIC_LABEL = "Relative gCNR [-]"
 
 def filter_dict_of_arrays(d: dict, condition):
     return {k: condition(v) for k, v in d.items()}
+
+
+def gcnr_valve(images, blacks, valve, selected_frames):
+    images = images[selected_frames]
+    blacks = blacks[selected_frames]
+
+    gcnr = gcnr_per_frame(images, blacks, valve)
+    return gcnr
 
 
 def swap_layer(d: dict):
