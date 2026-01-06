@@ -21,7 +21,7 @@ from zea.visualize import plot_shape_from_mask
 sys.path.append("/ulsa")
 from in_house_cardiac.gcnr import (
     METRIC_LABEL,
-    filter_dict_of_arrays,
+    filter_empty,
     plot_gcnr_over_time,
     sort_by_names,
     swap_layer,
@@ -84,11 +84,15 @@ def main():
     SAVE_DIR = Path("output/gcnr")
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
     subjects = [
+        "20251222_s1_a4ch_line_dw_0000",
+        "20251222_s2_a4ch_line_dw_0000",
         "20251222_s3_a4ch_line_dw_0000",
     ]
 
     group_names = {
         "greedy_entropy": "Active Perception",
+        # "uniform_random": "Random",
+        # "equispaced": "Equispaced",
         "focused": "Focused",
         "diverging": "Diverging",
     }
@@ -171,7 +175,7 @@ def main():
         gcnr_all[subject_name] = gcnr_relative
         gcnr_valve_all[subject_name] = gcnr_valve_relative
 
-    # gcnr_valve_all = filter_empty(gcnr_valve_all)
+    gcnr_valve_all = filter_empty(gcnr_valve_all)
 
     # Violin plot & over time plot for all
     violin = ViolinPlotter(group_names, xlabel="Subjects")
