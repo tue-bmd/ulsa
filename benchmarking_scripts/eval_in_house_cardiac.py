@@ -48,6 +48,12 @@ def parse_args():
         help="Can be a list of folders and/or files containing in-house cardiac data HDF5 files.",
     )
     parser.add_argument(
+        "--agent_config_path",
+        type=str,
+        default="./configs/cardiac_112_frames_harmonic.yaml",
+        help="Path to agent configuration file.",
+    )
+    parser.add_argument(
         "--low_pct",
         type=float,
         default=44,
@@ -66,6 +72,7 @@ def eval_in_house_data(
     file,
     save_dir,
     n_frames,
+    agent_config_path,
     override_config,
     image_range=None,  # auto-dynamic range
     seed=42,
@@ -142,7 +149,7 @@ def eval_in_house_data(
 
         # Run active sampling on focused waves
         results, _, _, _, _, agent, agent_config, _ = active_sampling_single_file(
-            "configs/cardiac_112_3_frames.yaml",
+            agent_config_path,
             target_sequence=str(file),
             override_config=_override_config,
             image_range=image_range,
@@ -190,15 +197,14 @@ def main():
     save_dir.mkdir(parents=True, exist_ok=True)
 
     files = list(find_hdf5_files(args.files))
-    n_frames = args.n_frames  # all frames if None
 
-    override_config = dict(io_config=dict(frame_cutoff=n_frames))
-
+    override_config = dict(io_config=dict(frame_cutoff=args.n_frames))
     for file in sorted(files):
         eval_in_house_data(
             file,
             save_dir,
-            n_frames,
+            args.n_frames,
+            args.agent_config_path,
             override_config,
             low_pct=args.low_pct,
             high_pct=args.high_pct,

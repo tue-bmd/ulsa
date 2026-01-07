@@ -96,7 +96,7 @@ class Pipeline(ZeaPipeline):
         zea.io_lib.save_video(data_array, save_path, fps=frames_per_second)
 
 
-def beamforming(rx_apo=True, low_pct=18, high_pct=95) -> list:
+def beamforming(rx_apo=True, pfield=False, low_pct=18, high_pct=95) -> list:
     """Create a pipeline for beamforming operations."""
     return [
         zea.ops.FirFilter(axis=-3, filter_key="bandpass_rf"),
@@ -107,7 +107,7 @@ def beamforming(rx_apo=True, low_pct=18, high_pct=95) -> list:
         zea.ops.Map(
             [
                 zea.ops.TOFCorrection(),
-                zea.ops.PfieldWeighting() if not rx_apo else zea.ops.Identity(),
+                zea.ops.PfieldWeighting() if pfield else zea.ops.Identity(),
                 ulsa.ops.Multiply("rx_apo") if rx_apo else zea.ops.Identity(),
                 zea.ops.DelayAndSum(),
             ],

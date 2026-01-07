@@ -1,7 +1,7 @@
 action_selection:
   n_possible_actions: n_tx
   n_actions: 11
-  shape: [112, "2*n_tx"] # h, w
+  shape: [112, "n_tx"] # h, w
   selection_strategy: "greedy_entropy" # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
 
 downstream_task: null
