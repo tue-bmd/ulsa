@@ -1,4 +1,4 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple, Union
@@ -55,6 +55,7 @@ class ActionSelectionConfig(Cfg):
     n_actions: int
     shape: List[Union[int, str]]
     selection_strategy: str
+    kwargs: dict = field(default_factory=dict)
 
     def set_n_tx(self, n_tx: int):
         if self.n_possible_actions == "n_tx":
@@ -73,6 +74,7 @@ class AgentConfig(Cfg):
     diffusion_inference: Config
     downstream_task: Optional[str] = None
     data: Optional[Config] = None
+    is_3d: Optional[bool] = False
 
     def fix_paths(self, data_paths=None):
         if data_paths is None:
@@ -96,6 +98,7 @@ class AgentConfig(Cfg):
             diffusion_inference=cfg.diffusion_inference,
             downstream_task=cfg.get("downstream_task", None),
             data=cfg.get("data", None),
+            is_3d=cfg.get("is_3d", False),
         )
 
 
@@ -517,9 +520,7 @@ def setup_agent(
     recover_p = partial(
         recover,
         reconstruction_method=agent_config.diffusion_inference.reconstruction_method,
-        posterior_sample=partial(
-            posterior_sample, batched=agent_config.get("is_3d", False)
-        ),
+        posterior_sample=partial(posterior_sample, batched=agent_config.is_3d),
         action_selection=action_selection,
     )
     if jit_mode == "recover":

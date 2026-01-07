@@ -1,6 +1,8 @@
 import argparse
 import json
 import os
+
+os.environ["MPLBACKEND"] = "Agg"
 from functools import partial
 from pathlib import Path
 
@@ -27,8 +29,6 @@ def parse_args():
     parser.add_argument(
         "--target_sequence",
         type=str,
-        # default="/mnt/z/Ultrasound-BMd/data/oisin/carotid_img/512_128/test/10_cross_2cm_L_0000.img.hdf5",
-        default="{data_root}/USBMD_datasets/echonet/val/0X10A5FC19152B50A5.hdf5",
         help="A hdf5 file containing an ordered sequence of frames to sample from.",
     )
     parser.add_argument(
@@ -333,11 +333,12 @@ if __name__ == "__main__":
     theta_range = (ops.min(grid["theta"]), ops.max(grid["theta"]))
     phi_range = (ops.min(grid["phi"]), ops.max(grid["phi"]))
 
-    expand_dims = zea.ops.Lambda(ops.expand_dims, {"axis": -1})
+    expand_dims = zea.ops.Lambda(ops.expand_dims, axis=-1)
     # Not using zea.ops.Normalize because that also clips the data!
     normalize = zea.ops.Lambda(
         translate,
-        {"range_from": args.image_range, "range_to": agent.input_range},
+        range_from=args.image_range,
+        range_to=agent.input_range,
     )
     pipeline = Pipeline(
         [normalize, expand_dims], jit_options="pipeline", with_batch_dim=False
@@ -353,7 +354,6 @@ if __name__ == "__main__":
     )
 
     n_az = ops.shape(results.target_imgs)[1]
-    # TODO: need to merge usbmd ulsa branch into zea
     make_plots(
         agent,
         output={
