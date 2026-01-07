@@ -243,6 +243,7 @@ def _load_from_run_dir(
         entropy,
         n_actions,
         n_possible_actions,
+        frame_idx,
     )
 
 
@@ -267,6 +268,7 @@ def plot_from_npz(
         entropy,
         n_actions,
         n_possible_actions,
+        frame_idx,
     ) = _load_from_run_dir(
         run_dir,
         frame_idx=frame_idx,
