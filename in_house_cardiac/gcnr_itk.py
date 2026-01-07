@@ -17,6 +17,7 @@ import SimpleITK as sitk
 from keras import ops
 from matplotlib.animation import FuncAnimation
 
+from zea.internal.cache import cache_output
 from zea.tools.selection_tool import remove_masks_from_axs
 from zea.visualize import plot_shape_from_mask
 
@@ -84,6 +85,7 @@ def visualize_masks(images, valve, myocardium, ventricle, filepath, fps=10):
     ani.save(filepath, writer="pillow")
 
 
+@cache_output(verbose=True)
 def load_results():
     DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/")
 

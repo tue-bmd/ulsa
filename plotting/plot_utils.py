@@ -306,8 +306,12 @@ class ViolinPlotter:
                 )
 
         # Customize plot
-        ax.set_xlabel(self.xlabel)
-        ax.set_ylabel(self.ylabel if metric_name is None else metric_name)
+        if self.xlabel is not None:
+            ax.set_xlabel(self.xlabel)
+        if self.ylabel is not None:
+            ax.set_ylabel(self.ylabel if metric_name is None else metric_name)
+        elif metric_name is not None:
+            ax.set_ylabel(metric_name)
         ax.grid()
         ax.set_xticks(plot_positions, [str(x) for x in all_x_values])
         if ylim:
