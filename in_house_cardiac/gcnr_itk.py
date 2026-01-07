@@ -29,6 +29,9 @@ from in_house_cardiac.gcnr import (
 from plotting.plot_utils import ViolinPlotter, write_roman
 from ulsa.metrics import gcnr_per_frame
 
+SAVE_DIR = Path("output/gcnr")
+SAVE_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def update_imshow_with_masks(
     frame_no: int,
@@ -79,10 +82,9 @@ def visualize_masks(images, valve, myocardium, ventricle, filepath, fps=10):
     ani.save(filepath, writer="pillow")
 
 
-def main():
+def load_results():
     DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/")
-    SAVE_DIR = Path("output/gcnr")
-    SAVE_DIR.mkdir(parents=True, exist_ok=True)
+
     subjects = [
         "20251222_s1_a4ch_line_dw_0000",
         "20251222_s2_a4ch_line_dw_0000",
@@ -102,9 +104,6 @@ def main():
     gcnr_valve_all = {}
     gcnr_all = {}
     for i, subject in enumerate(subjects):
-        # Load annotations and results
-        subject_name = write_roman(i + 1)
-
         # Calculate gCNR for each reconstruction type
         gcnr_valve_results = {}
         gcnr_results = {}
@@ -172,31 +171,40 @@ def main():
                 continue
             gcnr_valve_relative[k] = v - gcnr_valve_results[relative_to]
 
-        gcnr_all[subject_name] = gcnr_relative
-        gcnr_valve_all[subject_name] = gcnr_valve_relative
+        gcnr_all[subject] = gcnr_relative
+        gcnr_valve_all[subject] = gcnr_valve_relative
 
     gcnr_valve_all = filter_empty(gcnr_valve_all)
+
+    return subjects, group_names, gcnr_all, gcnr_valve_all
+
+
+def main():
+    subjects, group_names, gcnr_all, gcnr_valve_all = load_results()
+
+    # Convert subject keys to Roman numerals
+    subjects_ids = {s: write_roman(i + 1) for i, s in enumerate(subjects)}
 
     # Violin plot & over time plot for all
     violin = ViolinPlotter(group_names, xlabel="Subjects")
     for ext, (_gcnr, key) in product(
         [".png", ".pdf"], zip([gcnr_all, gcnr_valve_all], ["gcnr", "gcnr_valve"])
     ):
+        _gncr_roman = {subjects_ids[k]: v for k, v in _gcnr.items()}
         violin.plot(
-            sort_by_names(swap_layer(_gcnr), group_names.keys()),
+            sort_by_names(swap_layer(_gncr_roman), group_names.keys()),
             SAVE_DIR / f"{key}_violin{ext}",
-            x_label_values=_gcnr.keys(),
+            x_label_values=subjects_ids.values(),
             metric_name=METRIC_LABEL,
             context="styles/ieee-tmi.mplstyle",
         )
         with plt.style.context("styles/ieee-tmi.mplstyle"):
-            for i, subject in enumerate(subjects):
-                subject_name = write_roman(i + 1)
-                if subject_name not in _gcnr:
+            for subject in subjects:
+                if subject not in _gcnr:
                     continue
                 plot_gcnr_over_time(
                     None,
-                    _gcnr[subject_name],
+                    _gcnr[subject],
                     group_names,
                     SAVE_DIR / f"{subject}_{key}_over_time{ext}",
                 )

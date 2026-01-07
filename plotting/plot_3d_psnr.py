@@ -130,7 +130,7 @@ if __name__ == "__main__":
             frameon=False,
         )
         for ext in [".pdf", ".png"]:
-            save_path = f"./lpips_psnr_combined_violin_plot{ext}"
+            save_path = f"./3d_lpips_psnr_combined_violin_plot{ext}"
             plt.savefig(save_path)
             log.info(
                 f"Saved combined LPIPS and PSNR violin plot to {log.yellow(save_path)}"
