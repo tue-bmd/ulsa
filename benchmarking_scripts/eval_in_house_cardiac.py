@@ -1,17 +1,6 @@
 """
 Evaluate in-house (cardiac) data using different sampling strategies.
 Also saves focused and diverging wave reconstructions.
-
-To run on phantom:
-    ./launch/start_container.sh \
-        python benchmarking_scripts/eval_in_house_cardiac.py \
-        --save_dir "/mnt/z/usbmd/Wessel/ulsa/eval_phantom2/" \
-        --folder "/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea" \
-        --pattern "*.hdf5" --frame_idx 19
-
-To run on in-house cardiac data:
-    ./launch/start_container.sh \
-        python benchmarking_scripts/eval_in_house_cardiac.py
 """
 
 import sys
@@ -20,7 +9,8 @@ import zea
 
 sys.path.append("/ulsa")  # for relative imports
 
-zea.init_device(allow_preallocate=True)
+if __name__ == "__main__":
+    zea.init_device(allow_preallocate=True)
 
 import argparse
 from pathlib import Path
@@ -30,7 +20,6 @@ import numpy as np
 from active_sampling_temporal import active_sampling_single_file
 from in_house_cardiac.cardiac_scan import cardiac_scan
 from in_house_cardiac.to_itk import npz_to_itk
-from plotting.plot_in_house_cardiac import get_arrow, plot_from_npz
 
 
 def parse_args():
@@ -39,7 +28,6 @@ def parse_args():
         "--save_dir",
         type=str,
         default="/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/",
-        # default="/mnt/z/usbmd/Wessel/ulsa/eval_phantom",
         help="Directory to save results.",
     )
     parser.add_argument(
@@ -54,8 +42,6 @@ def parse_args():
         nargs="+",
         default=[
             "/mnt/datasets/2026_USBMD_A4CH_S51_V2/",
-            # "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/",
-            # "/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea",
         ],
         help="Folder(s) containing the HDF5 files. Can specify multiple folders.",
     )
@@ -63,27 +49,17 @@ def parse_args():
         "--pattern",
         type=str,
         default="*_a4ch_line_dw_*.hdf5",
-        # default="*.hdf5",
         help="Pattern to match HDF5 files in the folder.",
-    )
-    parser.add_argument(
-        "--frame_idx",
-        type=int,
-        default=24,
-        # default=19,
-        help="Frame index to plot.",
     )
     parser.add_argument(
         "--low_pct",
         type=float,
-        # default=18,
         default=44,
         help="Low percentile for dynamic range calculation.",
     )
     parser.add_argument(
         "--high_pct",
         type=float,
-        # default=95,
         default=99.99,
         help="High percentile for dynamic range calculation.",
     )
@@ -95,12 +71,9 @@ def eval_in_house_data(
     save_dir,
     n_frames,
     override_config,
-    visualize=True,
-    fps=8,
     image_range=None,  # auto-dynamic range
     seed=42,
     selection_strategies=None,
-    frame_idx=24,
     low_pct=18,
     high_pct=95,
 ):
@@ -201,10 +174,6 @@ def eval_in_house_data(
 
     print(f"Saved results to {save_dir}")
 
-    if visualize:
-        print("Creating plots...")
-        plot_from_npz(save_dir, save_dir, gif_fps=fps, frame_idx=frame_idx)
-
     return save_dir
 
 
@@ -227,58 +196,10 @@ def main():
             save_dir,
             n_frames,
             override_config,
-            frame_idx=args.frame_idx,
             low_pct=args.low_pct,
             high_pct=args.high_pct,
         )
 
 
-def run_single_example():
-    path = eval_in_house_data(
-        Path(
-            "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"
-        ),
-        Path("/mnt/z/usbmd/Wessel/ulsa/ulsa_paper_plots"),
-        n_frames=None,
-        override_config=dict(io_config=dict(frame_cutoff=None)),
-        visualize=False,
-        image_range=[-65, -20],
-        seed=0,
-    )
-    plot_from_npz(
-        path,
-        "output/in_house_cardiac",
-        gif=False,
-        context="styles/ieee-tmi.mplstyle",
-        diverging_dynamic_range=[-70, -30],
-        focused_dynamic_range=[-68, -20],
-        arrow=get_arrow(),
-    )
-
-
-def run_harmonic_example():
-    acq = "20251222_s3_a4ch_line_dw_0000"
-    path = eval_in_house_data(
-        Path(f"/mnt/z/usbmd/Wessel/Verasonics/2026_USBMD_A4CH_S51_V2/{acq}.hdf5"),
-        Path("/mnt/z/usbmd/Wessel/ulsa/ulsa_paper_plots_v2"),
-        n_frames=None,
-        override_config=dict(io_config=dict(frame_cutoff=None)),
-        visualize=False,
-        image_range=[-60, -10],
-        seed=0,
-    )
-    plot_from_npz(
-        path,
-        "output/in_house_cardiac",
-        gif=False,
-        context="styles/ieee-tmi.mplstyle",
-        diverging_dynamic_range=[-60, -10],
-        focused_dynamic_range=[-60, -10],
-    )
-
-
 if __name__ == "__main__":
-    main()  # run all a4ch
-
-    # run_single_example()
-    # run_harmonic_example()
+    main()
