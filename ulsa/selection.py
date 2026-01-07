@@ -253,7 +253,9 @@ class GreedyEntropyUnivariateGaussian(GreedyEntropy):
         Returns:
             Tuple[Tensor, Tensor]:
                 - Newly selected lines as k-hot vectors, shaped (batch_size, n_possible_actions)
+                    or of shape (1, n_possible_actions) if average_across_batch=True
                 - Masks of shape (batch_size, img_height, img_width)
+                    or of shape (1, img_height, img_width) if average_across_batch=True
         """
         # NOTE: we don't really need this constant offset since we take the argmax, and
         # |A^l| doesn't change across l, but we keep it here for completeness.
