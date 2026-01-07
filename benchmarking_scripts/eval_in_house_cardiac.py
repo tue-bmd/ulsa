@@ -5,7 +5,7 @@ Also saves focused and diverging wave reconstructions.
 To run on phantom:
     ./launch/start_container.sh \
         python benchmarking_scripts/eval_in_house_cardiac.py \
-        --save_dir "/mnt/z/usbmd/Wessel/eval_phantom2/" \
+        --save_dir "/mnt/z/usbmd/Wessel/ulsa/eval_phantom2/" \
         --folder "/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea" \
         --pattern "*.hdf5" --frame_idx 19
 
@@ -38,8 +38,8 @@ def parse_args():
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v3/",
-        # default="/mnt/z/usbmd/Wessel/eval_phantom",
+        default="/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/",
+        # default="/mnt/z/usbmd/Wessel/ulsa/eval_phantom",
         help="Directory to save results.",
     )
     parser.add_argument(
@@ -238,7 +238,7 @@ def run_single_example():
         Path(
             "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5"
         ),
-        Path("/mnt/z/usbmd/Wessel/ulsa_paper_plots"),
+        Path("/mnt/z/usbmd/Wessel/ulsa/ulsa_paper_plots"),
         n_frames=None,
         override_config=dict(io_config=dict(frame_cutoff=None)),
         visualize=False,
@@ -260,7 +260,7 @@ def run_harmonic_example():
     acq = "20251222_s3_a4ch_line_dw_0000"
     path = eval_in_house_data(
         Path(f"/mnt/z/usbmd/Wessel/Verasonics/2026_USBMD_A4CH_S51_V2/{acq}.hdf5"),
-        Path("/mnt/z/usbmd/Wessel/ulsa_paper_plots_v2"),
+        Path("/mnt/z/usbmd/Wessel/ulsa/ulsa_paper_plots_v2"),
         n_frames=None,
         override_config=dict(io_config=dict(frame_cutoff=None)),
         visualize=False,

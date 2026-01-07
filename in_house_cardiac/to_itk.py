@@ -55,7 +55,7 @@ def npz_to_itk(npz_path, itk_path, dynamic_range="file", resolution=0.3):
 
 if __name__ == "__main__":
     npz_to_itk(
-        "/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v3/20251222_s2_a4ch_line_dw_0000/diverging.npz",
-        "/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v3/20251222_s2_a4ch_line_dw_0000/diverging.nii.gz",
+        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/20251222_s2_a4ch_line_dw_0000/diverging.npz",
+        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/20251222_s2_a4ch_line_dw_0000/diverging.nii.gz",
         dynamic_range=None,
     )

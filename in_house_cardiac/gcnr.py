@@ -132,8 +132,8 @@ def plot_gcnr_over_time(
 
 
 def main():
-    ANNOTATIONS_ROOT = Path("/mnt/z/usbmd/Wessel/cardiac_annotations_2/")
-    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/eval_in_house_cardiac/")
+    ANNOTATIONS_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/cardiac_annotations_2/")
+    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac/")
     SAVE_DIR = Path("output/gcnr")
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
     subjects = [

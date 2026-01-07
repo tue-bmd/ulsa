@@ -80,7 +80,7 @@ def visualize_masks(images, valve, myocardium, ventricle, filepath, fps=10):
 
 
 def main():
-    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v3/")
+    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/")
     SAVE_DIR = Path("output/gcnr")
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
     subjects = [

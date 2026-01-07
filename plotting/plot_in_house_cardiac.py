@@ -275,11 +275,9 @@ def get_arrow(
 
 if __name__ == "__main__":
     # PLOT_NPZ_PATH = (
-    #     "/mnt/z/usbmd/Wessel/ulsa_paper_plots/20240701_P1_A4CH_0001_results.npz"
+    #     "/mnt/z/usbmd/Wessel/ulsa/ulsa_paper_plots/20240701_P1_A4CH_0001_results.npz"
     # )
-    PLOT_NPZ_PATH = (
-        "/mnt/z/usbmd/Wessel/eval_in_house_cardiac_v3/20251222_s1_a4ch_line_dw_0000"
-    )
+    PLOT_NPZ_PATH = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/20251222_s1_a4ch_line_dw_0000"
 
     plot_from_npz(
         PLOT_NPZ_PATH,
