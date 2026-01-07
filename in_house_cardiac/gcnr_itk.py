@@ -1,9 +1,11 @@
 import os
 
-os.environ["KERAS_BACKEND"] = "jax"
+if __name__ == "__main__":
+    os.environ["KERAS_BACKEND"] = "jax"
 import zea
 
-zea.init_device()
+if __name__ == "__main__":
+    zea.init_device()
 import sys
 from itertools import product
 from pathlib import Path
@@ -194,7 +196,7 @@ def main():
         violin.plot(
             sort_by_names(swap_layer(_gncr_roman), group_names.keys()),
             SAVE_DIR / f"{key}_violin{ext}",
-            x_label_values=subjects_ids.values(),
+            x_label_values=_gncr_roman.keys(),
             metric_name=METRIC_LABEL,
             context="styles/ieee-tmi.mplstyle",
         )
