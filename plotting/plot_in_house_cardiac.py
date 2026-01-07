@@ -372,7 +372,7 @@ def stack_plot_from_npz(
     selection_strategy="greedy_entropy",
 ):
     plot_dir = Path(plot_dir)
-    plot_path = plot_dir / selection_strategy
+    plot_path = plot_dir / f"qualitative_in_house_{selection_strategy}"
 
     if context is None:
         context = "styles/darkmode.mplstyle"
