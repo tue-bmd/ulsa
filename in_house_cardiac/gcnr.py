@@ -14,12 +14,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import zea
+from zea.internal.cache import cache_output
 
 sys.path.append("/ulsa")
 from plotting.plot_utils import ViolinPlotter, write_roman
 from ulsa.metrics import gcnr_per_frame
 
 METRIC_LABEL = "Relative gCNR [-]"
+SAVE_DIR = Path("output/gcnr")
+SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def filter_dict_of_arrays(d: dict, condition):
@@ -131,11 +134,11 @@ def plot_gcnr_over_time(
     return fig
 
 
-def main():
+@cache_output(verbose=True)
+def load_results():
     ANNOTATIONS_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/cardiac_annotations_2/")
     DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac/")
-    SAVE_DIR = Path("output/gcnr")
-    SAVE_DIR.mkdir(parents=True, exist_ok=True)
+
     subjects = [
         "20240701_P1_A4CH_0001",
         "20241021_P9_A4CH_0000",
@@ -153,8 +156,6 @@ def main():
     gcnr_all = {}
     selected_frames_all = {}
     for i, subject in enumerate(subjects):
-        # Load annotations and results
-        subject_name = write_roman(i + 1)
         wf = ANNOTATIONS_ROOT / f"{subject}_white_annotations.npy"
         bf = ANNOTATIONS_ROOT / f"{subject}_black_annotations.npy"
         vf = ANNOTATIONS_ROOT / "selected_frames" / f"{subject}_valve_annotations.npy"
@@ -170,7 +171,7 @@ def main():
                 selected_frames = np.load(sf)[:-1]  # Exclude last frame
             else:
                 selected_frames = np.arange(valve_masks.shape[0])
-            selected_frames_all[subject_name] = selected_frames
+            selected_frames_all[subject] = selected_frames
             assert len(selected_frames) == valve_masks.shape[0], (
                 "Number of selected frames must match the number of valve masks."
             )
@@ -237,36 +238,51 @@ def main():
                 continue
             gcnr_valve_relative[k] = v - gcnr_valve_results[relative_to]
 
-        gcnr_all[subject_name] = gcnr_relative
-        gcnr_valve_all[subject_name] = gcnr_valve_relative
+        gcnr_all[subject] = gcnr_relative
+        gcnr_valve_all[subject] = gcnr_valve_relative
 
     gcnr_valve_all = filter_empty(gcnr_valve_all)
+    return subjects, group_names, gcnr_all, gcnr_valve_all, selected_frames_all
+
+
+def main():
+    subjects, group_names, gcnr_all, gcnr_valve_all, selected_frames_all = (
+        load_results()
+    )
+
+    # Convert subject keys to Roman numerals
+    subjects_ids = {s: write_roman(i + 1) for i, s in enumerate(subjects)}
 
     # Violin plot & over time plot for all
     violin = ViolinPlotter(group_names, xlabel="Subjects")
     for ext, (_gcnr, key) in product(
         [".png", ".pdf"], zip([gcnr_all, gcnr_valve_all], ["gcnr", "gcnr_valve"])
     ):
+        _gncr_roman = {subjects_ids[k]: v for k, v in _gcnr.items()}
         violin.plot(
-            sort_by_names(swap_layer(_gcnr), group_names.keys()),
+            sort_by_names(swap_layer(_gncr_roman), group_names.keys()),
             SAVE_DIR / f"{key}_violin{ext}",
-            x_label_values=_gcnr.keys(),
+            x_label_values=_gncr_roman.keys(),
             metric_name=METRIC_LABEL,
             context="styles/ieee-tmi.mplstyle",
         )
         with plt.style.context("styles/ieee-tmi.mplstyle"):
-            for i, subject in enumerate(subjects):
-                subject_name = write_roman(i + 1)
-                if subject_name not in _gcnr:
+            for subject in subjects:
+                if subject not in _gcnr:
                     continue
                 plot_gcnr_over_time(
-                    selected_frames_all[subject_name] if key == "gcnr_valve" else None,
-                    _gcnr[subject_name],
+                    selected_frames_all[subject] if key == "gcnr_valve" else None,
+                    _gcnr[subject],
                     group_names,
                     SAVE_DIR / f"{subject}_{key}_over_time{ext}",
                 )
 
     # Plots for the paper
+    gcnr_valve_all_roman = {subjects_ids[k]: v for k, v in gcnr_valve_all.items()}
+    selected_frames_all_roman = {
+        subjects_ids[k]: v for k, v in selected_frames_all.items()
+    }
+
     plt.close("all")
     save_dir = SAVE_DIR / "paper_plots"
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -285,9 +301,11 @@ def main():
     with plt.style.context("styles/ieee-tmi.mplstyle"):
         fig, axs = plt.subplots(2, 1, sharex=True)
         plt.sca(axs[0])
-        _sel_frames = selected_frames_all["I"][selected_frames_all["I"] < 100]
+        _sel_frames = selected_frames_all_roman["I"][
+            selected_frames_all_roman["I"] < 100
+        ]
         _gcnr = filter_dict_of_arrays(
-            gcnr_valve_all["I"], lambda x: x[selected_frames_all["I"] < 100]
+            gcnr_valve_all_roman["I"], lambda x: x[selected_frames_all_roman["I"] < 100]
         )
         fig = plot_gcnr_over_time(
             _sel_frames,
@@ -301,9 +319,12 @@ def main():
         plt.grid()
         plt.title("Subject I", **title_kwargs)
         plt.sca(axs[1])
-        _sel_frames = selected_frames_all["II"][selected_frames_all["II"] < 100]
+        _sel_frames = selected_frames_all_roman["II"][
+            selected_frames_all_roman["II"] < 100
+        ]
         _gcnr = filter_dict_of_arrays(
-            gcnr_valve_all["II"], lambda x: x[selected_frames_all["II"] < 100]
+            gcnr_valve_all_roman["II"],
+            lambda x: x[selected_frames_all_roman["II"] < 100],
         )
         fig = plot_gcnr_over_time(
             _sel_frames,

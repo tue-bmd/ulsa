@@ -79,13 +79,6 @@ def plot_timings(
         context = {}
 
     markers = ["o", "x", "D", "^", "v", "x", "*"]
-    for i, (method, name) in enumerate(zip(results, names)):
-        result = method[0][metric]["greedy_entropy"]
-        psnr = np.stack(list(result.values()), axis=1)
-        psnr_mean = np.mean(psnr, axis=0)
-        sem_values = np.std(psnr, axis=0) / np.sqrt(len(psnr))
-
-        steps = np.array(list(result.keys()))
 
     with plt.style.context(context):
         plt.figure(figsize=(3.5, 2.5))
@@ -156,8 +149,8 @@ def plot_timings(
 
 
 if __name__ == "__main__":
-    seqdiff = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/Wessel/output/lud/active_sampling/recon_vs_fps2/sweep_2025_04_08_124401"
-    normal_diff = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/Wessel/output/lud/active_sampling/normal_diffusion_num_steps2/sweep_2025_04_08_115535"
+    seqdiff = "/mnt/z/usbmd/Wessel/ulsa/timings/recon_vs_fps2/sweep_2025_04_08_124401"
+    normal_diff = "/mnt/z/usbmd/Wessel/ulsa/timings/normal_diffusion_num_steps2/sweep_2025_04_08_115535"
     SAVE_ROOT = "."
 
     x = extract_sweep_data(seqdiff)
