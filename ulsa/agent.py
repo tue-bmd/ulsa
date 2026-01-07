@@ -1,6 +1,7 @@
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any, Callable, Tuple
+from pathlib import Path
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 import jax
 import keras
@@ -16,7 +17,7 @@ from ulsa.selection import (
     GreedyVariance,
     selector_from_name,
 )
-from ulsa.utils import lines_to_pfield
+from zea import set_data_paths
 from zea.agent.selection import (
     CovarianceSamplingLines,
     EquispacedLines,
@@ -26,10 +27,76 @@ from zea.agent.selection import (
 )
 from zea.backend import jit
 from zea.config import Config
+from zea.func import split_seed
 from zea.models.diffusion import DiffusionModel
-from zea.tensor_ops import split_seed
 
 DEBUGGING = False
+
+
+class Cfg:
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
+    def update_recursive(self, dictionary: dict | None = None, **kwargs):
+        if dictionary is None:
+            dictionary = {}
+        dictionary.update(kwargs)
+        for key, value in dictionary.items():
+            if hasattr(self, key) and isinstance(getattr(self, key), (Config, Cfg)):
+                attr = getattr(self, key)
+                attr.update_recursive(value)
+            else:
+                setattr(self, key, value)
+
+
+@dataclass
+class ActionSelectionConfig(Cfg):
+    n_possible_actions: int | str
+    n_actions: int
+    shape: List[Union[int, str]]
+    selection_strategy: str
+
+    def set_n_tx(self, n_tx: int):
+        if self.n_possible_actions == "n_tx":
+            self.n_possible_actions = n_tx
+
+        # For example: this converts [112, "2*n_tx"] to [112, 112] if n_tx=56
+        self.shape = [
+            s if "n_tx" not in str(s) else eval(s, {"n_tx": n_tx}) for s in self.shape
+        ]
+
+
+@dataclass
+class AgentConfig(Cfg):
+    io_config: Config
+    action_selection: ActionSelectionConfig
+    diffusion_inference: Config
+    downstream_task: Optional[str] = None
+    data: Optional[Config] = None
+
+    def fix_paths(self, data_paths=None):
+        if data_paths is None:
+            data_paths = set_data_paths("users.yaml", local=False)
+        output_dir = data_paths["output"]
+        self.diffusion_inference.run_dir = self.diffusion_inference.run_dir.format(
+            output_dir=output_dir
+        )
+        if self.data is not None and "target_sequence" in self.data:
+            self.data.target_sequence = self.data.target_sequence.format(
+                data_root=data_paths["data_root"]
+            )
+
+    @staticmethod
+    def from_yaml(path: str | Path):
+        cfg = Config.from_yaml(path)
+        action_selection_cfg = ActionSelectionConfig(**cfg.action_selection)
+        return AgentConfig(
+            io_config=cfg.io_config,
+            action_selection=action_selection_cfg,
+            diffusion_inference=cfg.diffusion_inference,
+            downstream_task=cfg.get("downstream_task", None),
+            data=cfg.get("data", None),
+        )
 
 
 # Static agent properties go here
@@ -44,7 +111,6 @@ class Agent:
     pre_action: Callable
     post_action: Callable
     operator: Any
-    pfield: Any
 
     def print_summary(self):
         print("\n")
@@ -80,7 +146,6 @@ class AgentState:
     posterior_samples: Any  # tensor of shape [n_particles, height, width, n_frames]: these are used as initial samples for SeqDiff
     belief_distribution: Any  # tensor of shape [n_particles, height, width, 1]: posterior samples at time t
     pipeline_state: Any
-    target_pipeline_state: Any
     saliency_map: Any  # heatmap used to make action selection decisions
 
     def tree_flatten(self):
@@ -93,7 +158,6 @@ class AgentState:
             self.posterior_samples,
             self.belief_distribution,
             self.pipeline_state,
-            self.target_pipeline_state,
             self.saliency_map,
         )
         aux = None
@@ -233,20 +297,6 @@ def action_selection_pre_post(
     return wrapper
 
 
-def action_selection_pfield(action_selector, **kwargs):
-    """
-    This function is used to wrap the action selection function to return a
-    pfield instead of a mask.
-    """
-
-    def wrapper(particles, current_lines, seed):
-        selected_lines, _ = action_selector(particles, current_lines, seed)
-        pfield_mask = lines_to_pfield(selected_lines[None], **kwargs)
-        return selected_lines, pfield_mask
-
-    return wrapper
-
-
 def reset_agent_state(agent: Agent, seed, batch_size=None):
     _, _, n_frames = agent.input_shape
     selected_lines, mask_t, saliency_map = agent.initial_action_selection(
@@ -264,18 +314,12 @@ def reset_agent_state(agent: Agent, seed, batch_size=None):
         posterior_samples=None,
         belief_distribution=None,
         pipeline_state={},
-        target_pipeline_state={},
         saliency_map=saliency_map,
     )
 
 
 def get_operator_dict(agent_config):
-    if (
-        "pfield" in agent_config.action_selection
-        and agent_config.diffusion_inference.get("guidance_method", "dps") == "dps"
-    ):
-        return {"name": "soft_inpainting"}
-    elif agent_config.diffusion_inference.get("operator", "inpainting") == "blur_noise":
+    if agent_config.diffusion_inference.get("operator", "inpainting") == "blur_noise":
         psf = np.load("psf.npy")
         psf = ops.expand_dims(
             ops.repeat(
@@ -289,10 +333,9 @@ def get_operator_dict(agent_config):
 
 
 def setup_agent(
-    agent_config: Config,
+    agent_config: AgentConfig,
     seed,
     batch_size=None,
-    pfield=None,
     jit_mode="recover",  # recover or posterior_sample
     model=None,
 ) -> Tuple[Agent, AgentState]:
@@ -444,30 +487,6 @@ def setup_agent(
         action_selector, is_3d=agent_config.get("is_3d", False)
     )
 
-    if agent_config.action_selection.get("pfield"):
-        assert pfield is not None, "pfield must be provided"
-        # TODO: is resizing the pfield fine?
-        pfield = ops.image.resize(
-            pfield,  # (n_tx, grid_size_z, grid_size_x)
-            agent_config.action_selection.shape,
-            interpolation="bilinear",
-            antialias=True,
-            data_format="channels_first",  # n_tx is the channel dim
-        )
-
-        initial_action_selection = action_selection_pfield(
-            initial_action_selection,
-            pfield=pfield,
-            n_actions=agent_config.action_selection.n_actions,
-        )
-        action_selection = action_selection_pfield(
-            action_selection,
-            pfield=pfield,
-            n_actions=agent_config.action_selection.n_actions,
-        )
-    else:
-        pfield = None
-
     pre_action = keras.layers.CenterCrop(
         *agent_config.action_selection.shape, data_format="channels_first"
     )
@@ -516,7 +535,6 @@ def setup_agent(
         pre_action=pre_action,
         post_action=post_action,
         operator=model.operator,
-        pfield=pfield,
     )
 
     return agent, reset_agent_state(agent, seed, batch_size=batch_size)

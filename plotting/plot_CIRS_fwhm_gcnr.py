@@ -8,7 +8,7 @@ comparison figure with reconstructions and FWHM traces.
 
 Example usage:
     python plotting/plot_CIRS_fwhm_gcnr.py \
-        --data-dir "/mnt/z/usbmd/Wessel/eval_phantom2/20251118_CIRS_0000" \
+        --data-dir "/mnt/z/usbmd/Wessel/ulsa/eval_phantom2/20251118_CIRS_0000" \
         --save-dir ./output \
         --frame-idx 19 \
         --point1 54 60 \
@@ -34,7 +34,7 @@ import numpy as np
 from matplotlib.patches import Circle, FancyArrowPatch
 
 from zea import init_device, log
-from zea.ops import translate
+from zea.func import translate
 
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"

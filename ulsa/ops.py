@@ -6,8 +6,8 @@ import numpy as np
 from keras import ops
 
 import zea.ops
-from zea.ops import translate
-from zea.tensor_ops import apply_along_axis
+from zea.func import apply_along_axis, translate
+from zea.internal.core import DataTypes
 
 NOISE_ESTIMATION_NORMALIZER = (
     0.6745  # Used for robust noise estimation from median absolute deviation
@@ -90,7 +90,7 @@ class GetAutoDynamicRange(zea.ops.Operation):
     Only works when dynamic range is not already set in the parameters."""
 
     def __init__(self, low_pct=18, high_pct=95, exclude_zeros=True, **kwargs):
-        super().__init__(input_data_type=zea.ops.DataTypes.ENVELOPE_DATA, **kwargs)
+        super().__init__(input_data_type=DataTypes.ENVELOPE_DATA, **kwargs)
         self.low_pct = low_pct
         self.high_pct = high_pct
         self.exclude_zeros = exclude_zeros
@@ -266,7 +266,35 @@ class Multiply(zea.ops.Operation):
         super().__init__(**kwargs)
         self.other_key = other_key
 
+    @property
+    def valid_keys(self) -> set:
+        """Get a set of all valid input keys for the operation."""
+        return self._valid_keys.union({self.other_key})
+
     def call(self, **kwargs):
         data = kwargs[self.key]
         multiplied_data = data * kwargs[self.other_key]
         return {self.output_key: multiplied_data}
+
+
+class UndoTGC(zea.ops.Operation):
+    def __init__(self, axis, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+
+    def call(self, tgc_gain_curve, **kwargs):
+        data = kwargs[self.key]
+        data = zea.func.apply_along_axis(lambda x: x / tgc_gain_curve, self.axis, data)
+        return {self.output_key: data}
+
+
+class ApplyAlongAxis(zea.ops.Operation):
+    def __init__(self, axis, fn: callable, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+        self.fn = fn
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        data = zea.func.apply_along_axis(self.fn, self.axis, data)
+        return {self.output_key: data}

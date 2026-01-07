@@ -18,67 +18,66 @@ import ulsa.ops
 from active_sampling_temporal import preload_data
 from ulsa.pipeline import make_pipeline
 from zea.display import scan_convert_2d
+from zea.func import translate
 from zea.io_lib import save_to_gif
-from zea.ops import translate
 
 
 def cardiac_scan(
     target_sequence,
-    n_frames,
-    grid_width=90,
-    resize_height=112,
+    n_frames=None,
+    grid_width=None,
+    resize_to=None,
     type="focused",  # "focused" or "diverging"
+    bandwidth=2e6,  # TODO: wide enough for fundemental?
+    polar_limits=None,
+    low_pct=18,
+    high_pct=95,
 ):
-    shape = (resize_height, grid_width)
     pipeline = make_pipeline(
         "data/raw_data",
-        None,
-        shape,
-        shape,
-        jit_options="ops",
+        output_shape=resize_to,
+        action_selection_shape=resize_to,
         rx_apo=(type == "focused"),
+        low_pct=low_pct,
+        high_pct=high_pct,
     )
-    pipeline.append(zea.ops.Lambda(lambda x: ops.squeeze(x, axis=-1)))
+    pipeline.append(zea.ops.keras_ops.Squeeze(axis=-1))
 
     with zea.File(target_sequence) as file:
-        raw_data_sequence, scan, _ = preload_data(
+        raw_data_sequence, scan = preload_data(
             file, n_frames, data_type="data/raw_data", type=type
         )
 
-    bandpass_rf = scipy.signal.firwin(
-        numtaps=128,
-        cutoff=np.array([0.5, 1.5]) * scan.center_frequency,
-        pass_zero="bandpass",
-        fs=scan.sampling_frequency,
+    bandpass_rf = zea.func.get_band_pass_filter(
+        128,
+        scan.sampling_frequency,
+        scan.demodulation_frequency - bandwidth / 2,
+        scan.demodulation_frequency + bandwidth / 2,
     )
-    scan.polar_limits = list(np.deg2rad([-45, 45]))
-    scan.grid_size_x = grid_width
+    if polar_limits is not None:
+        scan.polar_limits = list(polar_limits)
+    else:
+        scan.polar_limits = list(np.deg2rad([-45, 45]))
+    if grid_width is not None:
+        scan.grid_size_x = grid_width
+
     scan.dynamic_range = None  # for auto-dynamic range
 
+    params = {}
     if type == "focused":
-        kwargs = {
-            "rx_apo": ulsa.ops.lines_rx_apo(
-                scan.n_tx, scan.grid_size_z, scan.grid_size_x
-            )
-        }
-    else:
-        kwargs = {}
+        params["rx_apo"] = ulsa.ops.lines_rx_apo(
+            scan.n_tx, scan.grid_size_z, scan.grid_size_x
+        )
 
-    # TODO: fix minval to 0?
     params = pipeline.prepare_parameters(
-        scan=scan, bandwidth=2e6, bandpass_rf=bandpass_rf, **kwargs
+        scan=scan, bandwidth=bandwidth, bandpass_rf=bandpass_rf, minval=0, **params
     )
 
-    images = []
-    for raw_data in tqdm(raw_data_sequence):
-        output = pipeline(data=raw_data, **params)
-        image = output.pop("data")
-        params["maxval"] = output.pop("maxval")
-        params["dynamic_range"] = output.pop("dynamic_range")
-        images.append(ops.convert_to_numpy(image))
-    images = np.stack(images, axis=0)
+    images, output = pipeline.run(
+        raw_data_sequence, keep_keys=["maxval", "dynamic_range"], **params
+    )
 
-    scan.dynamic_range = params["dynamic_range"]
+    scan.dynamic_range = ops.convert_to_numpy(output["dynamic_range"]).tolist()
     return images, scan
 
 

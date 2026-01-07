@@ -17,7 +17,7 @@ from ulsa.downstream_task import EchoNetSegmentation
 from ulsa.io_utils import map_range
 from zea import Dataset
 from zea.config import Config
-from zea.ops import translate
+from zea.func import translate
 from zea.tensor_ops import vmap
 
 

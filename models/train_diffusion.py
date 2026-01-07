@@ -30,10 +30,10 @@ from wandb.integration.keras import WandbMetricsLogger
 
 from zea import Config, Dataset, set_data_paths
 from zea.backend.tensorflow.dataloader import make_dataloader
+from zea.func import translate
 from zea.io_lib import load_image, save_to_gif
 from zea.models.base import BaseModel
 from zea.models.diffusion import DiffusionModel
-from zea.ops import translate
 from zea.utils import get_date_string, log
 from zea.visualize import plot_image_grid
 

@@ -15,13 +15,8 @@ cp users.yaml.example users.yaml  # edit!
 
 ### 2. Dependencies
 
-Install [`zea`](https://github.com/tue-bmd/zea), the cognitive ultrasound toolbox.
-
-```bash
-pip install "zea==0.0.7"
-```
-
-or use the submodule in this repo:
+Install [`zea`](https://github.com/tue-bmd/zea), the cognitive ultrasound toolbox, preferably
+through the the submodule in this repo:
 
 ```bash
 git submodule update --init --recursive

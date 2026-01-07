@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.table import Table
 
 from zea import Config, init_device, log
-from zea.ops import translate
+from zea.func import translate
 
 if __name__ == "__main__":
     init_device("cpu")

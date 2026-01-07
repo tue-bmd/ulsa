@@ -10,8 +10,7 @@ if __name__ == "__main__":
 
 from pathlib import Path
 
-from benchmark_active_sampling_ultrasound import run_benchmark
-from zea import Config
+from benchmark_active_sampling_ultrasound import run_benchmark, AgentConfig
 
 if __name__ == "__main__":
     BASE_ULSA_CONFIG = Path("/ulsa/configs/echonet_3_frames_downstream_task.yaml")
@@ -20,7 +19,7 @@ if __name__ == "__main__":
         "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_out_dst/echonet_downstream_task/run1_22_07_25"
     )
 
-    ulsa_agent_config = Config.from_yaml(BASE_ULSA_CONFIG)
+    ulsa_agent_config = AgentConfig.from_yaml(BASE_ULSA_CONFIG)
 
     run_benchmark(
         agent_config=ulsa_agent_config,

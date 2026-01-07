@@ -3,7 +3,8 @@ for cardiac imaging data."""
 
 import os
 
-os.environ["KERAS_BACKEND"] = "numpy"
+if __name__ == "__main__":
+    os.environ["KERAS_BACKEND"] = "numpy"
 import sys
 from collections import OrderedDict
 from itertools import product
@@ -16,32 +17,13 @@ import zea
 
 sys.path.append("/ulsa")
 from plotting.plot_utils import ViolinPlotter, write_roman
+from ulsa.metrics import gcnr_per_frame
 
 METRIC_LABEL = "Relative gCNR [-]"
 
 
 def filter_dict_of_arrays(d: dict, condition):
     return {k: condition(v) for k, v in d.items()}
-
-
-def gcnr_per_frame(images, mask1, mask2):
-    """
-    Calculate gCNR for each frame in the images array.
-
-    Parameters:
-    - images: numpy array of shape (frames, h, w)
-    - mask1: boolean mask for the first region of shape (frames, h, w)
-    - mask2: boolean mask for the second region of shape (frames, h, w)
-
-    Returns:
-    - List of gCNR values for each frame
-    """
-
-    def single_gcnr(img, m1, m2):
-        return zea.metrics.gcnr(img[m1], img[m2])
-
-    vectorized_gcnr = np.vectorize(single_gcnr, signature="(h,w),(h,w),(h,w)->()")
-    return vectorized_gcnr(images, mask1, mask2)
 
 
 def gcnr_valve(images, blacks, valve, selected_frames):
@@ -150,8 +132,8 @@ def plot_gcnr_over_time(
 
 
 def main():
-    ANNOTATIONS_ROOT = Path("/mnt/z/usbmd/Wessel/cardiac_annotations_2/")
-    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/eval_in_house_cardiac/")
+    ANNOTATIONS_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/cardiac_annotations_2/")
+    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac/")
     SAVE_DIR = Path("output/gcnr")
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
     subjects = [

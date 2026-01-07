@@ -31,8 +31,8 @@ from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_sid
 
 
 def plot_from_npz(
-    run_dir,
-    plot_dir,
+    run_dir: Path | str,
+    plot_dir: Path | str,
     exts=(".png", ".pdf"),
     gif=True,
     gif_fps=8,
@@ -44,12 +44,15 @@ def plot_from_npz(
     scan_convert_resolution=0.1,
     selection_strategy="greedy_entropy",
 ):
+    run_dir = Path(run_dir)
     plot_dir = Path(plot_dir)
     plot_path = plot_dir / selection_strategy
 
     focused_results = np.load(run_dir / "focused.npz", allow_pickle=True)
     diverging_results = np.load(run_dir / "diverging.npz", allow_pickle=True)
     results = np.load(run_dir / f"{selection_strategy}.npz", allow_pickle=True)
+    n_actions = results["n_actions"].item()
+    n_possible_actions = results["n_possible_actions"].item()
 
     focused = focused_results["reconstructions"]
     diverging = diverging_results["reconstructions"]
@@ -108,7 +111,7 @@ def plot_from_npz(
         io_config,
         scan_convert_order=0,
         image_range=reconstruction_range,
-        reconstruction_sharpness_std=0.04,
+        reconstruction_sharpness_std=0.02,
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
     )
@@ -134,7 +137,7 @@ def plot_from_npz(
             diverging,
             labels=[
                 "Focused (90)",
-                "Reconstruction (11/90)",
+                f"Reconstruction ({n_actions}/{n_possible_actions})",
                 "Diverging (11)",
             ],
             context=context,
@@ -205,18 +208,18 @@ def plot_from_npz(
         )
         # ax = fig.add_subplot(outer[2])
         # ax.axis("off")
-        # ax.set_title("Reconstruction (11/90)")
+        # ax.set_title(f"Reconstruction ({n_actions}/{n_possible_actions})")
 
         ax_big = fig.add_subplot(inner[:, 0])
         ax_big.imshow(reconstructions[frame_idx], **kwargs)
-        ax_big.set_title("Reconstruction (11/90)")
+        ax_big.set_title(f"Reconstruction ({n_actions}/{n_possible_actions})")
         ax_big.axis("off")
         if arrow is not None:
             ax_big.add_patch(copy.copy(arrow))
 
         ax_bottom = fig.add_subplot(inner[1, 1])
         ax_bottom.imshow(measurements[frame_idx], **kwargs)
-        # ax_top.set_title("Acquisitions (11/90)")
+        # ax_top.set_title(f"Acquisitions ({n_actions}/{n_possible_actions})")
         ax_bottom.axis("off")
 
         ax_top = fig.add_subplot(inner[0, 1])
@@ -271,13 +274,14 @@ def get_arrow(
 
 
 if __name__ == "__main__":
-    PLOT_NPZ_PATH = (
-        "/mnt/z/usbmd/Wessel/ulsa_paper_plots/20240701_P1_A4CH_0001_results.npz"
-    )
+    # PLOT_NPZ_PATH = (
+    #     "/mnt/z/usbmd/Wessel/ulsa/ulsa_paper_plots/20240701_P1_A4CH_0001_results.npz"
+    # )
+    PLOT_NPZ_PATH = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/20251222_s1_a4ch_line_dw_0000"
 
     plot_from_npz(
         PLOT_NPZ_PATH,
-        "output/in_house_cardiac.png",
+        "output/in_house_cardiac",
         context="styles/ieee-tmi.mplstyle",
         frame_idx=24,
         arrow=get_arrow(),
