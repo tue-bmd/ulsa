@@ -14,15 +14,15 @@ from matplotlib.patches import FancyArrow
 from zea import log
 from zea.agent.selection import EquispacedLines
 from zea.display import scan_convert_2d, scan_convert_3d
-from zea.func import translate
-from zea.internal.cache import cache_output
-from zea.io_lib import matplotlib_figure_to_numpy, save_to_gif
-from zea.tensor_ops import (
+from zea.func import (
     interpolate_data,
     split_volume_data_from_axis,
     stack_volume_data_along_axis,
+    translate,
     vmap,
 )
+from zea.internal.cache import cache_output
+from zea.io_lib import matplotlib_figure_to_numpy, save_to_gif
 from zea.visualize import plot_frustum_vertices, plot_image_grid
 
 TITLE_LOOKUP = {
