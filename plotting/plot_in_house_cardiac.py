@@ -433,9 +433,7 @@ if __name__ == "__main__":
     # )
 
     fundamental_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental/20240701_P1_A4CH_0001"
-    harmonic_file = (
-        "/mnt/z/usbmd/Wessel/ulsa/ulsa_paper_plots_v2/20251222_s3_a4ch_line_dw_0000"
-    )
+    harmonic_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/20251222_s3_a4ch_line_dw_0000"
     frame_indices = [24, 68]
     arrows = [get_arrow(), None]
     stack_plot_from_npz(

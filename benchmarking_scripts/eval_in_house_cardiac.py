@@ -200,6 +200,7 @@ def main():
     save_dir.mkdir(parents=True, exist_ok=True)
 
     files = list(find_hdf5_files(args.files))
+    assert len(files) > 0, "No HDF5 files found."
 
     override_config = dict(io_config=dict(frame_cutoff=args.n_frames))
     for file in sorted(files):
