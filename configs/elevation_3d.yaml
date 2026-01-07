@@ -13,7 +13,7 @@ diffusion_inference:
   run_dir: "{output_dir}/ddim/2025_06_16_155010_986984_ddim_train_elevation_multi_frame/zeahub"
   num_steps: 500
   initial_step: 450 # [0, num_steps]
-  batch_size: 4 # posterior samples
+  batch_size: 2 # posterior samples
   guidance_kwargs:
     omega: 3
     initial_omega: 1
