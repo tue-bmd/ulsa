@@ -1,3 +1,5 @@
+"""Convert npz reconstructions to ITK format for annotation in ITK-SNAP."""
+
 import numpy as np
 import SimpleITK as sitk
 

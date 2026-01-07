@@ -1,3 +1,6 @@
+"""Script to calculate and plot gCNR (Generalized Contrast-to-Noise Ratio)
+for harmonic cardiac imaging data (annotated using ITK-SNAP)."""
+
 import os
 
 if __name__ == "__main__":

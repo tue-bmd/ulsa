@@ -10,9 +10,7 @@ if __name__ == "__main__":
 
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.signal
 from keras import ops
-from tqdm import tqdm
 
 import ulsa.ops
 from active_sampling_temporal import preload_data

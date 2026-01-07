@@ -1,12 +1,11 @@
 """Script to calculate and plot gCNR (Generalized Contrast-to-Noise Ratio)
-for cardiac imaging data."""
+for fundamental cardiac imaging data (annotated using zea)."""
 
 import os
 
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
 import sys
-from collections import OrderedDict
 from itertools import product
 from pathlib import Path
 
