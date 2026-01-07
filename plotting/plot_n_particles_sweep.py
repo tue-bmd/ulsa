@@ -422,7 +422,6 @@ def plot_variance_maps_grid(
             cbar_ax = fig.add_subplot(gs[:, -1])
             cbar = plt.colorbar(im, cax=cbar_ax)
             cbar.set_label("Variance", fontsize=9)
-            cbar.ax.tick_params(labelsize=8)
 
             # Save plot
             patient_name = variance_data[0][2].replace(".avi", "").replace(".mp4", "")
@@ -647,15 +646,14 @@ def plot_linewise_entropy_curves(
                 )
 
             # Formatting
-            ax.set_title(f"Sequence {seq_idx + 1}", fontsize=9)
+            ax.set_title(f"Sequence {seq_idx + 1}", fontsize=8)
             ax.grid(True, alpha=0.3)
-            ax.tick_params(labelsize=8)
 
         # Set y-label only on the leftmost plot
-        axes[0].set_ylabel("Entropy $\hat{H}^\ell$", fontsize=9)
+        axes[0].set_ylabel("Entropy $\hat{H}^\ell$")
 
         # Add shared x-label at the bottom
-        fig.text(0.5, 0.02, "Line Index $\ell$", ha="center", fontsize=9)
+        fig.text(0.5, 0.02, "Line Index $\ell$", ha="center")
 
         # Adjust layout before adding colorbar
         plt.tight_layout(rect=[0, 0, 0.92, 1])  # Leave space on right for colorbar
@@ -678,10 +676,9 @@ def plot_linewise_entropy_curves(
         cbar = fig.colorbar(
             sm_discrete, ax=axes, orientation="vertical", pad=0.02, aspect=15
         )
-        cbar.set_label("$N_p$", fontsize=9)
+        cbar.set_label("$N_p$")
         cbar.set_ticks(n_particles_values)  # Set ticks to actual n_particles values
         cbar.set_ticklabels([str(int(n)) for n in n_particles_values])  # Integer labels
-        cbar.ax.tick_params(labelsize=8)
         cbar.ax.minorticks_off()
 
         # plt.tight_layout()

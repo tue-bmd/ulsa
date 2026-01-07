@@ -166,7 +166,6 @@ def plot_combined_sweeps(
 
         ax.set_ylabel(METRIC_NAMES["lpips"])
         ax.grid(True, alpha=0.3)
-        ax.tick_params(labelsize=7)
 
         # Plot LPIPS vs omega (top-right)
         ax = axes[0, 1]
@@ -195,7 +194,6 @@ def plot_combined_sweeps(
 
         ax.set_xscale("log")
         ax.grid(True, alpha=0.3)
-        ax.tick_params(labelsize=7)
 
         # Plot PSNR vs n_frames (bottom-left)
         ax = axes[1, 0]
@@ -219,7 +217,6 @@ def plot_combined_sweeps(
         ax.set_xlabel(r"$W$")
         ax.set_ylabel(METRIC_NAMES["psnr"])
         ax.grid(True, alpha=0.3)
-        ax.tick_params(labelsize=7)
 
         # Plot PSNR vs omega (bottom-right)
         ax = axes[1, 1]
@@ -243,7 +240,6 @@ def plot_combined_sweeps(
         ax.set_xlabel(r"$\gamma$")
         ax.set_xscale("log")
         ax.grid(True, alpha=0.3)
-        ax.tick_params(labelsize=7)
 
         # Format x-axis for omega plots
         for ax in [axes[0, 1], axes[1, 1]]:
