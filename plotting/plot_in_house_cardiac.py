@@ -1,12 +1,12 @@
 """
 This script makes a figure with the target, reconstruction, and measurements
 for the in-house cardiac dataset.
-
-# diverging_dynamic_range = [-70, -30]
 """
 
 import os
 import sys
+
+import matplotlib.pyplot as plt
 
 import zea
 
@@ -14,6 +14,7 @@ if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "jax"
     zea.init_device()
     sys.path.append("/ulsa")
+    plt.rcdefaults()
 
 import copy
 import math
@@ -22,9 +23,9 @@ from pathlib import Path
 import jax.numpy as jnp
 import keras
 import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import FancyArrowPatch
+from skimage.exposure import match_histograms
 
 from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_side_gif
@@ -39,8 +40,7 @@ def plot_from_npz(
     context=None,
     frame_idx=24,
     arrow=None,
-    diverging_dynamic_range=None,
-    focused_dynamic_range=None,
+    dynamic_range=None,
     scan_convert_resolution=0.1,
     selection_strategy="greedy_entropy",
 ):
@@ -54,21 +54,36 @@ def plot_from_npz(
     n_actions = results["n_actions"].item()
     n_possible_actions = results["n_possible_actions"].item()
 
+    # Load into variables
     focused = focused_results["reconstructions"]
     diverging = diverging_results["reconstructions"]
-
-    if focused_dynamic_range is None:
-        focused_dynamic_range = focused_results["dynamic_range"]
-
-    if diverging_dynamic_range is None:
-        diverging_dynamic_range = diverging_results["dynamic_range"]
-
     reconstructions = results["reconstructions"]
-    reconstruction_range = results["dynamic_range"]
-
     measurements = results["measurements"]
     masks = results["masks"]
     belief_distributions = results["belief_distributions"]
+
+    # Drop to single frame if not gif
+    if not gif:
+        focused = focused[frame_idx, None]
+        diverging = diverging[frame_idx, None]
+        reconstructions = reconstructions[frame_idx, None]
+        measurements = measurements[frame_idx, None]
+        masks = masks[frame_idx, None]
+        belief_distributions = belief_distributions[frame_idx, None]
+        frame_idx = 0
+
+    # histogram match diverging to focused
+    match_histograms_vectorized = np.vectorize(
+        match_histograms, signature="(n,m),(n,m)->(n,m)"
+    )
+    diverging = match_histograms_vectorized(diverging, focused)
+
+    # histogram match reconstructions to focused
+    reconstructions = match_histograms_vectorized(reconstructions, focused)
+    reconstruction_range = results["dynamic_range"]
+
+    if dynamic_range is None:
+        dynamic_range = focused_results["dynamic_range"]
 
     measurements = keras.ops.where(
         masks > 0, measurements, color_to_value(reconstruction_range, "gray")
@@ -79,20 +94,12 @@ def plot_from_npz(
         scan_conversion_angles=np.rad2deg(results["theta_range"]),
     )
 
-    if not gif:
-        focused = focused[frame_idx, None]
-        diverging = diverging[frame_idx, None]
-        reconstructions = reconstructions[frame_idx, None]
-        measurements = measurements[frame_idx, None]
-        belief_distributions = belief_distributions[frame_idx, None]
-        frame_idx = 0
-
     print("Postprocessing focused...")
     focused = postprocess_agent_results(
         focused,
         io_config,
         scan_convert_order=0,
-        image_range=focused_dynamic_range,
+        image_range=dynamic_range,
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
     )
@@ -101,7 +108,7 @@ def plot_from_npz(
         diverging,
         io_config,
         scan_convert_order=0,
-        image_range=diverging_dynamic_range,
+        image_range=dynamic_range,
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
     )
@@ -110,7 +117,7 @@ def plot_from_npz(
         reconstructions,
         io_config,
         scan_convert_order=0,
-        image_range=reconstruction_range,
+        image_range=dynamic_range,
         reconstruction_sharpness_std=0.02,
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
@@ -242,9 +249,9 @@ def plot_from_npz(
 
 def get_arrow(
     x_tip=880,
-    y_tip=650,
+    y_tip=700,
     length=310,
-    angle_deg=20 + 90,
+    angle_deg=-20 + 90,
 ):
     """Create an arrow patch with the specified parameters.
 
@@ -479,20 +486,12 @@ def paper(
 
 
 if __name__ == "__main__":
-    # PLOT_NPZ_PATH = (
-    #     "/mnt/z/usbmd/Wessel/ulsa/ulsa_paper_plots/20240701_P1_A4CH_0001_results.npz"
-    # )
-    # PLOT_NPZ_PATH = (
-    #     "/mnt/z/usbmd/Wessel/ulsa/ulsa_paper_plots_v2/20251222_s3_a4ch_line_dw_0000"
-    # )
+    plot_from_npz(
+        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental/20240701_P1_A4CH_0001",
+        "output/in_house_cardiac",
+        context="styles/ieee-tmi.mplstyle",
+        arrow=get_arrow(),
+        gif=False,
+    )
 
-    # plot_from_npz(
-    #     PLOT_NPZ_PATH,
-    #     "output/in_house_cardiac",
-    #     context="styles/ieee-tmi.mplstyle",
-    #     frame_idx=17,
-    #     # arrow=get_arrow(),
-    #     gif=False,
-    # )
-
-    paper()
+    # paper()

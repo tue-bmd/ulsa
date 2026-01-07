@@ -93,6 +93,9 @@ def eval_in_house_data(
         n_focused_tx = np.where(f.scan().focus_distances > 0)[0].size
         grid_width = n_focused_tx * 6
 
+        # e.g. (112,90) for 90 tx, (112,112) for 56 tx.
+        resize_to = (112, (112 // n_focused_tx) * n_focused_tx)
+
     # Run focused waves (stores full dynamic range)
     zea.log.info("Running focused waves...")
     focused, focused_scan = cardiac_scan(
@@ -100,7 +103,7 @@ def eval_in_house_data(
         n_frames=n_frames,
         grid_width=grid_width,
         type="focused",
-        resize_to=(112, 112),
+        resize_to=resize_to,
         low_pct=low_pct,
         high_pct=high_pct,
     )
@@ -118,7 +121,7 @@ def eval_in_house_data(
         n_frames=n_frames,
         grid_width=grid_width,
         type="diverging",
-        resize_to=(112, 112),
+        resize_to=resize_to,
         low_pct=low_pct,
         high_pct=high_pct,
     )
@@ -126,7 +129,7 @@ def eval_in_house_data(
         save_dir / f"diverging.npz",
         reconstructions=diverging,
         theta_range=diverging_scan.theta_range,
-        dynamic_range=focused_scan.dynamic_range,  # NOTE: uses focused dynamic range!
+        dynamic_range=diverging_scan.dynamic_range,
     )
 
     # For annotation purposes, also save as itk
