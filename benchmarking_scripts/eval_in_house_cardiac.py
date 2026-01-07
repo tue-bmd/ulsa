@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/",
+        default="/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/",
         help="Directory to save results.",
     )
     parser.add_argument(
@@ -37,19 +37,15 @@ def parse_args():
         help="Number of frames to process (None for all).",
     )
     parser.add_argument(
-        "--folder",
+        "--files",
         type=str,
         nargs="+",
         default=[
-            "/mnt/datasets/2026_USBMD_A4CH_S51_V2/",
+            "/mnt/datasets/2026_USBMD_A4CH_S51_V2/20251222_s1_a4ch_line_dw_0000.hdf5",
+            "/mnt/datasets/2026_USBMD_A4CH_S51_V2/20251222_s2_a4ch_line_dw_0000.hdf5",
+            "/mnt/datasets/2026_USBMD_A4CH_S51_V2/20251222_s3_a4ch_line_dw_0000.hdf5",
         ],
-        help="Folder(s) containing the HDF5 files. Can specify multiple folders.",
-    )
-    parser.add_argument(
-        "--pattern",
-        type=str,
-        default="*_a4ch_line_dw_*.hdf5",
-        help="Pattern to match HDF5 files in the folder.",
+        help="Can be a list of folders and/or files containing in-house cardiac data HDF5 files.",
     )
     parser.add_argument(
         "--low_pct",
@@ -177,15 +173,23 @@ def eval_in_house_data(
     return save_dir
 
 
+def find_hdf5_files(files_and_folders: list):
+    for file in files_and_folders:
+        path = Path(file)
+        if path.is_file() and path.suffix == ".hdf5":
+            yield path
+        elif path.is_dir():
+            folder = path
+            for f in folder.rglob("*.hdf5"):
+                yield f
+
+
 def main():
     args = parse_args()
     save_dir = Path(args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    folders = [Path(f) for f in args.folder]
-    files = []
-    for folder in folders:
-        files += list(folder.glob(args.pattern, case_sensitive=False))
+    files = list(find_hdf5_files(args.files))
     n_frames = args.n_frames  # all frames if None
 
     override_config = dict(io_config=dict(frame_cutoff=n_frames))
