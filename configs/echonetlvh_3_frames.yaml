@@ -13,7 +13,7 @@ diffusion_inference:
   run_dir: "{output_dir}/ddim/2025_05_16_135444_ddim_train_echonetlvh_256/zeahub"
   num_steps: 500
   initial_step: 450 # [0, num_steps]
-  batch_size: 4 # posterior samples
+  batch_size: 2 # posterior samples
   guidance_kwargs:
     initial_omega: 1
     omega: 10

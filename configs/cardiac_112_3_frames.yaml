@@ -10,7 +10,7 @@ diffusion_inference:
   run_dir: hf://zeahub/ulsa
   num_steps: 500
   initial_step: 450 # [0, num_steps]
-  batch_size: 4 # posterior samples
+  batch_size: 2 # posterior samples
   operator: inpainting
   guidance_method: dps
   guidance_kwargs:
