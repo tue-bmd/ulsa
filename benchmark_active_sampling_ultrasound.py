@@ -326,11 +326,7 @@ def benchmark(
             target_sequence, centers = circle_augmentation(target_sequence, seed=seed_1)
 
         # 3d batch
-        batch_size = (
-            None
-            if agent_config.get("is_3d", None) is None
-            else ops.shape(target_sequence)[2]
-        )
+        batch_size = ops.shape(target_sequence)[2] if agent_config.is_3d else None
         state = reset_agent_state(agent, seed, batch_size=batch_size)
         results = run_active_sampling(
             agent,

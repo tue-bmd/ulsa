@@ -17,7 +17,7 @@ from ulsa.selection import (
     GreedyVariance,
     selector_from_name,
 )
-from zea import set_data_paths
+from zea import log, set_data_paths
 from zea.agent.selection import (
     CovarianceSamplingLines,
     EquispacedLines,
@@ -575,10 +575,12 @@ def setup_agent(
     )
 
     if jit_mode is None:
-        print(
-            "JIT is off, this is useful for debugging but slow for general use! "
-            "Cosider setting jit_mode to 'posterior_sample' such that atleast "
-            "the diffusion model is JIT compiled."
+        log.info(
+            log.red(
+                "JIT is off, this is useful for debugging but slow for general use! "
+                "Cosider setting jit_mode to 'posterior_sample' such that atleast "
+                "the diffusion model is JIT compiled."
+            )
         )
 
     if jit_mode == "posterior_sample":

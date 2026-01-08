@@ -364,12 +364,9 @@ def preload_data(
     try:
         scan = file.scan()
     except:
-        if data_type == "data/image_3D":
-            scan = Scan(n_tx=1)  # dummy n_tx
-        else:
-            scan = None
+        scan = Scan(n_tx=1)
 
-    is_in_house_dataset = scan.n_tx and data_type != "data/image_3D"
+    is_in_house_dataset = scan.n_tx and data_type == "data/raw_data"
     if is_in_house_dataset:  # TODO: does echonet still work?
         log.info("Assuming the data file is from the in-house dataset!")
         _type = "unfocused" if type == "diverging" else type
