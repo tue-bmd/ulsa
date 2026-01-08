@@ -22,10 +22,8 @@ diffusion_inference:
 
 io_config:
   plot_step_overview: false
-  plot_frame_overview: false
   plot_frames_for_presentation: true
   save_target_img: false
-  save_animation: true
   scan_convert: true
   scan_conversion_angles: [-45, 45]
   frame_cutoff: 100

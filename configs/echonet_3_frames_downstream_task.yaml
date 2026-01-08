@@ -13,7 +13,7 @@ diffusion_inference:
   run_dir: hf://zeahub/ulsa
   num_steps: 500
   initial_step: 450 # [0, num_steps]
-  batch_size: 4 # posterior samples
+  batch_size: 2 # posterior samples
   guidance_kwargs:
     omega: 10
   reconstruction_method: "choose_first" # "choose_first" | "maximum_likelihood" | "mean"
@@ -21,10 +21,8 @@ diffusion_inference:
 
 io_config:
   plot_step_overview: false
-  plot_frame_overview: false
   plot_frames_for_presentation: true
   save_target_img: false
-  save_animation: true
   scan_convert: true
   scan_conversion_angles: [-45, 45]
   frame_cutoff: 50

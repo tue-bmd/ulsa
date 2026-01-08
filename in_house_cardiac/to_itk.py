@@ -1,3 +1,5 @@
+"""Convert npz reconstructions to ITK format for annotation in ITK-SNAP."""
+
 import numpy as np
 import SimpleITK as sitk
 
@@ -26,7 +28,7 @@ def npz_to_itk(npz_path, itk_path, dynamic_range="file", resolution=0.3):
     if dynamic_range == "file":
         dynamic_range = data["dynamic_range"]
     elif dynamic_range == "auto":
-        dynamic_range = auto_dynamic_range(reconstuctions, low_pct=44, high_pct=99.99)
+        dynamic_range = auto_dynamic_range(reconstuctions)
 
     if dynamic_range is not None:
         reconstuctions = np.clip(reconstuctions, dynamic_range[0], dynamic_range[1])
@@ -50,12 +52,4 @@ def npz_to_itk(npz_path, itk_path, dynamic_range="file", resolution=0.3):
     sitk.WriteImage(
         sitk.GetImageFromArray(reconstuctions),
         itk_path,  # .nii.gz extension for compression
-    )
-
-
-if __name__ == "__main__":
-    npz_to_itk(
-        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/20251222_s2_a4ch_line_dw_0000/diverging.npz",
-        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/20251222_s2_a4ch_line_dw_0000/diverging.nii.gz",
-        dynamic_range=None,
     )

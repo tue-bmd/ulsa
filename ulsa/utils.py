@@ -12,24 +12,6 @@ from ulsa.pipeline import beamforming
 from zea import Scan
 
 
-def select_transmits_from_pfield(pfield, transmits):
-    # pfield: (n_tx, grid_size_z, grid_size_x)
-    # transmits: (n_indices, c) -- indices into n_tx
-    # Output: (grid_size_z, grid_size_x, c)
-
-    # Gather for each column in transmits
-    def gather_column(transmits):
-        # transmits: (n_indices,)
-        return pfield[transmits, :, :]  # (n_indices, grid_size_z, grid_size_x)
-
-    # Apply over columns of transmits
-    gathered = jax.vmap(gather_column, out_axes=-1)(transmits.T)
-    # gathered: (n_indices, grid_size_z, grid_size_x, c)
-
-    output = ops.sum(gathered, axis=0)  # (grid_size_z, grid_size_x, c)
-    return output
-
-
 def round_cm_down(x):
     """Round down to the nearest centimeter."""
     return np.floor(x * 100) / 100

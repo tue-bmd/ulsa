@@ -104,13 +104,11 @@ from ulsa import selection  # need to import this to update action selection reg
 from ulsa.agent import Agent, AgentConfig, AgentState, hard_projection, setup_agent
 from ulsa.downstream_task import downstream_task_registry
 from ulsa.io_utils import (
-    animate_overviews,
     make_save_dir,
     map_range,
     plot_belief_distribution_for_presentation,
     plot_downstream_task_beliefs,
     plot_downstream_task_output_for_presentation,
-    plot_frame_overview,
     plot_frames_for_presentation,
 )
 from ulsa.ops import lines_rx_apo
@@ -547,39 +545,6 @@ def save_results(
     log.info(f"Run dir created at {log.yellow(run_dir)}")
 
     compute_metrics(results, agent)
-
-    # TODO: maybe more io_config to script args? Since this isn't relevant to benchmarking
-    if agent_config.io_config.plot_frame_overview:
-        postprocess_fn = lambda x: ops.cast(
-            map_range(x, agent.input_range, (0, 255)), dtype="uint8"
-        )
-
-        for frame_index, (target, recon, beliefs, mask, dst_out) in enumerate(
-            zip(
-                results.target_imgs,
-                results.reconstructions,
-                results.belief_distributions,
-                results.masks,
-                reconstructions_dst,
-            )
-        ):
-            plot_frame_overview(
-                run_dir,
-                frame_index,
-                postprocess_fn(target),
-                postprocess_fn(recon),
-                ops.abs(target - recon),
-                agent_config.io_config,
-                images_from_posterior=postprocess_fn(beliefs),
-                mask=mask,
-                **(
-                    {downstream_task.output_type(): dst_out}
-                    if dst_out is not None
-                    else {}
-                ),
-            )
-        if agent_config.io_config.save_animation:
-            animate_overviews(run_dir, agent_config.io_config)
 
     if agent_config.io_config.plot_frames_for_presentation:
         postfix_filename = Path(dataset_path).stem
