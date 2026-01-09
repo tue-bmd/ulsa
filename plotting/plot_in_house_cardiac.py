@@ -42,10 +42,9 @@ def _init_grid(
     n_rows,
     grid_columns=3,
     wspace=0.04,
-    wspace_inner=-0.1,
     hspace=0.07,
-    hspace_inner=0.02,
-    inner_grid_shape=(2, 2),
+    left_margin=0.0,
+    right_margin=1.0,
 ):
     fig = plt.figure(figsize=(7.16, 1.6 * n_rows))
 
@@ -56,26 +55,14 @@ def _init_grid(
         figure=fig,
         wspace=wspace,
         hspace=hspace,
-        left=0.0,
-        right=1.0,
-        top=0.88,  # <1.0 to leave space for titles
+        left=left_margin,
+        right=right_margin,
+        top=0.95,  # <1.0 to leave space for titles
         bottom=0.0,
-        width_ratios=[1.0, 1.0, 1.5],
+        width_ratios=[1.0, 1.0, 1.45],
     )
 
-    inner_grids = []
-    for row_idx in range(n_rows):
-        offset = row_idx * grid_shape[1]
-        inner = gridspec.GridSpecFromSubplotSpec(
-            *inner_grid_shape,
-            subplot_spec=outer[offset + 2],
-            width_ratios=[2, 1],
-            height_ratios=[1, 1],
-            wspace=wspace_inner,
-            hspace=hspace_inner * inner_grid_shape[0],
-        )
-        inner_grids.append(inner)
-    return fig, outer, inner_grids
+    return fig, outer
 
 
 def _load_from_run_dir(
@@ -255,8 +242,10 @@ def plot_from_npz(
         )
 
     with plt.style.context([context, {"figure.constrained_layout.use": False}]):
-        fig, outer, inner_grids = _init_grid(1)
-        inner = inner_grids[0]
+        fig, outer = _init_grid(1)
+        wspace_inner = -0.1
+        hspace_inner = 0.02
+        inner_grid_shape = (2, 2)
 
         ax = fig.add_subplot(outer[0])
         ax.imshow(focused[frame_idx], **imshow_kwargs)
@@ -269,6 +258,15 @@ def plot_from_npz(
         ax.axis("off")
         if arrow is not None:
             ax.add_patch(copy.copy(arrow))
+
+        inner = gridspec.GridSpecFromSubplotSpec(
+            *inner_grid_shape,
+            subplot_spec=outer[2],
+            width_ratios=[2, 1],
+            height_ratios=[1, 1],
+            wspace=wspace_inner,
+            hspace=hspace_inner * inner_grid_shape[0],
+        )
 
         ax_big = fig.add_subplot(inner[:, 0])
         ax_big.imshow(reconstructions[frame_idx], **imshow_kwargs)
@@ -300,7 +298,7 @@ def plot_from_npz(
 
 def get_arrow(
     x_tip=880,
-    y_tip=700,
+    y_tip=650,
     length=310,
     angle_deg=-20 + 90,
 ):
@@ -361,11 +359,14 @@ def stack_plot_from_npz(
     if context is None:
         context = "styles/darkmode.mplstyle"
 
-    with plt.style.context(context):
+    with plt.style.context([context, {"figure.constrained_layout.use": False}]):
         grid_columns = 3
+        wspace_inner = -0.1
+        hspace_inner = 0.02
+        inner_grid_shape = (2, 2)
         # left_margin = 0.08 if ylabels is not None else 0.0
-        fig, outer_grids, inner_grids = _init_grid(
-            len(run_dirs), grid_columns=grid_columns
+        fig, outer = _init_grid(
+            len(run_dirs), grid_columns=grid_columns, left_margin=0.03
         )
         for row_idx, run_dir in enumerate(run_dirs):
             (
@@ -384,14 +385,9 @@ def stack_plot_from_npz(
                 scan_convert_resolution=scan_convert_resolution,
             )
 
-            outer = [
-                outer_grids[idx]
-                for idx in range(row_idx * grid_columns, (row_idx + 1) * grid_columns)
-            ]
-            inner = inner_grids[row_idx]
             arrow = arrows[row_idx] if arrows is not None else None
 
-            ax = fig.add_subplot(outer[0])
+            ax = fig.add_subplot(outer[row_idx, 0])
             ax.imshow(focused[frame_idx], **imshow_kwargs)
             if row_idx == 0:
                 ax.set_title(f"Focused")
@@ -405,16 +401,25 @@ def stack_plot_from_npz(
                 ax.spines["left"].set_visible(False)
             else:
                 ax.axis("off")
-            tilted_text(ax, f"({n_possible_actions})")
+            tilted_text(ax, f"{n_possible_actions} transmits")
 
-            ax = fig.add_subplot(outer[1])
+            ax = fig.add_subplot(outer[row_idx, 1])
             ax.imshow(diverging[frame_idx], **imshow_kwargs)
             if row_idx == 0:
                 ax.set_title("Diverging")
             ax.axis("off")
             if arrow is not None:
                 ax.add_patch(copy.copy(arrow))
-            tilted_text(ax, f"(11)")
+            tilted_text(ax, "11 transmits")
+
+            inner = gridspec.GridSpecFromSubplotSpec(
+                *inner_grid_shape,
+                subplot_spec=outer[row_idx, 2],
+                width_ratios=[2, 1],
+                height_ratios=[1, 1],
+                wspace=wspace_inner,
+                hspace=hspace_inner * inner_grid_shape[0],
+            )
 
             ax_big = fig.add_subplot(inner[:, 0])
             ax_big.imshow(reconstructions[frame_idx], **imshow_kwargs)
@@ -423,7 +428,7 @@ def stack_plot_from_npz(
             ax_big.axis("off")
             if arrow is not None:
                 ax_big.add_patch(copy.copy(arrow))
-            tilted_text(ax_big, f"({n_actions}/{n_possible_actions})")
+            tilted_text(ax_big, f"{n_actions}/{n_possible_actions} transmits")
 
             ax_bottom = fig.add_subplot(inner[1, 1])
             ax_bottom.imshow(measurements[frame_idx], **imshow_kwargs)
