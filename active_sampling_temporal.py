@@ -115,7 +115,6 @@ from ulsa.ops import lines_rx_apo
 from ulsa.pipeline import make_pipeline
 from ulsa.utils import update_scan_for_polar_grid
 from zea import File, Pipeline, Scan, log, set_data_paths
-from zea.agent.masks import k_hot_to_indices
 from zea.func import func_with_one_batch_dim, vmap
 from zea.metrics import Metrics
 from zea.utils import FunctionTimer
@@ -404,6 +403,7 @@ def active_sampling_single_file(
     override_config=None,
     jit_mode="recover",
     return_timings=False,
+    map_type="vmap",
     **kwargs,
 ):
     data_paths = set_data_paths("users.yaml", local=False)
@@ -457,6 +457,7 @@ def active_sampling_single_file(
         agent_config,
         seed=jax.random.PRNGKey(seed),
         jit_mode=jit_mode,
+        map_type=map_type,
     )
 
     pipeline = make_pipeline(
