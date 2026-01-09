@@ -2,9 +2,9 @@ action_selection:
   n_possible_actions: 48
   n_actions: 8
   shape: [400, 48]
-  selection_strategy: "uniform_random"
+  selection_strategy: "greedy_entropy" # "uniform_random"
   kwargs:
-    average_across_batch: false
+    average_entropy_across_batch: true
   
 downstream_task: null
 is_3d: true # maybe more elegant way to handle this

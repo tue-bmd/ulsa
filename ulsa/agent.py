@@ -17,7 +17,7 @@ from ulsa.selection import (
     GreedyVariance,
     selector_from_name,
 )
-from zea import set_data_paths
+from zea import log, set_data_paths
 from zea.agent.selection import (
     CovarianceSamplingLines,
     EquispacedLines,
@@ -37,6 +37,12 @@ class Cfg:
     def get(self, key, default=None):
         return getattr(self, key, default)
 
+    def copy(self):
+        """Return a deep copy of this AgentConfig."""
+        from copy import deepcopy
+
+        return deepcopy(self)
+
     def update_recursive(self, dictionary: dict | None = None, **kwargs):
         if dictionary is None:
             dictionary = {}
@@ -47,6 +53,67 @@ class Cfg:
                 attr.update_recursive(value)
             else:
                 setattr(self, key, value)
+
+    def update_config_value_from_key_path(self, key_path: str, value):
+        """
+        Given a key path like 'a.b.c' and value X, sets self.a.b.c = X.
+
+        Args:
+            key_path: String of dot-separated keys (e.g. 'action_selection.selection_strategy')
+            value: Value to set at the specified path
+
+        Raises:
+            AttributeError: If any part of the key path doesn't exist
+        """
+        key_chain = key_path.split(".")
+        ref = self
+
+        # Traverse to the parent of the final attribute
+        for key in key_chain[:-1]:
+            if not hasattr(ref, key):
+                raise AttributeError(
+                    f"Config path '{key_path}' is invalid: '{key}' not found"
+                )
+            ref = getattr(ref, key)
+
+        # Set the final attribute
+        final_key = key_chain[-1]
+        if not hasattr(ref, final_key):
+            raise AttributeError(
+                f"Config path '{key_path}' is invalid: '{final_key}' not found"
+            )
+        setattr(ref, final_key, value)
+
+    def as_dict(self):
+        """Convert this Cfg dataclass to a dictionary (recursively)."""
+        from dataclasses import fields
+
+        result = {}
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if isinstance(value, Cfg):
+                result[f.name] = value.as_dict()
+            elif isinstance(value, Config):
+                result[f.name] = value.as_dict()
+            elif isinstance(value, list):
+                result[f.name] = [
+                    v.as_dict() if isinstance(v, (Cfg, Config)) else v for v in value
+                ]
+            else:
+                result[f.name] = value
+        return result
+
+    def save_to_yaml(self, path):
+        """Save config contents to yaml."""
+        import yaml
+
+        with open(Path(path), "w", encoding="utf-8") as save_file:
+            yaml.dump(
+                self.as_dict(),
+                save_file,
+                default_flow_style=False,
+                sort_keys=False,
+            )
 
 
 @dataclass
@@ -480,14 +547,14 @@ def setup_agent(
         n_possible_actions=agent_config.action_selection.n_possible_actions,
         img_height=img_height,
         img_width=img_width,
-        **agent_config.action_selection.get("kwargs", {}),
+        **agent_config.action_selection.kwargs,
     )
     initial_action_selection = action_selection_wrapper(
         get_initial_action_selection_fn(action_selector),
-        is_3d=agent_config.get("is_3d", False),
+        is_3d=agent_config.is_3d,
     )
     action_selection = action_selection_wrapper(
-        action_selector, is_3d=agent_config.get("is_3d", False)
+        action_selector, is_3d=agent_config.is_3d
     )
 
     pre_action = keras.layers.CenterCrop(
@@ -508,10 +575,12 @@ def setup_agent(
     )
 
     if jit_mode is None:
-        print(
-            "JIT is off, this is useful for debugging but slow for general use! "
-            "Cosider setting jit_mode to 'posterior_sample' such that atleast "
-            "the diffusion model is JIT compiled."
+        log.info(
+            log.red(
+                "JIT is off, this is useful for debugging but slow for general use! "
+                "Cosider setting jit_mode to 'posterior_sample' such that atleast "
+                "the diffusion model is JIT compiled."
+            )
         )
 
     if jit_mode == "posterior_sample":

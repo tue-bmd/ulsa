@@ -84,6 +84,7 @@ import logging
 from collections import defaultdict
 from itertools import product
 from pathlib import Path
+from typing import List
 
 import jax
 import keras
@@ -192,7 +193,7 @@ def update_config_value(base_config: Config, key_path: str, value):
     return updated_config
 
 
-def setup_sweep(agent_config: Config, sweep_params):
+def setup_sweep(agent_config: AgentConfig, sweep_params) -> List[AgentConfig]:
     """Sets up sweep configurations as cross product of all parameter combinations
 
     Args:
@@ -208,12 +209,13 @@ def setup_sweep(agent_config: Config, sweep_params):
     param_values = list(sweep_params.values())
 
     # Generate all combinations
-    sweep_configs = []
+    sweep_configs: List[AgentConfig] = []
     for value_combination in product(*param_values):
         config = agent_config.copy()
         # Apply each parameter value in the combination
         for param_path, value in zip(param_paths, value_combination):
-            config = update_config_value(config, param_path, value)
+            # config = update_config_value(config, param_path, value)
+            config.update_config_value_from_key_path(key_path=param_path, value=value)
         sweep_configs.append(config)
 
     # Update sweep details to include all parameters
@@ -251,7 +253,7 @@ def get_target_files(target_dir, limit=None):
 
 
 def benchmark(
-    agent_config: Config,
+    agent_config: AgentConfig,
     dataset: Dataset,
     dynamic_range: tuple,
     file_indices=None,
@@ -316,7 +318,7 @@ def benchmark(
     all_metrics_results = []
     for i, file_index in enumerate(file_indices):
         file = dataset[file_index]
-        target_sequence, scan, _ = preload_data(file, n_frames, dataset.key)
+        target_sequence, scan = preload_data(file, n_frames, dataset.key)
         scan.dynamic_range = dynamic_range
 
         if circle_augmentation is not None:
@@ -324,11 +326,7 @@ def benchmark(
             target_sequence, centers = circle_augmentation(target_sequence, seed=seed_1)
 
         # 3d batch
-        batch_size = (
-            None
-            if agent_config.get("is_3d", None) is None
-            else ops.shape(target_sequence)[2]
-        )
+        batch_size = ops.shape(target_sequence)[2] if agent_config.is_3d else None
         state = reset_agent_state(agent, seed, batch_size=batch_size)
         results = run_active_sampling(
             agent,
@@ -354,7 +352,10 @@ def benchmark(
 
         denormalized = results.to_uint8(agent.input_range)
         metrics_results = metrics(
-            denormalized.target_imgs, denormalized.reconstructions, average_batch=False
+            denormalized.target_imgs,
+            denormalized.reconstructions,
+            average_batch=False,
+            batch_size=84,  # to avoid OOM on LPIPS
         )
         all_metrics_results.append(metrics_results)
         if circle_augmentation is not None:

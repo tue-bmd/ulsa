@@ -3,9 +3,8 @@ action_selection:
   n_actions: 7
   shape: [112, 112]
   selection_strategy: "greedy_entropy" # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
-  kwargs: {}
 
-downstream_task: "echonet_segmentation"
+downstream_task: null # "echonet_segmentation"
 
 diffusion_inference:
   # run_dir: "{output_dir}/ddim/2025_02_26_160545_ddim_train_echonet_112_3_frames/hub"
@@ -30,6 +29,6 @@ io_config:
   reconstruction_sharpness_std: 0.025
 
 data:
-  target_sequence: "{data_root}/USBMD_datasets/echonet_legacy/val/0X10A5FC19152B50A5.hdf5"
+  target_sequence: "{data_root}/USBMD_datasets/_LEGACY/echonet_legacy/val/0X10A5FC19152B50A5.hdf5"
   data_type: data/image
   image_range: [-60, 0]

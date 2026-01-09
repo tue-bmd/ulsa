@@ -124,7 +124,13 @@ if __name__ == "__main__":
     args = parse_args()
     keras.mixed_precision.set_global_policy("float32")  # echonet-dynamic uses float32
 
-    TARGET_DIR = data_paths.data_root / "USBMD_datasets" / "echonet_legacy" / args.split
+    TARGET_DIR = (
+        data_paths.data_root
+        / "USBMD_datasets"
+        / "_LEGACY"
+        / "echonet_legacy"
+        / args.split
+    )
 
     ulsa_agent_config = AgentConfig.from_yaml("/ulsa/configs/echonet_3_frames.yaml")
 
@@ -135,7 +141,7 @@ if __name__ == "__main__":
         sweep_params={
             "action_selection.n_actions": args.n_actions,
             "action_selection.selection_strategy": args.selection_strategy,
-            "diffusion_inference.batch_size": [4],
+            "diffusion_inference.batch_size": [2],
             "downstream_task": ["echonet_segmentation"],  # just runs additionally
         },
         limit_n_samples=args.limit_n_samples,  # set to None to use all samples
