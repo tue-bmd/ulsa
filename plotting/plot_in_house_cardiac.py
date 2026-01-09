@@ -30,6 +30,13 @@ from skimage.exposure import match_histograms
 from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_side_gif
 
+imshow_kwargs = {
+    "vmin": 0,
+    "vmax": 255,
+    "cmap": "gray",
+    "interpolation": "nearest",
+}
+
 
 def _init_grid(
     n_rows,
@@ -53,7 +60,7 @@ def _init_grid(
         right=1.0,
         top=0.88,  # <1.0 to leave space for titles
         bottom=0.0,
-        width_ratios=[1.0, 1.0, 1.42],
+        width_ratios=[1.0, 1.0, 1.5],
     )
 
     inner_grids = []
@@ -69,66 +76,6 @@ def _init_grid(
         )
         inner_grids.append(inner)
     return fig, outer, inner_grids
-
-
-def _build_row(
-    fig,
-    outer,
-    inner,
-    focused,
-    diverging,
-    reconstructions,
-    measurements,
-    entropy,
-    n_actions,
-    n_possible_actions,
-    frame_idx=0,
-    arrow=None,
-):
-    kwargs = {
-        "vmin": 0,
-        "vmax": 255,
-        "cmap": "gray",
-        "interpolation": "nearest",
-    }
-
-    ax = fig.add_subplot(outer[0])
-    ax.imshow(focused[frame_idx], **kwargs)
-    ax.set_title(f"Focused ({n_possible_actions})")
-    ax.axis("off")
-
-    ax = fig.add_subplot(outer[1])
-    ax.imshow(diverging[frame_idx], **kwargs)
-    ax.set_title("Diverging (11)")
-    ax.axis("off")
-    if arrow is not None:
-        ax.add_patch(copy.copy(arrow))
-
-    # ax = fig.add_subplot(outer[2])
-    # ax.axis("off")
-    # ax.set_title(f"Reconstruction ({n_actions}/{n_possible_actions})")
-
-    ax_big = fig.add_subplot(inner[:, 0])
-    ax_big.imshow(reconstructions[frame_idx], **kwargs)
-    ax_big.set_title(f"Reconstruction ({n_actions}/{n_possible_actions})")
-    ax_big.axis("off")
-    if arrow is not None:
-        ax_big.add_patch(copy.copy(arrow))
-
-    ax_bottom = fig.add_subplot(inner[1, 1])
-    ax_bottom.imshow(measurements[frame_idx], **kwargs)
-    # ax_top.set_title(f"Acquisitions ({n_actions}/{n_possible_actions})")
-    ax_bottom.axis("off")
-
-    ax_top = fig.add_subplot(inner[0, 1])
-    ax_top.imshow(
-        entropy,
-        cmap="inferno",
-        vmin=0,
-        vmax=255,
-        interpolation="nearest",
-    )
-    ax_top.axis("off")
 
 
 def _load_from_run_dir(
@@ -194,6 +141,7 @@ def _load_from_run_dir(
         image_range=dynamic_range,
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
+        distance_to_apex=7.0,  # pixels
     )
     print("Postprocessing diverging...")
     diverging = postprocess_agent_results(
@@ -203,6 +151,7 @@ def _load_from_run_dir(
         image_range=dynamic_range,
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
+        distance_to_apex=7.0,  # pixels
     )
     print("Postprocessing reconstructions...")
     reconstructions = postprocess_agent_results(
@@ -213,6 +162,7 @@ def _load_from_run_dir(
         reconstruction_sharpness_std=0.02,
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
+        distance_to_apex=7.0,  # pixels
     )
     print("Postprocessing measurements...")
     measurements = postprocess_agent_results(
@@ -222,6 +172,7 @@ def _load_from_run_dir(
         image_range=reconstruction_range,
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
+        distance_to_apex=7.0,  # pixels
     )
 
     print("Postprocessing entropy...")
@@ -236,6 +187,7 @@ def _load_from_run_dir(
         image_range=[0, jnp.nanpercentile(entropy, 98.5)],
         fill_value="transparent",
         scan_convert_resolution=scan_convert_resolution,
+        distance_to_apex=7.0,  # pixels
     )
 
     return (
@@ -306,20 +258,38 @@ def plot_from_npz(
         fig, outer, inner_grids = _init_grid(1)
         inner = inner_grids[0]
 
-        _build_row(
-            fig,
-            outer,
-            inner,
-            focused,
-            diverging,
-            reconstructions,
-            measurements,
+        ax = fig.add_subplot(outer[0])
+        ax.imshow(focused[frame_idx], **imshow_kwargs)
+        ax.set_title(f"Focused ({n_possible_actions})")
+        ax.axis("off")
+
+        ax = fig.add_subplot(outer[1])
+        ax.imshow(diverging[frame_idx], **imshow_kwargs)
+        ax.set_title("Diverging (11)")
+        ax.axis("off")
+        if arrow is not None:
+            ax.add_patch(copy.copy(arrow))
+
+        ax_big = fig.add_subplot(inner[:, 0])
+        ax_big.imshow(reconstructions[frame_idx], **imshow_kwargs)
+        ax_big.set_title(f"Reconstruction ({n_actions}/{n_possible_actions})")
+        ax_big.axis("off")
+        if arrow is not None:
+            ax_big.add_patch(copy.copy(arrow))
+
+        ax_bottom = fig.add_subplot(inner[1, 1])
+        ax_bottom.imshow(measurements[frame_idx], **imshow_kwargs)
+        ax_bottom.axis("off")
+
+        ax_top = fig.add_subplot(inner[0, 1])
+        ax_top.imshow(
             entropy,
-            n_actions,
-            n_possible_actions,
-            frame_idx=frame_idx,
-            arrow=arrow,
+            cmap="inferno",
+            vmin=0,
+            vmax=255,
+            interpolation="nearest",
         )
+        ax_top.axis("off")
 
         for ext in exts:
             plt.savefig(plot_path.with_suffix(ext))
@@ -361,6 +331,19 @@ def get_arrow(
     )
 
 
+def tilted_text(ax, text, fontsize=7, rotation=45, color="gray", **kwargs):
+    ax.text(
+        0.0,  # left=0.0
+        0.5,  # upper=1.0
+        text,
+        transform=ax.transAxes,
+        fontsize=fontsize,
+        rotation=rotation,
+        color=color,
+        **kwargs,
+    )
+
+
 def stack_plot_from_npz(
     run_dirs: list,
     plot_dir: str | Path,
@@ -368,6 +351,7 @@ def stack_plot_from_npz(
     context=None,
     frame_indices: list | None = None,
     arrows: list | None = None,
+    ylabels: list | None = None,
     scan_convert_resolution=0.1,
     selection_strategy="greedy_entropy",
 ):
@@ -379,7 +363,10 @@ def stack_plot_from_npz(
 
     with plt.style.context(context):
         grid_columns = 3
-        fig, outer, inner_grids = _init_grid(len(run_dirs), grid_columns=grid_columns)
+        # left_margin = 0.08 if ylabels is not None else 0.0
+        fig, outer_grids, inner_grids = _init_grid(
+            len(run_dirs), grid_columns=grid_columns
+        )
         for row_idx, run_dir in enumerate(run_dirs):
             (
                 focused,
@@ -397,24 +384,60 @@ def stack_plot_from_npz(
                 scan_convert_resolution=scan_convert_resolution,
             )
 
-            outer_row = [
-                outer[idx]
+            outer = [
+                outer_grids[idx]
                 for idx in range(row_idx * grid_columns, (row_idx + 1) * grid_columns)
             ]
-            _build_row(
-                fig,
-                outer_row,
-                inner_grids[row_idx],
-                focused,
-                diverging,
-                reconstructions,
-                measurements,
+            inner = inner_grids[row_idx]
+            arrow = arrows[row_idx] if arrows is not None else None
+
+            ax = fig.add_subplot(outer[0])
+            ax.imshow(focused[frame_idx], **imshow_kwargs)
+            if row_idx == 0:
+                ax.set_title(f"Focused")
+            if ylabels is not None and row_idx < len(ylabels):
+                ax.set_ylabel(ylabels[row_idx])
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.spines["bottom"].set_visible(False)
+                ax.spines["left"].set_visible(False)
+            else:
+                ax.axis("off")
+            tilted_text(ax, f"({n_possible_actions})")
+
+            ax = fig.add_subplot(outer[1])
+            ax.imshow(diverging[frame_idx], **imshow_kwargs)
+            if row_idx == 0:
+                ax.set_title("Diverging")
+            ax.axis("off")
+            if arrow is not None:
+                ax.add_patch(copy.copy(arrow))
+            tilted_text(ax, f"(11)")
+
+            ax_big = fig.add_subplot(inner[:, 0])
+            ax_big.imshow(reconstructions[frame_idx], **imshow_kwargs)
+            if row_idx == 0:
+                ax_big.set_title(f"Reconstruction")
+            ax_big.axis("off")
+            if arrow is not None:
+                ax_big.add_patch(copy.copy(arrow))
+            tilted_text(ax_big, f"({n_actions}/{n_possible_actions})")
+
+            ax_bottom = fig.add_subplot(inner[1, 1])
+            ax_bottom.imshow(measurements[frame_idx], **imshow_kwargs)
+            ax_bottom.axis("off")
+
+            ax_top = fig.add_subplot(inner[0, 1])
+            ax_top.imshow(
                 entropy,
-                n_actions,
-                n_possible_actions,
-                frame_idx=frame_idx,
-                arrow=arrows[row_idx] if arrows is not None else None,
+                cmap="inferno",
+                vmin=0,
+                vmax=255,
+                interpolation="nearest",
             )
+            ax_top.axis("off")
 
         for ext in exts:
             plt.savefig(plot_path.with_suffix(ext))
@@ -436,12 +459,14 @@ if __name__ == "__main__":
     harmonic_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/20251222_s3_a4ch_line_dw_0000"
     frame_indices = [24, 68]
     arrows = [get_arrow(), None]
+    ylabels = ["Fundamental", "Harmonic"]
     stack_plot_from_npz(
         [fundamental_file, harmonic_file],
         "output/in_house_cardiac",
         context="styles/ieee-tmi.mplstyle",
         frame_indices=frame_indices,
         arrows=arrows,
+        ylabels=ylabels,
         selection_strategy="greedy_entropy",
         scan_convert_resolution=0.1,
     )
