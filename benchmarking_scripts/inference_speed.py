@@ -26,6 +26,12 @@ def parse_args():
         help="Benchmark case to run.",
     )
     parser.add_argument(
+        "--n_frames",
+        type=int,
+        default=100,
+        help="Number of frames to time.",
+    )
+    parser.add_argument(
         "--drop_n_frames",
         type=int,
         default=3,
@@ -44,7 +50,7 @@ if __name__ == "__main__":
             "initial_step": 475,
         },
         "io_config": {
-            "frame_cutoff": 20,
+            "frame_cutoff": args.n_frames,
         },
     }
 
@@ -75,6 +81,8 @@ if __name__ == "__main__":
     fps = len(timings) / total_time
     frame_time_ms = 1000 / fps
 
+    print("-" * 30)
     print(f"Case {args.case}")
-    print(f"Frame freq.: {fps:.2f} Hz")
     print(f"Frame time: {frame_time_ms:.1f} ms")
+    print(f"Frame freq.: {fps:.2f} Hz")
+    print("-" * 30)
