@@ -1,5 +1,5 @@
 # Inherit from zea base image
-FROM zeahub/all:latest
+FROM zeahub/all:v0.0.9
 
 # Install latex and fonts
 # https://stackoverflow.com/questions/37920935/matplotlib-cant-find-font-installed-in-my-linux-machine
