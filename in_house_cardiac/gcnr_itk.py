@@ -90,7 +90,10 @@ def visualize_masks(images, valve, myocardium, ventricle, filepath, fps=10):
 
 @cache_output(verbose=True)
 def load_results():
-    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac_v3/")
+    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/")
+    ANNOTATION_ROOT = Path(
+        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic_annotations/"
+    )
 
     subjects = [
         "20251222_s1_a4ch_line_dw_0000",
@@ -126,7 +129,9 @@ def load_results():
                 fill_value=images.min(),
             )
 
-            masks = sitk.ReadImage(DATA_ROOT / subject / "focused_annotated.nii.gz")
+            masks = sitk.ReadImage(
+                ANNOTATION_ROOT / subject / "focused_annotated.nii.gz"
+            )
             masks = sitk.GetArrayFromImage(masks)
             masks = masks[skip_first_n_frames:]
 
