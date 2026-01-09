@@ -26,13 +26,6 @@ def parse_args():
         help="Path to agent config yaml.",
     )
     parser.add_argument(
-        "--backend",
-        type=str,
-        default="jax",
-        help="ML backend to use",
-        choices=["tensorflow", "torch", "jax"],
-    )
-    parser.add_argument(
         "--target_sequence",
         type=str,
         default=None,
@@ -83,7 +76,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    os.environ["KERAS_BACKEND"] = args.backend
+    os.environ["KERAS_BACKEND"] = "jax"
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     from zea import init_device
 

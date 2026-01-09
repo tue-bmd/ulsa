@@ -21,7 +21,7 @@ def parse_args():
     parser.add_argument(
         "--case",
         type=int,
-        choices=[1, 2, 3, 4, 5],
+        choices=[1, 2, 3, 4],
         required=True,
         help="Benchmark case to run.",
     )
