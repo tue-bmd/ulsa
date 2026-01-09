@@ -332,7 +332,6 @@ def benchmark(
             agent,
             state,
             target_sequence,
-            agent_config.action_selection.n_actions,
             pipeline,
             scan,
             hard_project=agent_config.diffusion_inference.hard_project,

@@ -406,7 +406,7 @@ def setup_agent(
     agent_config: AgentConfig,
     seed,
     batch_size=None,
-    jit_mode="recover",  # recover or posterior_sample
+    jit_mode="recover",  # recover or posterior_sample or guidance
     model=None,
 ) -> Tuple[Agent, AgentState]:
     """
@@ -425,7 +425,7 @@ def setup_agent(
             model_path,
             guidance={
                 "name": guidance_method,
-                "params": {"disable_jit": True},
+                "params": {"disable_jit": jit_mode != "guidance"},
             },  # we jit later
             operator=get_operator_dict(agent_config),
         )

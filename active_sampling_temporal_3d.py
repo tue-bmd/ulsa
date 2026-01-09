@@ -348,7 +348,6 @@ if __name__ == "__main__":
         agent,
         agent_state,
         validation_sample_frames,
-        n_actions=agent_config.action_selection.n_actions,
         pipeline=pipeline,
         hard_project=agent_config.diffusion_inference.hard_project,
     )
