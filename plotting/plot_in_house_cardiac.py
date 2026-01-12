@@ -28,7 +28,7 @@ from matplotlib.patches import FancyArrowPatch
 from skimage.exposure import match_histograms
 
 from ulsa.entropy import pixelwise_entropy
-from ulsa.io_utils import color_to_value, postprocess_agent_results, side_by_side_gif
+from ulsa.io_utils import color_to_value, postprocess_agent_results
 
 imshow_kwargs = {
     "vmin": 0,
@@ -189,113 +189,6 @@ def _load_from_run_dir(
     )
 
 
-def plot_from_npz(
-    run_dir: Path | str,
-    plot_dir: Path | str,
-    exts=(".png", ".pdf"),
-    gif=True,
-    gif_fps=8,
-    context=None,
-    frame_idx=24,
-    arrow=None,
-    dynamic_range=None,
-    scan_convert_resolution=0.1,
-    selection_strategy="greedy_entropy",
-):
-    (
-        focused,
-        diverging,
-        reconstructions,
-        measurements,
-        entropy,
-        n_actions,
-        n_possible_actions,
-        frame_idx,
-    ) = _load_from_run_dir(
-        run_dir,
-        frame_idx=frame_idx,
-        selection_strategy=selection_strategy,
-        scan_convert_resolution=scan_convert_resolution,
-        dynamic_range=dynamic_range,
-    )
-
-    plot_dir = Path(plot_dir)
-    plot_path = plot_dir / selection_strategy
-
-    if context is None:
-        context = "styles/darkmode.mplstyle"
-
-    if gif:
-        print("Creating GIF...")
-        side_by_side_gif(
-            plot_path.with_suffix(".gif"),
-            focused,
-            reconstructions,
-            diverging,
-            labels=[
-                f"Focused ({n_possible_actions})",
-                f"Reconstruction ({n_actions}/{n_possible_actions})",
-                "Diverging (11)",
-            ],
-            context=context,
-            fps=gif_fps,
-        )
-
-    with plt.style.context([context, {"figure.constrained_layout.use": False}]):
-        fig, outer = _init_grid(1)
-        wspace_inner = -0.1
-        hspace_inner = 0.02
-        inner_grid_shape = (2, 2)
-
-        ax = fig.add_subplot(outer[0])
-        ax.imshow(focused[frame_idx], **imshow_kwargs)
-        ax.set_title(f"Focused ({n_possible_actions})")
-        ax.axis("off")
-
-        ax = fig.add_subplot(outer[1])
-        ax.imshow(diverging[frame_idx], **imshow_kwargs)
-        ax.set_title("Diverging (11)")
-        ax.axis("off")
-        if arrow is not None:
-            ax.add_patch(copy.copy(arrow))
-
-        inner = gridspec.GridSpecFromSubplotSpec(
-            *inner_grid_shape,
-            subplot_spec=outer[2],
-            width_ratios=[2, 1],
-            height_ratios=[1, 1],
-            wspace=wspace_inner,
-            hspace=hspace_inner * inner_grid_shape[0],
-        )
-
-        ax_big = fig.add_subplot(inner[:, 0])
-        ax_big.imshow(reconstructions[frame_idx], **imshow_kwargs)
-        ax_big.set_title(f"Reconstruction ({n_actions}/{n_possible_actions})")
-        ax_big.axis("off")
-        if arrow is not None:
-            ax_big.add_patch(copy.copy(arrow))
-
-        ax_bottom = fig.add_subplot(inner[1, 1])
-        ax_bottom.imshow(measurements[frame_idx], **imshow_kwargs)
-        ax_bottom.axis("off")
-
-        ax_top = fig.add_subplot(inner[0, 1])
-        ax_top.imshow(
-            entropy,
-            cmap="inferno",
-            vmin=0,
-            vmax=255,
-            interpolation="nearest",
-        )
-        ax_top.axis("off")
-
-        for ext in exts:
-            plt.savefig(plot_path.with_suffix(ext))
-            zea.log.info(
-                f"Saved cardiac reconstruction plot to {zea.log.yellow(plot_path.with_suffix(ext))}"
-            )
-
-
 def get_arrow(
     x_tip=880,
     y_tip=650,
@@ -369,6 +262,12 @@ def stack_plot_from_npz(
             len(run_dirs), grid_columns=grid_columns, left_margin=0.03
         )
         for row_idx, run_dir in enumerate(run_dirs):
+            is_fundamental = "fundamental" in str(run_dir)
+            is_harmonic = "harmonic" in str(run_dir)
+            assert is_fundamental or is_harmonic, (
+                "Run dir should contain 'fundamental' or 'harmonic' to identify modality."
+            )
+
             (
                 focused,
                 diverging,
@@ -384,6 +283,10 @@ def stack_plot_from_npz(
                 selection_strategy=selection_strategy,
                 scan_convert_resolution=scan_convert_resolution,
             )
+
+            if is_harmonic:
+                n_possible_actions *= 2
+                n_actions *= 2
 
             arrow = arrows[row_idx] if arrows is not None else None
 
@@ -410,7 +313,7 @@ def stack_plot_from_npz(
             ax.axis("off")
             if arrow is not None:
                 ax.add_patch(copy.copy(arrow))
-            tilted_text(ax, "11 transmits")
+            tilted_text(ax, f"{n_actions} transmits")
 
             inner = gridspec.GridSpecFromSubplotSpec(
                 *inner_grid_shape,
@@ -452,14 +355,6 @@ def stack_plot_from_npz(
 
 
 if __name__ == "__main__":
-    # plot_from_npz(
-    #     "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental/20240701_P1_A4CH_0001",
-    #     "output/in_house_cardiac",
-    #     context="styles/ieee-tmi.mplstyle",
-    #     arrow=get_arrow(),
-    #     gif=False,
-    # )
-
     fundamental_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental/20240701_P1_A4CH_0001"
     harmonic_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/20251222_s3_a4ch_line_dw_0000"
     frame_indices = [24, 68]
@@ -468,7 +363,7 @@ if __name__ == "__main__":
     stack_plot_from_npz(
         [fundamental_file, harmonic_file],
         "output/in_house_cardiac",
-        context="styles/ieee-tmi.mplstyle",
+        context="styles/darkmode.mplstyle",
         frame_indices=frame_indices,
         arrows=arrows,
         ylabels=ylabels,
