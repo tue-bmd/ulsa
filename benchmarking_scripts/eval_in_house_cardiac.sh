@@ -24,5 +24,6 @@ python benchmarking_scripts/eval_in_house_cardiac.py \
 python benchmarking_scripts/eval_in_house_cardiac.py \
     --save_dir "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/phantom/" \
     --files "/mnt/z/usbmd/Wessel/Verasonics/2025-11-18_zea/" \
-    --low_pct 18 \
-    --high_pct 95
+    --agent_config_path ./configs/cardiac_112_3_frames.yaml \
+    --low_pct 17 \
+    --high_pct 99.8
