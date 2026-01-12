@@ -1,3 +1,5 @@
+"""Simple script to calculate transmit time for ultrasound imaging."""
+
 depth = 15  # cm
 speed_of_sound = 1540  # m/s in soft tissue
 n_transmits = 112

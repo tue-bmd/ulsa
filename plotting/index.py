@@ -13,9 +13,6 @@ from ulsa.downstream_task import compute_dice_score
 from zea import Config, log
 from zea.internal.cache import cache_output
 
-DATA_ROOT = "/mnt/z/usbmd/Wessel/ulsa"
-DATA_FOLDER = Path(DATA_ROOT) / "eval_echonet_dynamic_test_set"
-
 
 @cache_output(verbose=True)
 def index_sweep_data(sweep_dirs: str | List[str]):

@@ -6,7 +6,6 @@ import numpy as np
 from keras import ops
 
 import zea
-from models.deeplabv3_segmenter import DeeplabV3Plus
 from ulsa.io_utils import deg2rad
 from zea.backend.autograd import AutoGrad
 from zea.display import compute_scan_convert_2d_coordinates, scan_convert_2d
