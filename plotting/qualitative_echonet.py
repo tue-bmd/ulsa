@@ -21,11 +21,12 @@ from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import color_to_value, postprocess_agent_results
 from zea import Config
 
-DATA_ROOT = "/mnt/z/usbmd/Wessel/ulsa"
+DATA_ROOT = "/mnt/z/usbmd/Wessel/ulsa/Np_2"
 DATA_FOLDER = Path(DATA_ROOT) / "eval_echonet_dynamic_test_set"
 SUBSAMPLED_PATHS = [
-    DATA_FOLDER / "sharding_sweep_2025-08-05_14-35-11",
-    DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
+    # DATA_FOLDER / "sharding_sweep_2025-08-05_14-35-11",
+    # DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
+    DATA_FOLDER / "sweep_2026_01_08_225505_654881"
 ]
 
 N_PATIENTS = 3

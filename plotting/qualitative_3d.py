@@ -38,7 +38,8 @@ plt.rcParams["axes.titlepad"] = 10.0  # default is 6.0
 
 # --- CONFIG ---
 data_root = Path(
-    "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_out/3d_test_3_frame/to_plot"
+    # "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_out/3d_test_3_frame/to_plot"
+    "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d_Np=2/qualitative"
 )
 n_patients = 3
 frame_idx = 4  # or whichever frame you want to visualize
