@@ -347,6 +347,7 @@ def postprocess_agent_results(
     reconstruction_sharpness_std=0.0,  # advise: 0.025
     fill_value="black",
     to_uint8=True,
+    **kwargs,
 ):
     """Postprocess agent results for visualization.
     Always return images in range [0, 255]."""
@@ -372,6 +373,7 @@ def postprocess_agent_results(
             order=scan_convert_order,
             fill_value=fill_value,
             resolution=scan_convert_resolution,
+            **kwargs,
         )
 
     # To uint8

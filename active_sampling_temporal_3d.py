@@ -19,13 +19,7 @@ def parse_args():
         default="./configs/elevation_3d.yaml",
         help="Path to agent config yaml.",
     )
-    parser.add_argument(
-        "--backend",
-        type=str,
-        default="jax",
-        help="ML backend to use",
-        choices=["tensorflow", "torch", "jax"],
-    )
+
     parser.add_argument(
         "--target_sequence",
         type=str,
@@ -85,7 +79,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    os.environ["KERAS_BACKEND"] = args.backend
+    os.environ["KERAS_BACKEND"] = "jax"
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     from zea import init_device
 
@@ -348,7 +342,6 @@ if __name__ == "__main__":
         agent,
         agent_state,
         validation_sample_frames,
-        n_actions=agent_config.action_selection.n_actions,
         pipeline=pipeline,
         hard_project=agent_config.diffusion_inference.hard_project,
     )

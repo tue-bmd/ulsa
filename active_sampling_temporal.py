@@ -26,13 +26,6 @@ def parse_args():
         help="Path to agent config yaml.",
     )
     parser.add_argument(
-        "--backend",
-        type=str,
-        default="jax",
-        help="ML backend to use",
-        choices=["tensorflow", "torch", "jax"],
-    )
-    parser.add_argument(
         "--target_sequence",
         type=str,
         default=None,
@@ -83,7 +76,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    os.environ["KERAS_BACKEND"] = args.backend
+    os.environ["KERAS_BACKEND"] = "jax"
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     from zea import init_device
 
@@ -115,9 +108,9 @@ from ulsa.ops import lines_rx_apo
 from ulsa.pipeline import make_pipeline
 from ulsa.utils import update_scan_for_polar_grid
 from zea import File, Pipeline, Scan, log, set_data_paths
-from zea.agent.masks import k_hot_to_indices
 from zea.func import func_with_one_batch_dim, vmap
 from zea.metrics import Metrics
+from zea.utils import FunctionTimer
 
 
 def simple_scan(f, init, xs, length=None, disable_tqdm=False):
@@ -216,13 +209,13 @@ def run_active_sampling(
     agent: Agent,
     agent_state: AgentState,
     target_sequence,
-    n_actions: int,
     pipeline: Pipeline = None,
     scan: Scan = None,
     hard_project=False,
     verbose=True,
     post_pipeline: Pipeline = None,
     bandwidth: float = 2e6,
+    return_timings=False,
 ) -> AgentResults:
     if verbose:
         log.info(log.blue("Running active sampling"))
@@ -308,18 +301,18 @@ def run_active_sampling(
     if verbose:
         print(f"Running active sampling for {len(target_sequence)} frames...")
 
+    if return_timings:
+        timer = FunctionTimer()
+        perception_action_step = timer(perception_action_step)
+
     # Initial recover -> full number of diffusion steps
     # Subsequent percetion_action uses SeqDiff
-    start_time = time.perf_counter()
     _, outputs = simple_scan(
         perception_action_step,
         agent_state,
         target_sequence,
         disable_tqdm=not verbose,
     )
-    fps = len(target_sequence) / (time.perf_counter() - start_time)
-    if verbose:
-        print("Done! FPS: ", fps)
 
     (
         reconstructions,
@@ -342,7 +335,7 @@ def run_active_sampling(
         )
         measurements = post_pipeline(data=measurements)["data"]
 
-    return AgentResults(
+    agent_results = AgentResults(
         masks,
         target_imgs,
         reconstructions,
@@ -350,6 +343,11 @@ def run_active_sampling(
         measurements,
         saliency_map,
     )
+
+    if not return_timings:
+        return agent_results
+    else:
+        return agent_results, timer.timings["perception_action_step"]
 
 
 def preload_data(
@@ -396,6 +394,9 @@ def active_sampling_single_file(
     image_range: tuple = "unset",  # Set to None for auto-dynamic range
     seed: int = 42,
     override_config=None,
+    jit_mode="recover",
+    return_timings=False,
+    map_type="vmap",
     **kwargs,
 ):
     data_paths = set_data_paths("users.yaml", local=False)
@@ -448,8 +449,8 @@ def active_sampling_single_file(
     agent, agent_state = setup_agent(
         agent_config,
         seed=jax.random.PRNGKey(seed),
-        jit_mode="recover",
-        # jit_mode=None,
+        jit_mode=jit_mode,
+        map_type=map_type,
     )
 
     pipeline = make_pipeline(
@@ -469,12 +470,15 @@ def active_sampling_single_file(
         agent,
         agent_state,
         validation_sample_frames,
-        n_actions=agent_config.action_selection.n_actions,
         pipeline=pipeline,
         scan=scan,
         hard_project=agent_config.diffusion_inference.hard_project,
         post_pipeline=post_pipeline,
+        return_timings=return_timings,
     )
+
+    if return_timings:
+        results, timings = results
 
     if agent_config.downstream_task is not None:
         downstream_task = downstream_task_registry[agent_config.downstream_task](
@@ -501,7 +505,7 @@ def active_sampling_single_file(
         reconstructions_dst = None
         beliefs_dst = None
 
-    return (
+    to_return = [
         results,
         downstream_task,
         targets_dst,
@@ -510,7 +514,10 @@ def active_sampling_single_file(
         agent,
         agent_config,
         dataset_path,
-    )
+    ]
+    if return_timings:
+        to_return.append(timings)
+    return tuple(to_return)
 
 
 def compute_metrics(results, agent, metric_keys=["lpips", "psnr"]):

@@ -32,7 +32,7 @@ def df_to_dict(df: pd.DataFrame, metric_name: str):
 
 
 def main():
-    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac/")
+    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental/")
     SAVE_DIR = Path("output/in_house_cardiac/")
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
     subjects = [

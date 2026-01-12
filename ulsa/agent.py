@@ -25,12 +25,9 @@ from zea.agent.selection import (
     LinesActionModel,
     UniformRandomLines,
 )
-from zea.backend import jit
 from zea.config import Config
 from zea.func import split_seed
 from zea.models.diffusion import DiffusionModel
-
-DEBUGGING = False
 
 
 class Cfg:
@@ -408,11 +405,24 @@ def setup_agent(
     batch_size=None,
     jit_mode="recover",  # recover or posterior_sample
     model=None,
+    map_type="vmap",
 ) -> Tuple[Agent, AgentState]:
     """
     Uses the parsed YAML config details stored in agent_config to initialise
     the functions in AgentConfig
     """
+
+    assert jit_mode in [None, "recover", "posterior_sample", "off"], (
+        f"Invalid jit_mode={jit_mode}"
+    )
+
+    if map_type == "map":
+        # NOTE: good for debugging!
+        map_fn = partial(zea.func.vmap, disable_jit=True)
+    elif map_type == "vmap":
+        map_fn = jax.vmap
+    else:
+        raise UserWarning(f"Invalid map_type={map_type}")
 
     if model is None:
         # 1: Set up perception model (posterior sampler)
@@ -421,7 +431,7 @@ def setup_agent(
 
         # NOTE: we now assume our posterior sampler to be a diffusion model, but other than this
         # setup function the code should be agnostic to this.
-        model = DiffusionModel.from_preset(
+        model: DiffusionModel = DiffusionModel.from_preset(
             model_path,
             guidance={
                 "name": guidance_method,
@@ -456,10 +466,21 @@ def setup_agent(
                     initial_samples, (n_part * n_batch, height, width, frame)
                 )
 
+        # First frame uses full diffusion steps, subsequent frames use SeqDiff
+        omega = agent_config.diffusion_inference.guidance_kwargs.omega
+        if initial_samples is not None:
+            # add dummy batch and particle dim
+            initial_samples = initial_samples[:, None, None]
+            initial_step = agent_config.diffusion_inference.initial_step
+        else:
+            initial_step = 0
+            omega = agent_config.diffusion_inference.guidance_kwargs.get(
+                "initial_omega", omega
+            )
+
         # we vmap the posterior sampling to make the guidance weight
         # omega independent of batch size.
-        def posterior_sample_individual(args):
-            measurement, seed_i, initial_sample, initial_step, omega = args
+        def posterior_sample_individual(measurement, seed_i, initial_sample):
             posterior_samples = model.posterior_sample(
                 measurements=measurement,
                 mask=mask[None],  # add dummy batch dim
@@ -474,50 +495,10 @@ def setup_agent(
 
         measurements = ops.expand_dims(measurements, axis=1)  # add dummy batch dim
         seeds = split_seed(seed, len(measurements))
-        omega = agent_config.diffusion_inference.guidance_kwargs.omega
-        if initial_samples is None:
-            initial_omega = agent_config.diffusion_inference.guidance_kwargs.get(
-                "initial_omega", omega
-            )
-            if DEBUGGING:
-                psi = lambda meas, seed: posterior_sample_individual(
-                    (meas, seed, None, 0, initial_omega)
-                )
-                posterior_samples = ops.stack(
-                    [psi(m, s) for m, s in zip(measurements, seeds)]
-                )
-            else:
-                posterior_samples = ops.vectorized_map(
-                    lambda meas_seed: posterior_sample_individual(
-                        (*meas_seed, None, 0, initial_omega)
-                    ),
-                    (measurements, seeds),
-                )
-        else:
-            initial_samples = initial_samples[
-                :, None, None
-            ]  # add dummy batch and particle dim
-            if DEBUGGING:
-                psi = lambda meas, seed, inits: posterior_sample_individual(
-                    (meas, seed, inits, 0, initial_omega)
-                )
-                posterior_samples = ops.stack(
-                    [
-                        psi(m, s, i)
-                        for m, s, i in zip(measurements, seeds, initial_samples)
-                    ]
-                )
-            else:
-                posterior_samples = ops.vectorized_map(
-                    lambda meas_seed_inits: posterior_sample_individual(
-                        (
-                            *meas_seed_inits,
-                            agent_config.diffusion_inference.initial_step,
-                            omega,
-                        )
-                    ),
-                    (measurements, seeds, initial_samples),
-                )
+
+        posterior_samples = map_fn(posterior_sample_individual)(
+            measurements, seeds, initial_samples
+        )
 
         # remove dummy batch dim
         posterior_samples = ops.squeeze(posterior_samples, axis=1)
@@ -584,16 +565,16 @@ def setup_agent(
         )
 
     if jit_mode == "posterior_sample":
-        posterior_sample = jit(posterior_sample)
+        posterior_sample = jax.jit(posterior_sample, static_argnames=("batched"))
 
     recover_p = partial(
         recover,
         reconstruction_method=agent_config.diffusion_inference.reconstruction_method,
-        posterior_sample=partial(posterior_sample, batched=agent_config.is_3d),
+        posterior_sample=posterior_sample,
         action_selection=action_selection,
     )
     if jit_mode == "recover":
-        recover_p = jit(recover_p)
+        recover_p = jax.jit(recover_p)
 
     agent = Agent(
         initial_action_selection=initial_action_selection,

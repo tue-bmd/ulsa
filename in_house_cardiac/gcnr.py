@@ -135,8 +135,12 @@ def plot_gcnr_over_time(
 
 @cache_output(verbose=True)
 def load_results():
-    ANNOTATIONS_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/cardiac_annotations_2/")
-    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house_cardiac/")
+    ANNOTATIONS_ROOT = Path(
+        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental_annotations/"
+    )
+    DATA_ROOT = Path(
+        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental_for_gcnr/"
+    )
 
     subjects = [
         "20240701_P1_A4CH_0001",
@@ -151,8 +155,12 @@ def load_results():
     }
     relative_to = "focused"
 
+    relative_gcnr_valve_all = {}
+    relative_gcnr_all = {}
+
     gcnr_valve_all = {}
     gcnr_all = {}
+
     selected_frames_all = {}
     for i, subject in enumerate(subjects):
         wf = ANNOTATIONS_ROOT / f"{subject}_white_annotations.npy"
@@ -237,17 +245,35 @@ def load_results():
                 continue
             gcnr_valve_relative[k] = v - gcnr_valve_results[relative_to]
 
-        gcnr_all[subject] = gcnr_relative
-        gcnr_valve_all[subject] = gcnr_valve_relative
+        relative_gcnr_all[subject] = gcnr_relative
+        relative_gcnr_valve_all[subject] = gcnr_valve_relative
+
+        # Store absolute gCNR results as well
+        gcnr_all[subject] = gcnr_results
+        gcnr_valve_all[subject] = gcnr_valve_results
 
     gcnr_valve_all = filter_empty(gcnr_valve_all)
-    return subjects, group_names, gcnr_all, gcnr_valve_all, selected_frames_all
+    return (
+        subjects,
+        group_names,
+        relative_gcnr_all,
+        relative_gcnr_valve_all,
+        selected_frames_all,
+        gcnr_all,
+        gcnr_valve_all,
+    )
 
 
 def main():
-    subjects, group_names, gcnr_all, gcnr_valve_all, selected_frames_all = (
-        load_results()
-    )
+    (
+        subjects,
+        group_names,
+        relative_gcnr_all,
+        relative_gcnr_valve_all,
+        selected_frames_all,
+        _,
+        _,
+    ) = load_results()
 
     # Convert subject keys to Roman numerals
     subjects_ids = {s: write_roman(i + 1) for i, s in enumerate(subjects)}
@@ -255,7 +281,8 @@ def main():
     # Violin plot & over time plot for all
     violin = ViolinPlotter(group_names, xlabel="Subjects")
     for ext, (_gcnr, key) in product(
-        [".png", ".pdf"], zip([gcnr_all, gcnr_valve_all], ["gcnr", "gcnr_valve"])
+        [".png", ".pdf"],
+        zip([relative_gcnr_all, relative_gcnr_valve_all], ["gcnr", "gcnr_valve"]),
     ):
         _gncr_roman = {subjects_ids[k]: v for k, v in _gcnr.items()}
         violin.plot(
@@ -277,7 +304,9 @@ def main():
                 )
 
     # Plots for the paper
-    gcnr_valve_all_roman = {subjects_ids[k]: v for k, v in gcnr_valve_all.items()}
+    gcnr_valve_all_roman = {
+        subjects_ids[k]: v for k, v in relative_gcnr_valve_all.items()
+    }
     selected_frames_all_roman = {
         subjects_ids[k]: v for k, v in selected_frames_all.items()
     }

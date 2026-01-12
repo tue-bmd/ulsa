@@ -28,12 +28,41 @@ from plotting.plot_utils import ViolinPlotter, write_roman
 SAVE_DIR = Path("output/gcnr")
 
 
+def get_mean_gcnr(gcnr_dict, method="diverging"):
+    sum_gcnr = 0.0
+    len_gcnr = 0
+    for subject, values in gcnr_dict.items():
+        sum_gcnr += sum(values[method])
+        len_gcnr += len(values[method])
+    return sum_gcnr, len_gcnr
+
+
 if __name__ == "__main__":
     plt.rcdefaults()  # Reset to default matplotlib style
-    subjects, group_names, gcnr_dict, gcnr_valve, selected_frames_all = (
+    subjects, group_names, relative_gncr_dict, _, _, gcnr_all, _ = (
         load_fundamental_results()
     )
-    subjects_hi, group_names_hi, gcnr_dict_hi, gcnr_valve_hi = load_harmonic_results()
+    subjects_hi, group_names_hi, relative_gncr_dict_hi, _, gcnr_all_hi, _ = (
+        load_harmonic_results()
+    )
+
+    # Compute mean gcnr for active perception and diverging waves
+    sum_gcnr, len_gcnr = get_mean_gcnr(gcnr_all, method="diverging")
+    sum_gcnr_hi, len_gcnr_hi = get_mean_gcnr(gcnr_all_hi, method="diverging")
+    mean_gcnr1 = (sum_gcnr + sum_gcnr_hi) / (len_gcnr + len_gcnr_hi)
+    print(
+        f"Mean gCNR (diverging waves, both fundamental and harmonic): {mean_gcnr1:.4f}"
+    )
+
+    sum_gcnr, len_gcnr = get_mean_gcnr(gcnr_all, method="reconstructions")
+    sum_gcnr_hi, len_gcnr_hi = get_mean_gcnr(gcnr_all_hi, method="greedy_entropy")
+    mean_gcnr2 = (sum_gcnr + sum_gcnr_hi) / (len_gcnr + len_gcnr_hi)
+    print(
+        f"Mean gCNR (greedy entropy, both fundamental and harmonic): {mean_gcnr2:.4f}"
+    )
+
+    gcnr_improvement = ((mean_gcnr2 - mean_gcnr1) / mean_gcnr1) * 100.0
+    print(f"gCNR improvement: {gcnr_improvement:.2f}%")
 
     group_names.update(group_names_hi)
 
@@ -56,13 +85,15 @@ if __name__ == "__main__":
     }
 
     with plt.style.context("styles/ieee-tmi.mplstyle"):
-        gcnr_dict_roman = {subject_ids_all[k]: v for k, v in gcnr_dict.items()}
+        relative_gncr_dict_roman = {
+            subject_ids_all[k]: v for k, v in relative_gncr_dict.items()
+        }
         violin = ViolinPlotter(group_names, xlabel=None, ylabel=None)
         fig, axs = plt.subplots(1, 2, sharey=True)
         violin.plot(
-            sort_by_names(swap_layer(gcnr_dict_roman), group_names.keys()),
+            sort_by_names(swap_layer(relative_gncr_dict_roman), group_names.keys()),
             save_path=None,
-            x_label_values=gcnr_dict_roman.keys(),
+            x_label_values=relative_gncr_dict_roman.keys(),
             metric_name=METRIC_LABEL,
             context="styles/ieee-tmi.mplstyle",
             ax=axs[0],
@@ -70,11 +101,13 @@ if __name__ == "__main__":
         )
         axs[0].set_title("Fundamental imaging", **title_kwargs)
 
-        gcnr_dict_hi_roman = {subject_ids_all[k]: v for k, v in gcnr_dict_hi.items()}
+        relative_gncr_dict_hi_roman = {
+            subject_ids_all[k]: v for k, v in relative_gncr_dict_hi.items()
+        }
         violin.plot(
-            sort_by_names(swap_layer(gcnr_dict_hi_roman), group_names.keys()),
+            sort_by_names(swap_layer(relative_gncr_dict_hi_roman), group_names.keys()),
             save_path=None,
-            x_label_values=gcnr_dict_hi_roman.keys(),
+            x_label_values=relative_gncr_dict_hi_roman.keys(),
             metric_name=None,
             context="styles/ieee-tmi.mplstyle",
             ax=axs[1],
