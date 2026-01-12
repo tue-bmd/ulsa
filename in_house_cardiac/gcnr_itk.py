@@ -111,6 +111,9 @@ def load_results():
     relative_to = "focused"
     skip_first_n_frames = 4
 
+    relative_gcnr_valve_all = {}
+    relative_gcnr_all = {}
+
     gcnr_valve_all = {}
     gcnr_all = {}
     for i, subject in enumerate(subjects):
@@ -183,16 +186,28 @@ def load_results():
                 continue
             gcnr_valve_relative[k] = v - gcnr_valve_results[relative_to]
 
-        gcnr_all[subject] = gcnr_relative
-        gcnr_valve_all[subject] = gcnr_valve_relative
+        # Store the unmodified gCNR results as well
+        gcnr_all[subject] = gcnr_results
+        gcnr_valve_all[subject] = gcnr_valve_results
 
+        relative_gcnr_all[subject] = gcnr_relative
+        relative_gcnr_valve_all[subject] = gcnr_valve_relative
+
+    relative_gcnr_valve_all = filter_empty(relative_gcnr_valve_all)
     gcnr_valve_all = filter_empty(gcnr_valve_all)
 
-    return subjects, group_names, gcnr_all, gcnr_valve_all
+    return (
+        subjects,
+        group_names,
+        relative_gcnr_all,
+        relative_gcnr_valve_all,
+        gcnr_all,
+        gcnr_valve_all,
+    )
 
 
 def main():
-    subjects, group_names, gcnr_all, gcnr_valve_all = load_results()
+    subjects, group_names, relative_gcnr, relative_gcnr_valve, _, _ = load_results()
 
     # Convert subject keys to Roman numerals
     subjects_ids = {s: write_roman(i + 1) for i, s in enumerate(subjects)}
@@ -200,7 +215,8 @@ def main():
     # Violin plot & over time plot for all
     violin = ViolinPlotter(group_names, xlabel="Subjects")
     for ext, (_gcnr, key) in product(
-        [".png", ".pdf"], zip([gcnr_all, gcnr_valve_all], ["gcnr", "gcnr_valve"])
+        [".png", ".pdf"],
+        zip([relative_gcnr, relative_gcnr_valve], ["gcnr", "gcnr_valve"]),
     ):
         _gncr_roman = {subjects_ids[k]: v for k, v in _gcnr.items()}
         violin.plot(
