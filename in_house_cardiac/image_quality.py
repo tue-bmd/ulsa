@@ -79,10 +79,10 @@ def main():
             "Shapes of focused, diverging and reconstructions must be the same."
         )
         div_res = metrics(
-            focused_uint8[..., None], diverging_uint8[..., None], average_batch=False
+            focused_uint8[..., None], diverging_uint8[..., None], average_batches=False
         )
         rec_res = metrics(
-            focused_uint8[..., None], reconstructions[..., None], average_batch=False
+            focused_uint8[..., None], reconstructions[..., None], average_batches=False
         )
         data_frame.append({"subject": subject_name, "strategy": "diverging", **div_res})
         data_frame.append(

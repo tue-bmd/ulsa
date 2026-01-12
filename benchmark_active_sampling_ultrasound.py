@@ -354,8 +354,8 @@ def benchmark(
         metrics_results = metrics(
             denormalized.target_imgs,
             denormalized.reconstructions,
-            average_batch=False,
-            batch_size=84,  # to avoid OOM on LPIPS
+            average_batches=False,
+            mapped_batch_size=28,  # to avoid OOM on LPIPS
         )
         all_metrics_results.append(metrics_results)
         if circle_augmentation is not None:
