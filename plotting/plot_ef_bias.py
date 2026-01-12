@@ -15,7 +15,7 @@ import yaml
 
 sys.path.append("/ulsa")
 
-from plotting.plot_psnr_dice import extract_and_combine_sweep_data
+from plotting.index import extract_sweep_data
 
 
 def load_ef_data(csv_path):
@@ -143,28 +143,18 @@ def plot_ef_psnr_correlation(df, save_path=None):
 
 
 if __name__ == "__main__":
-    DATA_ROOT = "/mnt/z/prjs0966"
-    DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
-    SUBSAMPLED_PATHS = [
-        DATA_FOLDER / "sharding_sweep_2025-08-05_14-35-11",
-        DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
-    ]
-    EF_CSV_PATH = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/USBMD_datasets/_RAW/EchoNet-Dynamic/FileList.csv"
-    SAVE_ROOT = "."
+    DATA_ROOT = "/mnt/z/usbmd/Wessel/ulsa"
+    DATA_FOLDER = (
+        Path(DATA_ROOT)
+        / "Np_2/eval_echonet_dynamic_test_set/sweep_2026_01_08_225505_654881"
+    )
+    EF_CSV_PATH = "/mnt/USBMD_datasets/_RAW/EchoNet-Dynamic/FileList.csv"
+    SAVE_ROOT = "./output/"
 
-    TEMP_FILE = Path("/tmp/plot_ef_bias.pkl")
-    if Path(TEMP_FILE).exists():
-        print(f"Loading cached results from {TEMP_FILE}")
-        results_df = pd.read_pickle(TEMP_FILE)
-    else:
-        # Load EF lookup table
-        ef_lookup = load_ef_data(EF_CSV_PATH)
-
-        # Extract PSNR and EF data
-        results_df = extract_and_combine_sweep_data(
-            SUBSAMPLED_PATHS, keys_to_extract=["psnr"], ef_lookup=ef_lookup
-        )
-        results_df.to_pickle(TEMP_FILE)
+    ef_lookup = load_ef_data(EF_CSV_PATH)
+    results_df = extract_sweep_data(
+        [DATA_FOLDER], keys_to_extract=["psnr"], ef_lookup=ef_lookup
+    )
 
     df = results_df[results_df["x_value"] == 14]
 
