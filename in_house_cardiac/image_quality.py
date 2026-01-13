@@ -1,3 +1,5 @@
+"""Script to evaluate image quality of in-house cardiac ultrasound data."""
+
 import os
 
 os.environ["KERAS_BACKEND"] = "jax"

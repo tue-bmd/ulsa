@@ -1,3 +1,5 @@
+"""Managing a frame buffer which can be used in jax."""
+
 from jax import tree_util
 from keras import ops
 

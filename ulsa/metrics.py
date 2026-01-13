@@ -1,3 +1,7 @@
+"""Metrics for ultrasound image quality assessment.
+Extends zea.metrics with additional metrics.
+"""
+
 import numpy as np
 from keras import ops
 

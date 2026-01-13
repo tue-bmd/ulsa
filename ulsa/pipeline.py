@@ -13,6 +13,8 @@ from zea.scan import Scan
 
 
 class Pipeline(ZeaPipeline):
+    """zea.Pipeline with convenience methods to beamform a full sequence."""
+
     def run(
         self,
         data: Union[File, np.ndarray, List[np.ndarray]],

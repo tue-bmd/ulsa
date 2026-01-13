@@ -1,3 +1,5 @@
+"""This script (and function) loads and reconstructs a cardiac ultrasound scan from raw data."""
+
 import os
 import sys
 
