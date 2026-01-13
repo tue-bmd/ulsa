@@ -482,7 +482,7 @@ def plot_fwhm_gcnr(
             "greedy_entropy": "Active Perception (11/90)",
             "uniform_random": "Random (11/90)",
             "equispaced": "Equispaced (11/90)",
-            "focused": "Ground Truth (90)",
+            "focused": "Target (90)",
         }
 
         # Store text positions for later
