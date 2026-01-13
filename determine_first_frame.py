@@ -59,13 +59,6 @@ if __name__ == "__main__":
             scan.set_transmits("focused")
             update_scan_for_polar_grid(scan, pixels_per_wavelength=1, ray_multiplier=3)
 
-            width = 2e6  # Hz
-            f1 = scan.demodulation_frequency - width / 2
-            f2 = scan.demodulation_frequency + width / 2
-            bandpass_rf = zea.func.get_band_pass_filter(
-                128, scan.sampling_frequency, f1, f2
-            )
-
             rx_apo = ulsa.ops.lines_rx_apo(
                 n_tx=scan.n_tx,
                 grid_size_z=scan.grid_size_z,
@@ -73,10 +66,5 @@ if __name__ == "__main__":
             )
 
             first_frame_idx, _ = get_first_frame(
-                file,
-                scan,
-                rx_apo=rx_apo,
-                bandpass_rf=bandpass_rf,
-                bandwidth=2e6,
-                minval=0,
+                file, scan, rx_apo=rx_apo, bandwidth=2e6, minval=0
             )

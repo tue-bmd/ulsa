@@ -99,7 +99,7 @@ class Pipeline(ZeaPipeline):
 def beamforming(rx_apo=True, pfield=False, low_pct=18, high_pct=95) -> list:
     """Create a pipeline for beamforming operations."""
     return [
-        zea.ops.FirFilter(axis=-3, filter_key="bandpass_rf"),
+        zea.ops.BandPassFilter(axis=-3),
         ulsa.ops.WaveletDenoise(),  # optional
         zea.ops.Demodulate(),
         zea.ops.LowPassFilter(complex_channels=True, axis=-2),  # optional

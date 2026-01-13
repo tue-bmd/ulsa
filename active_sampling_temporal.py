@@ -226,17 +226,10 @@ def run_active_sampling(
     # Prepare acquisition function
     if getattr(scan, "n_tx", None) is not None and scan.n_tx > 1:
         rx_apo = lines_rx_apo(scan.n_tx, scan.grid_size_z, scan.grid_size_x)
-        bandpass_rf = zea.func.get_band_pass_filter(
-            128,
-            scan.sampling_frequency,
-            scan.demodulation_frequency - bandwidth / 2,
-            scan.demodulation_frequency + bandwidth / 2,
-        )
         base_params = pipeline.prepare_parameters(
             scan=scan,
             rx_apo=rx_apo,
             bandwidth=bandwidth,
-            bandpass_rf=bandpass_rf,
             minval=0,
         )
 
