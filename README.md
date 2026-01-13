@@ -4,6 +4,8 @@ The repo contains the code for the paper [Patient-Adaptive Focused Transmit Beam
 
 Find the weights of our model on [Huggingface](https://huggingface.co/zeahub/ulsa).
 
+![measurements_reconstruction_0X10A5FC19152B50A5](https://github.com/user-attachments/assets/c5ed6f17-fdc6-4b4a-840b-b92095439f28)
+
 ## Setup code
 
 ### 1. Settings

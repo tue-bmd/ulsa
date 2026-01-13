@@ -7,6 +7,8 @@ so far.
 import argparse
 import json
 import os
+
+os.environ["MPLBACKEND"] = "Agg"
 import time
 from dataclasses import dataclass
 from pathlib import Path
