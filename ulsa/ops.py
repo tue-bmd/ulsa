@@ -134,23 +134,6 @@ class TranslateDynamicRange(zea.ops.Operation):
         return {self.output_key: data}
 
 
-class Sharpen(zea.ops.Operation):
-    """Sharpen an image using unsharp masking."""
-
-    def __init__(self, sigma=1.0, amount=1.0, **kwargs):
-        super().__init__(**kwargs, jittable=False)
-        self.sigma = sigma
-        self.amount = amount
-
-    def call(self, **kwargs):
-        from skimage.filters import unsharp_mask  # pip install scikit-image
-
-        image = kwargs[self.key]
-        sharpened_image = unsharp_mask(image, radius=self.sigma, amount=self.amount)
-
-        return {self.output_key: sharpened_image}
-
-
 class WaveletDenoise(zea.ops.Operation):
     def __init__(self, wavelet="db4", level=4, threshold_factor=0.1, axis=-3, **kwargs):
         super().__init__(**kwargs)
@@ -169,75 +152,6 @@ class WaveletDenoise(zea.ops.Operation):
             threshold_factor=self.threshold_factor,
         )
         return {self.output_key: denoised_signal}
-
-
-class HistogramMatching(zea.ops.Operation):
-    """Histogram matching operation."""
-
-    def __init__(self, reference_image, dynamic_range, **kwargs):
-        super().__init__(**kwargs, jittable=False)
-        self.reference_image = reference_image
-        self.dynamic_range = dynamic_range
-
-    def call(self, **kwargs):
-        from skimage import exposure  # pip install scikit-image
-
-        image = kwargs[self.key]
-
-        matched_image = exposure.match_histograms(image, self.reference_image)
-
-        return {self.output_key: matched_image, "dynamic_range": self.dynamic_range}
-
-
-def match_histogram_fn(src, target):
-    """
-    Return a function that matches the histogram of src to target. Can be used to compute a
-    matching based on a region of interest (ROI) in the source image, and apply it to the
-    entire source image.
-    """
-    # Get sorted unique values and their counts from the ROI of the source image
-    src_values, src_counts = np.unique(src.ravel(), return_counts=True)
-    # Get sorted unique values and their counts from the entire target image
-    target_values, target_counts = np.unique(target.ravel(), return_counts=True)
-
-    # Compute the cumulative distribution function (CDF) for the ROI of the source
-    src_cdf = np.cumsum(src_counts).astype(np.float64)
-    src_cdf /= src_cdf[-1]
-    # Compute the CDF for the target image
-    target_cdf = np.cumsum(target_counts).astype(np.float64)
-    target_cdf /= target_cdf[-1]
-
-    # Interpolate to find the target values that correspond to the quantiles of the source ROI
-    interp_t_values = np.interp(src_cdf, target_cdf, target_values)
-
-    def _match_histogram(src):
-        """Match histogram of src to target using the computed mapping."""
-        # Map all pixels in the source image to the new values using linear interpolation
-        matched = np.interp(src.ravel(), src_values, interp_t_values)
-        # Reshape to the original image shape and cast to the original dtype
-        return matched.reshape(src.shape).astype(src.dtype)
-
-    return _match_histogram
-
-
-class HistogramMatchingForModel(HistogramMatching):
-    def __init__(self, config_path: str, frame_idx: int = 0, **kwargs):
-        config = zea.Config.from_yaml(config_path)
-        data_paths = zea.set_data_paths("/ulsa/users.yaml")  # TODO hardcoded
-        dataset_folder = data_paths.data_root / config.data.train_folder
-        files = Path(dataset_folder).glob("*.hdf5")
-        reference_path = next(iter(files))
-        with zea.File(reference_path) as file:
-            reference_image = file.load_data(config.data.hdf5_key, indices=frame_idx)
-        super().__init__(reference_image, **kwargs)
-
-
-class Copy(zea.ops.Operation):
-    """Copy the input data to the output key."""
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-        return {self.output_key: data}
 
 
 def lines_rx_apo(n_tx, grid_size_z, grid_size_x):

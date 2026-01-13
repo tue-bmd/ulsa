@@ -72,54 +72,6 @@ def _scan_convert(
     return sc
 
 
-def gray_to_color_with_transparency(grayscale_image, transparency_mask=None):
-    transparency_mask = (
-        transparency_mask
-        if transparency_mask is not None
-        else np.ones_like(grayscale_image)
-    )
-    grayscale_image = ops.convert_to_numpy(grayscale_image)
-    colour_image = cv2.cvtColor(grayscale_image, cv2.COLOR_GRAY2BGRA)
-    colour_image[:, :, 3] = colour_image[:, :, 3] * transparency_mask
-    return colour_image
-
-
-map_error = lambda x: map_range(x, (0, 2), (0, 1))
-
-
-def apply_colormap_to_rgba(rgba_image: np.ndarray, cmap_name: str = "viridis"):
-    """
-    Apply a colormap to an RGBA image based on its grayscale values while preserving transparency.
-
-    Parameters:
-    - rgba_image (np.ndarray): Input image of shape (H, W, 4) where RGB channels define grayscale values.
-    - cmap_name (str): Name of the colormap to apply (default is 'viridis').
-
-    Returns:
-    - np.ndarray: RGBA image with the colormap applied and transparency preserved.
-    """
-
-    if rgba_image.shape[-1] != 4:
-        raise ValueError("Input image must have shape (H, W, 4) with an alpha channel.")
-
-    # Convert RGB to grayscale (luminosity method: best perceptual results)
-    gray = np.dot(rgba_image[..., :3], [0.2989, 0.5870, 0.1140])  # Weighted sum
-
-    # Normalize grayscale values to range [0, 1]
-    gray = (gray - gray.min()) / (gray.max() - gray.min() + 1e-8)  # Avoid div by zero
-
-    # Get the specified colormap
-    cmap = cm.get_cmap(cmap_name)
-
-    # Apply colormap (returns RGBA image with shape (H, W, 4))
-    color_mapped = cmap(gray)
-
-    # Preserve the original alpha channel
-    color_mapped[..., 3] = rgba_image[..., 3]  # Copy alpha values
-
-    return color_mapped
-
-
 def mask_heatmap_moving_average(masks, window_size=9):
     masks = ops.convert_to_numpy(masks).astype(np.float32)
     heatmap = np.zeros_like(masks)
