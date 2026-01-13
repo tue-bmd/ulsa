@@ -8,15 +8,19 @@ comparison figure with reconstructions and FWHM traces.
 
 Example usage:
     python plotting/plot_CIRS_fwhm_gcnr.py \
-        --data-dir "/mnt/z/usbmd/Wessel/ulsa/eval_phantom2/20251118_CIRS_0000" \
+        --data-dir "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/phantom/20251118_CIRS_0000" \
         --save-dir ./output \
-        --frame-idx 19 \
-        --point1 54 60 \
-        --point2 54 76 \
-        --gcnr-center 40 82 \
-        --gcnr-radius 5 \
-        --gcnr-annulus-inner 8 \
-        --gcnr-annulus-outer 12
+        --frame-idx 10 \
+        --point1 135 640 \
+        --point2 135 740 \
+        --gcnr-center 385 810 \
+        --gcnr-radius 45 \
+        --gcnr-annulus-inner 55 \
+        --gcnr-annulus-outer 90 \
+        --arrow-tip 760 680 \
+        --arrow-length 200 \
+        --num-fwhm-lines 7 \
+        --fwhm-line-offsets 120 120 130 120 130 130
 
 """
 
@@ -64,6 +68,9 @@ STRATEGY_COLORS = {
 
 # Strategies that use original acquisitions (not reconstructed from subsampled data)
 ORIGINAL_ACQUISITONS = ["focused", "diverging"]
+
+GCNR_ALPHA = 0.6
+FWHM_LINE_ALPHA = 0.4
 
 
 def get_arrow_patch(row_tip, col_tip, length=30, angle_deg=45):
@@ -425,8 +432,10 @@ def plot_fwhm_gcnr(
         reconstructions_sc[strategy] = _scan_convert(
             reconstructions_raw[strategy],
             scan_conversion_angles=scan_conversion_angles,
-            fill_value=np.nan,
+            fill_value=0,  # np.nan
             order=0,
+            distance_to_apex=13.0,
+            resolution=0.1,
         )
 
     # Compute FWHM and GCNR for each strategy
@@ -504,7 +513,7 @@ def plot_fwhm_gcnr(
                             [line_p1[0], line_p2[0]],
                             "r-",
                             linewidth=0.8,
-                            alpha=0.5,
+                            alpha=FWHM_LINE_ALPHA,
                         )
 
                     # Draw GCNR regions
@@ -515,7 +524,7 @@ def plot_fwhm_gcnr(
                         edgecolor="cyan",
                         linestyle="--",
                         linewidth=1,
-                        alpha=0.7,
+                        alpha=GCNR_ALPHA,
                     )
                     ax.add_patch(circle_signal)
 
@@ -526,7 +535,7 @@ def plot_fwhm_gcnr(
                         edgecolor="yellow",
                         linestyle="--",
                         linewidth=1,
-                        alpha=0.7,
+                        alpha=GCNR_ALPHA,
                     )
                     ax.add_patch(circle_annulus_inner)
                     circle_annulus_outer = Circle(
@@ -536,7 +545,7 @@ def plot_fwhm_gcnr(
                         edgecolor="yellow",
                         linestyle="--",
                         linewidth=1,
-                        alpha=0.7,
+                        alpha=GCNR_ALPHA,
                     )
                     ax.add_patch(circle_annulus_outer)
 
@@ -557,8 +566,8 @@ def plot_fwhm_gcnr(
         for ax, strategy in text_positions:
             bbox = ax.get_position()
             fig.text(
-                bbox.x1 - 0.14,
-                bbox.y1 - 0.1,
+                bbox.x1 - 0.13,
+                bbox.y1 - 0.045,
                 f"FWHM: {fwhm_vals[strategy]:.2f}\nGCNR: {gcnr_vals[strategy]:.2f}",
                 fontsize=6,
                 color="black",
@@ -568,7 +577,7 @@ def plot_fwhm_gcnr(
             )
 
         # Save with minimal padding
-        for ext in [".pdf", ".png"]:
+        for ext in [".png", ".pdf"]:
             save_file = (
                 save_dir
                 / f"fwhm_single_column_frame{frame_idx}_p1_{point1[0]}_{point1[1]}__p2_{point2[0]}_{point2[1]}{ext}"
@@ -597,46 +606,46 @@ if __name__ == "__main__":
     parser.add_argument(
         "--frame-idx",
         type=int,
-        default=3,
+        default=10,
         help="Frame index to visualize (default: 3)",
     )
     parser.add_argument(
         "--point1",
         type=int,
         nargs=2,
-        default=[54, 60],
+        default=[135, 640],
         help="First point as index (row, col) in scan-converted image",
     )
     parser.add_argument(
         "--point2",
         type=int,
         nargs=2,
-        default=[54, 76],
+        default=[135, 740],
         help="Second point as index (row, col) in scan-converted image",
     )
     parser.add_argument(
         "--gcnr-center",
         type=int,
         nargs=2,
-        default=[41, 81],
+        default=[385, 810],
         help="Center of GCNR regions as (row, col) in scan-converted image",
     )
     parser.add_argument(
         "--gcnr-radius",
         type=float,
-        default=5,
+        default=45,
         help="Radius of inner circle for GCNR in pixels (default: 10)",
     )
     parser.add_argument(
         "--gcnr-annulus-inner",
         type=float,
-        default=8,
+        default=55,
         help="Inner radius of annulus for GCNR in pixels (default: 15)",
     )
     parser.add_argument(
         "--gcnr-annulus-outer",
         type=float,
-        default=12,
+        default=90,
         help="Outer radius of annulus for GCNR in pixels (default: 20)",
     )
     parser.add_argument(
@@ -668,13 +677,13 @@ if __name__ == "__main__":
         "--arrow-tip",
         type=int,
         nargs=2,
-        default=None,
+        default=[760, 680],
         help="Arrow tip position (row, col) in scan-converted image (default: None, disables arrow)",
     )
     parser.add_argument(
         "--arrow-length",
         type=float,
-        default=25,
+        default=200,
         help="Arrow length in pixels (default: 30)",
     )
     parser.add_argument(
@@ -697,14 +706,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-fwhm-lines",
         type=int,
-        default=1,
+        default=7,
         help="Number of parallel FWHM measurement lines (default: 1)",
     )
     parser.add_argument(
         "--fwhm-line-offsets",
         type=int,
         nargs="+",
-        default=None,
+        default=[120, 120, 130, 120, 130, 130],
         help="Vertical offsets between consecutive FWHM lines in pixels. "
         "Should have (num_fwhm_lines - 1) values. "
         "Example: --fwhm-line-offsets 10 12 11 for 4 lines with varying spacing.",
