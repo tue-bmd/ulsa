@@ -29,6 +29,7 @@ from skimage.exposure import match_histograms
 
 from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import color_to_value, postprocess_agent_results
+from ulsa.transmit_time import max_fps
 
 imshow_kwargs = {
     "vmin": 0,
@@ -469,13 +470,7 @@ def animated_plot_from_npz(
         n_actions *= 2
 
     if fps is None:
-        depth = 0.15  # in meters
-        n_tx = n_possible_actions + n_actions  # for both diverging and focused
-        speed_of_sound = 1540  # in meters per second
-        time_per_transmit = 2.0 * (depth / speed_of_sound)  # in seconds
-        time_per_transmit *= 1.14  # accounting for processing overhead
-        total_time = n_tx * time_per_transmit  # in seconds
-        fps = 1.0 / total_time  # in Hz
+        fps = max_fps(n_tx=n_possible_actions + n_actions, processing_overhead=1.14)
         print(f"Saving animations at {fps:.2f} FPS")
 
     axis = -1  # concat along width
