@@ -363,7 +363,7 @@ if __name__ == "__main__":
     stack_plot_from_npz(
         [fundamental_file, harmonic_file],
         "output/in_house_cardiac",
-        context="styles/darkmode.mplstyle",
+        context="styles/ieee-tmi.mplstyle",
         frame_indices=frame_indices,
         arrows=arrows,
         ylabels=ylabels,
