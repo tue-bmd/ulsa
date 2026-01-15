@@ -106,9 +106,9 @@ def _load_from_run_dir(
     fill_value="transparent",
     distance_to_apex=7.0,
     no_measurement_color="gray",
-    drop_first_n_frames=None,
+    drop_first_n_frames: int = 0,
 ):
-    if drop_first_n_frames is not None:
+    if drop_first_n_frames > 0:
         assert frame_idx is None, (
             "Cannot drop frames when a specific frame is selected."
         )
@@ -175,10 +175,8 @@ def _load_from_run_dir(
 
     # Find best cine loop
     if frame_idx is None:
-        last_frame = find_best_cine_loop(
-            focused[drop_first_n_frames:] if drop_first_n_frames else focused
-        )
-        last_frame = last_frame + (drop_first_n_frames if drop_first_n_frames else 0)
+        last_frame = find_best_cine_loop(focused[drop_first_n_frames:])
+        last_frame = last_frame + drop_first_n_frames
         focused = focused[:last_frame]
         diverging = diverging[:last_frame]
         reconstructions = reconstructions[:last_frame]
@@ -429,12 +427,13 @@ def stack_plot_from_npz(
 def animated_plot_from_npz(
     run_dir: str,
     plot_dir: str | Path,
-    scan_convert_resolution=0.6,
+    scan_convert_resolution=0.5,
     selection_strategy="greedy_entropy",
     file_type="gif",
     fill_value="black",
     no_measurement_color="gray",
     drop_first_n_frames=10,
+    fps=None,
 ):
     plot_dir = Path(plot_dir)
     plot_dir.mkdir(parents=True, exist_ok=True)
@@ -469,22 +468,21 @@ def animated_plot_from_npz(
         n_possible_actions *= 2
         n_actions *= 2
 
-    depth = 0.15  # in meters
-    n_tx = n_possible_actions + n_actions  # for both diverging and focused
-    speed_of_sound = 1540  # in meters per second
-    time_per_transmit = 2.0 * (depth / speed_of_sound)  # in seconds
-    time_per_transmit *= 1.14  # accounting for processing overhead
-    total_time = n_tx * time_per_transmit  # in seconds
-    fps = 1.0 / total_time  # in Hz
-    print(f"Saving animations at {fps:.2f} FPS")
+    if fps is None:
+        depth = 0.15  # in meters
+        n_tx = n_possible_actions + n_actions  # for both diverging and focused
+        speed_of_sound = 1540  # in meters per second
+        time_per_transmit = 2.0 * (depth / speed_of_sound)  # in seconds
+        time_per_transmit *= 1.14  # accounting for processing overhead
+        total_time = n_tx * time_per_transmit  # in seconds
+        fps = 1.0 / total_time  # in Hz
+        print(f"Saving animations at {fps:.2f} FPS")
 
     axis = -1  # concat along width
-    target_diverging_reconstruction = np.concatenate(
-        [focused, diverging, reconstructions], axis=axis
-    )
+    comparison = np.concatenate([focused, reconstructions, diverging], axis=axis)
     zea.io_lib.save_video(
-        target_diverging_reconstruction,
-        plot_dir / f"target_diverging_reconstruction_{name}.{file_type}",
+        comparison,
+        plot_dir / f"target_reconstruction_diverging_{name}.{file_type}",
         fps=fps,
     )
 
@@ -515,4 +513,6 @@ if __name__ == "__main__":
         scan_convert_resolution=0.1,
     )
 
-    animated_plot_from_npz(harmonic_file, "output/in_house_cardiac/animations")
+    animated_plot_from_npz(
+        harmonic_file, "output/in_house_cardiac/animations", scan_convert_resolution=0.2
+    )
