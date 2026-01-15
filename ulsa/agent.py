@@ -125,9 +125,12 @@ class ActionSelectionConfig(Cfg):
         if self.n_possible_actions == "n_tx":
             self.n_possible_actions = n_tx
 
+        self._orig_shape = self.shape.copy()
+
         # For example: this converts [112, "2*n_tx"] to [112, 112] if n_tx=56
         self.shape = [
-            s if "n_tx" not in str(s) else eval(s, {"n_tx": n_tx}) for s in self.shape
+            s if "n_tx" not in str(s) else eval(s, {"n_tx": n_tx})
+            for s in self._orig_shape
         ]
 
 
