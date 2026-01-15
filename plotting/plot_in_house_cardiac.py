@@ -65,6 +65,38 @@ def _init_grid(
     return fig, outer
 
 
+def find_best_cine_loop(
+    data,  # shape (n_frames, height, width)
+    min_sequence_length=30,
+    visualize=True,
+):
+    """Find the best cine loop by comparing frame differences to the first frame.
+
+    Args:
+        data: np.ndarray of shape (n_frames, height, width)
+        min_sequence_length: Minimum number of frames before considering loop closure.
+        visualize: Whether to save a plot of the frame differences.
+    """
+    first_frame = data[0]
+    other_frames = data[1:]
+    differences = np.sum(np.abs(other_frames - first_frame[None]), axis=(1, 2))
+    min_diff_idx = np.argmin(differences[min_sequence_length:]) + min_sequence_length
+
+    if visualize:
+        plt.plot(differences)
+        plt.axvline(min_sequence_length, color="red", linestyle="--")
+        plt.axvline(min_diff_idx, color="green", linestyle="--")
+        plt.title("Frame Differences from First Frame")
+        plt.xlabel("Frame Index (relative to first frame)")
+        plt.ylabel("Sum of Absolute Differences")
+        plt.savefig("frame_differences.png")
+        plt.close()
+        zea.log.info(
+            f"Saved frame differences plot to {zea.log.yellow('frame_differences.png')}"
+        )
+    return min_diff_idx
+
+
 def _load_from_run_dir(
     run_dir: Path | str,
     frame_idx=None,
@@ -140,6 +172,18 @@ def _load_from_run_dir(
         dtype=focused.dtype,
         distance_to_apex=distance_to_apex,
     )
+
+    # Find best cine loop
+    if frame_idx is None:
+        last_frame = find_best_cine_loop(
+            focused[drop_first_n_frames:] if drop_first_n_frames else focused
+        )
+        last_frame = last_frame + (drop_first_n_frames if drop_first_n_frames else 0)
+        focused = focused[:last_frame]
+        diverging = diverging[:last_frame]
+        reconstructions = reconstructions[:last_frame]
+        measurements = measurements[:last_frame]
+        belief_distributions = belief_distributions[:last_frame]
 
     print("Postprocessing focused...")
     focused = postprocess_agent_results(
@@ -390,7 +434,7 @@ def animated_plot_from_npz(
     file_type="gif",
     fill_value="black",
     no_measurement_color="gray",
-    drop_first_n_frames=5,
+    drop_first_n_frames=10,
 ):
     plot_dir = Path(plot_dir)
     plot_dir.mkdir(parents=True, exist_ok=True)
