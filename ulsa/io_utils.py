@@ -1,9 +1,8 @@
 import os
 from pathlib import Path
 
-import cv2
+import jax
 import keras
-import matplotlib.cm as cm
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,6 +42,7 @@ def _scan_convert(
     fill_value: float = 0.0,
     order: int = 1,
     resolution: float | None = 1.0,
+    coordinates=None,
     **kwargs,
 ):
     """Scan conversion helper function (will handle casting to float32 if needed). If possible,
@@ -55,15 +55,24 @@ def _scan_convert(
     if int_type:
         img = ops.cast(img, "float32")
 
-    sc, _ = scan_convert_2d(
-        img,
-        rho_range=(0, img_height),
-        theta_range=(deg2rad(start_angle), deg2rad(end_angle)),
-        order=order,
-        fill_value=fill_value,
-        resolution=resolution,
-        **kwargs,
-    )
+    if coordinates is None:
+        sc, _ = scan_convert_2d(
+            img,
+            rho_range=(0, img_height),
+            theta_range=(deg2rad(start_angle), deg2rad(end_angle)),
+            order=order,
+            fill_value=fill_value,
+            resolution=resolution,
+            **kwargs,
+        )
+    else:
+        sc, _ = jax.jit(scan_convert_2d, static_argnames=("fill_value", "order"))(
+            img,
+            coordinates=coordinates,
+            order=order,
+            fill_value=fill_value,
+            **kwargs,
+        )
 
     # round sc to get rid of numerical errors leading to overflow
     if int_type:
@@ -279,8 +288,8 @@ def color_to_value(image_range, color="gray"):
         return image_range[1]
     elif color == "black":
         return image_range[0]
-    elif color == "gray":
-        return (image_range[0] + image_range[1]) / 2
+    elif color == "gray" or color == "grey":
+        return float((image_range[0] + image_range[1]) / 2)
     elif color == "transparent":
         return np.nan
     else:
@@ -299,6 +308,7 @@ def postprocess_agent_results(
     reconstruction_sharpness_std=0.0,  # advise: 0.025
     fill_value="black",
     to_uint8=True,
+    coordinates=None,
     **kwargs,
 ):
     """Postprocess agent results for visualization.
@@ -325,6 +335,7 @@ def postprocess_agent_results(
             order=scan_convert_order,
             fill_value=fill_value,
             resolution=scan_convert_resolution,
+            coordinates=coordinates,
             **kwargs,
         )
 
