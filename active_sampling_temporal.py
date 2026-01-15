@@ -358,10 +358,9 @@ def preload_data(
         scan = Scan(n_tx=1)
 
     is_in_house_dataset = scan.n_tx and data_type == "data/raw_data"
-    if is_in_house_dataset:  # TODO: does echonet still work?
+    if is_in_house_dataset:
         log.info("Assuming the data file is from the in-house dataset!")
-        _type = "unfocused" if type == "diverging" else type
-        scan.set_transmits(_type)
+        scan.set_transmits(type)
         update_scan_for_polar_grid(scan)
 
     # slice(None) means all frames.
