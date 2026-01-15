@@ -145,11 +145,6 @@ def eval_in_house_data(
 
         _override_config["action_selection"]["selection_strategy"] = selection_strategy
 
-        if selection_strategy == "equispaced":
-            _override_config["action_selection"]["kwargs"] = {
-                "assert_equal_spacing": False
-            }
-
         # Run active sampling on focused waves
         results, _, _, _, _, agent, agent_config, _ = active_sampling_single_file(
             agent_config_path,

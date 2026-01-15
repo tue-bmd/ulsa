@@ -223,5 +223,7 @@ def selector_from_name(name: str, **kwargs) -> LinesActionModel:
             "Covariance sampling is not registered."
         )
         kwargs["n_masks"] = int(1e5)
+    elif name == "equispaced":
+        kwargs["assert_equal_spacing"] = False
 
     return action_selection_registry[name](**kwargs)
