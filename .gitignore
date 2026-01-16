@@ -7,7 +7,7 @@ users.yaml
 *.pdf
 !derivations/*.pdf
 !additional_results/*.png
-!assets/*.png
+!assets/*
 *.npy
 *.pkl
 *.ttf
