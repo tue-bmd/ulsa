@@ -20,6 +20,8 @@ from zea import log
 sys.path.append("/ulsa")
 
 
+from itertools import product
+
 from in_house_cardiac.gcnr import METRIC_LABEL, sort_by_names, swap_layer
 from in_house_cardiac.gcnr import load_results as load_fundamental_results
 from in_house_cardiac.gcnr_itk import load_results as load_harmonic_results
@@ -37,6 +39,38 @@ def get_mean_gcnr(gcnr_dict, method="diverging"):
     return sum_gcnr, len_gcnr
 
 
+def print_mean_gcnr(
+    gcnr_dict_fund,
+    gcnr_dict_harm,
+    rec_methods=("greedy_entropy", "diverging"),
+    acq_methods=("fundamental", "harmonic"),
+):
+    if isinstance(rec_methods, str):
+        rec_methods = [rec_methods]
+    if isinstance(acq_methods, str):
+        acq_methods = [acq_methods]
+
+    sum_gcnr = 0.0
+    len_gcnr = 0
+    for rec_method, acq_method in product(rec_methods, acq_methods):
+        if acq_method == "fundamental" and rec_method == "greedy_entropy":
+            rec_method = "reconstructions"
+        if acq_method == "fundamental":
+            _sum_gcnr, _len_gcnr = get_mean_gcnr(gcnr_dict_fund, method=rec_method)
+        else:
+            _sum_gcnr, _len_gcnr = get_mean_gcnr(gcnr_dict_harm, method=rec_method)
+        sum_gcnr += _sum_gcnr
+        len_gcnr += _len_gcnr
+
+    mean_gcnr = sum_gcnr / len_gcnr
+
+    print(
+        f"Mean gCNR ({' & '.join(acq_methods)} acquisition for {', '.join(rec_methods)}): {mean_gcnr:.4f}"
+    )
+
+    return sum_gcnr, len_gcnr, mean_gcnr
+
+
 if __name__ == "__main__":
     plt.rcdefaults()  # Reset to default matplotlib style
     subjects, group_names, relative_gncr_dict, _, _, gcnr_all, _ = (
@@ -46,23 +80,25 @@ if __name__ == "__main__":
         load_harmonic_results()
     )
 
-    # Compute mean gcnr for active perception and diverging waves
-    sum_gcnr, len_gcnr = get_mean_gcnr(gcnr_all, method="diverging")
-    sum_gcnr_hi, len_gcnr_hi = get_mean_gcnr(gcnr_all_hi, method="diverging")
-    mean_gcnr1 = (sum_gcnr + sum_gcnr_hi) / (len_gcnr + len_gcnr_hi)
-    print(
-        f"Mean gCNR (diverging waves, both fundamental and harmonic): {mean_gcnr1:.4f}"
-    )
+    for acq_method in [("fundamental", "harmonic"), ("harmonic",), ("fundamental",)]:
+        # mean gcnr for diverging
+        _, _, mean_gcnr_div = print_mean_gcnr(
+            gcnr_all,
+            gcnr_all_hi,
+            rec_methods=("diverging"),
+            acq_methods=acq_method,
+        )
 
-    sum_gcnr, len_gcnr = get_mean_gcnr(gcnr_all, method="reconstructions")
-    sum_gcnr_hi, len_gcnr_hi = get_mean_gcnr(gcnr_all_hi, method="greedy_entropy")
-    mean_gcnr2 = (sum_gcnr + sum_gcnr_hi) / (len_gcnr + len_gcnr_hi)
-    print(
-        f"Mean gCNR (greedy entropy, both fundamental and harmonic): {mean_gcnr2:.4f}"
-    )
+        # mean gcnr for greedy entropy
+        _, _, mean_gcnr_act = print_mean_gcnr(
+            gcnr_all,
+            gcnr_all_hi,
+            rec_methods=("greedy_entropy"),
+            acq_methods=acq_method,
+        )
 
-    gcnr_improvement = ((mean_gcnr2 - mean_gcnr1) / mean_gcnr1) * 100.0
-    print(f"gCNR improvement: {gcnr_improvement:.2f}%")
+        gcnr_improvement = ((mean_gcnr_act - mean_gcnr_div) / mean_gcnr_div) * 100.0
+        print(f"-- gCNR improvement ({acq_method}): {gcnr_improvement:.2f}%")
 
     group_names.update(group_names_hi)
 
