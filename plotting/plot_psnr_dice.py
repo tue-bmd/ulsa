@@ -48,11 +48,6 @@ STRATEGY_NAMES = {
     "equispaced": "Equispaced",
 }
 
-# Canonical strategy mapping
-STRATEGY_CANONICAL_MAP = {
-    "downstream_propagation": "downstream_propagation_summed",
-    # Add more mappings if needed
-}
 
 STRATEGIES_TO_PLOT = [
     # "downstream_propagation_summed",

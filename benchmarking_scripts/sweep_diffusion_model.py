@@ -13,7 +13,6 @@ python benchmarking_scripts/sweep_diffusion_model.py \
         /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_123033_778339_echonet_diffusion_4_frames/hub \
         /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_123045_908961_echonet_diffusion_5_frames/hub \
         /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_123115_976983_echonet_diffusion_6_frames/hub
-    
 
 """
 

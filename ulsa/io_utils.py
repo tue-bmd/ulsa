@@ -1,9 +1,8 @@
 import os
 from pathlib import Path
 
-import cv2
+import jax
 import keras
-import matplotlib.cm as cm
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,6 +42,7 @@ def _scan_convert(
     fill_value: float = 0.0,
     order: int = 1,
     resolution: float | None = 1.0,
+    coordinates=None,
     **kwargs,
 ):
     """Scan conversion helper function (will handle casting to float32 if needed). If possible,
@@ -55,69 +55,30 @@ def _scan_convert(
     if int_type:
         img = ops.cast(img, "float32")
 
-    sc, _ = scan_convert_2d(
-        img,
-        rho_range=(0, img_height),
-        theta_range=(deg2rad(start_angle), deg2rad(end_angle)),
-        order=order,
-        fill_value=fill_value,
-        resolution=resolution,
-        **kwargs,
-    )
+    if coordinates is None:
+        sc, _ = scan_convert_2d(
+            img,
+            rho_range=(0, img_height),
+            theta_range=(deg2rad(start_angle), deg2rad(end_angle)),
+            order=order,
+            fill_value=fill_value,
+            resolution=resolution,
+            **kwargs,
+        )
+    else:
+        sc, _ = jax.jit(scan_convert_2d, static_argnames=("fill_value", "order"))(
+            img,
+            coordinates=coordinates,
+            order=order,
+            fill_value=fill_value,
+            **kwargs,
+        )
 
     # round sc to get rid of numerical errors leading to overflow
     if int_type:
         sc = ops.cast(ops.round(sc), orig_dtype)
 
     return sc
-
-
-def gray_to_color_with_transparency(grayscale_image, transparency_mask=None):
-    transparency_mask = (
-        transparency_mask
-        if transparency_mask is not None
-        else np.ones_like(grayscale_image)
-    )
-    grayscale_image = ops.convert_to_numpy(grayscale_image)
-    colour_image = cv2.cvtColor(grayscale_image, cv2.COLOR_GRAY2BGRA)
-    colour_image[:, :, 3] = colour_image[:, :, 3] * transparency_mask
-    return colour_image
-
-
-map_error = lambda x: map_range(x, (0, 2), (0, 1))
-
-
-def apply_colormap_to_rgba(rgba_image: np.ndarray, cmap_name: str = "viridis"):
-    """
-    Apply a colormap to an RGBA image based on its grayscale values while preserving transparency.
-
-    Parameters:
-    - rgba_image (np.ndarray): Input image of shape (H, W, 4) where RGB channels define grayscale values.
-    - cmap_name (str): Name of the colormap to apply (default is 'viridis').
-
-    Returns:
-    - np.ndarray: RGBA image with the colormap applied and transparency preserved.
-    """
-
-    if rgba_image.shape[-1] != 4:
-        raise ValueError("Input image must have shape (H, W, 4) with an alpha channel.")
-
-    # Convert RGB to grayscale (luminosity method: best perceptual results)
-    gray = np.dot(rgba_image[..., :3], [0.2989, 0.5870, 0.1140])  # Weighted sum
-
-    # Normalize grayscale values to range [0, 1]
-    gray = (gray - gray.min()) / (gray.max() - gray.min() + 1e-8)  # Avoid div by zero
-
-    # Get the specified colormap
-    cmap = cm.get_cmap(cmap_name)
-
-    # Apply colormap (returns RGBA image with shape (H, W, 4))
-    color_mapped = cmap(gray)
-
-    # Preserve the original alpha channel
-    color_mapped[..., 3] = rgba_image[..., 3]  # Copy alpha values
-
-    return color_mapped
 
 
 def mask_heatmap_moving_average(masks, window_size=9):
@@ -327,8 +288,8 @@ def color_to_value(image_range, color="gray"):
         return image_range[1]
     elif color == "black":
         return image_range[0]
-    elif color == "gray":
-        return (image_range[0] + image_range[1]) / 2
+    elif color == "gray" or color == "grey":
+        return float((image_range[0] + image_range[1]) / 2)
     elif color == "transparent":
         return np.nan
     else:
@@ -347,6 +308,7 @@ def postprocess_agent_results(
     reconstruction_sharpness_std=0.0,  # advise: 0.025
     fill_value="black",
     to_uint8=True,
+    coordinates=None,
     **kwargs,
 ):
     """Postprocess agent results for visualization.
@@ -373,6 +335,7 @@ def postprocess_agent_results(
             order=scan_convert_order,
             fill_value=fill_value,
             resolution=scan_convert_resolution,
+            coordinates=coordinates,
             **kwargs,
         )
 

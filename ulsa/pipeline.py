@@ -13,6 +13,8 @@ from zea.scan import Scan
 
 
 class Pipeline(ZeaPipeline):
+    """zea.Pipeline with convenience methods to beamform a full sequence."""
+
     def run(
         self,
         data: Union[File, np.ndarray, List[np.ndarray]],
@@ -99,10 +101,10 @@ class Pipeline(ZeaPipeline):
 def beamforming(rx_apo=True, pfield=False, low_pct=18, high_pct=95) -> list:
     """Create a pipeline for beamforming operations."""
     return [
-        zea.ops.FirFilter(axis=-3, filter_key="bandpass_rf"),
+        zea.ops.BandPassFilter(num_taps=128, axis=-3),
         ulsa.ops.WaveletDenoise(),  # optional
         zea.ops.Demodulate(),
-        zea.ops.LowPassFilter(complex_channels=True, axis=-2),  # optional
+        zea.ops.LowPassFilterIQ(num_taps=128, axis=-3),  # optional
         zea.ops.Downsample(2),  # optional
         zea.ops.Map(
             [

@@ -6,6 +6,7 @@ so far.
 
 import argparse
 import os
+import time
 
 
 def parse_args():
@@ -257,35 +258,17 @@ def benchmark(
     circle_augmentation=None,
     save_dir=None,
     metrics: Metrics = None,
+    reinitialize_every_file=False,
+    jit_options="pipeline",
+    metrics_batch_size=28,
 ):
-    # Not sure if I have to reinit the agent every time?
-    seed, seed_1 = jax.random.split(seed)
-    agent, state = setup_agent(
-        agent_config, seed=seed_1, model=model, jit_mode=jit_mode
-    )
-
-    jit_options = None if jit_mode == "off" else "pipeline"
-    pipeline = make_pipeline(
-        dataset.key,
-        agent.input_range,
-        agent.input_shape,
-        agent_config.action_selection.shape,
-        jit_options=jit_options,
-    )
-    if agent_config.get("is_3d", False):
-        # we don't need any post-cropping for the 3d case
-        post_pipeline = None
-    else:
-        post_pipeline = zea.ops.Pipeline(
-            [
-                zea.ops.Lambda(
-                    keras.layers.CenterCrop(*agent_config.action_selection.shape)
-                )
-            ],
-            with_batch_dim=True,
-            jit_options=jit_options,
-        )
-
+    """
+    Args:
+        reinitialize_every_file: Whether to reinitialize the agent and pipeline for every file.
+            Mainly useful if the agent configuration changes between files (e.g. n_tx -- for
+            the in-house dataset). Defaults to False for efficiency because the 3d dataset and
+            echonet do not need it.
+    """
     if metrics is None:
         if agent_config.get("is_3d", False):
             metrics_to_compute = ["mae", "mse", "psnr", "lpips"]
@@ -296,13 +279,6 @@ def benchmark(
             image_range=[0, 255],
         )
 
-    if agent_config.downstream_task is not None:
-        downstream_task = downstream_task_registry[agent_config.downstream_task](
-            batch_size=agent_config.diffusion_inference.batch_size
-        )
-    else:
-        downstream_task = None
-
     if file_indices is None:
         file_indices = range(len(dataset))
     if isinstance(file_indices, int):
@@ -310,9 +286,49 @@ def benchmark(
 
     all_metrics_results = []
     for i, file_index in enumerate(file_indices):
+        # Load data and scan
         file = dataset[file_index]
         target_sequence, scan = preload_data(file, n_frames, dataset.key)
         scan.dynamic_range = dynamic_range
+        agent_config.action_selection.set_n_tx(scan.n_tx)
+
+        # Initialize agent and pipeline (once or per file)
+        if i == 0 or reinitialize_every_file:
+            seed, seed_1 = jax.random.split(seed)
+            agent, state = setup_agent(
+                agent_config, seed=seed_1, model=model, jit_mode=jit_mode
+            )
+
+            jit_options = None if jit_mode == "off" else jit_options
+            pipeline = make_pipeline(
+                dataset.key,
+                agent.input_range,
+                agent.input_shape,
+                agent_config.action_selection.shape,
+                jit_options=jit_options,
+            )
+            if agent_config.get("is_3d", False):
+                # we don't need any post-cropping for the 3d case
+                post_pipeline = None
+            else:
+                post_pipeline = zea.ops.Pipeline(
+                    [
+                        zea.ops.Lambda(
+                            keras.layers.CenterCrop(
+                                *agent_config.action_selection.shape
+                            )
+                        )
+                    ],
+                    with_batch_dim=True,
+                    jit_options=jit_options,
+                )
+            if agent_config.downstream_task is not None:
+                print(f"Setting up downstream task: {agent_config.downstream_task}...")
+                downstream_task = downstream_task_registry[
+                    agent_config.downstream_task
+                ](batch_size=agent_config.diffusion_inference.batch_size)
+            else:
+                downstream_task = None
 
         if circle_augmentation is not None:
             seed, seed_1 = jax.random.split(seed)
@@ -332,22 +348,31 @@ def benchmark(
             post_pipeline=post_pipeline,
         )
 
-        target_sequence_preprocessed = zea.func.translate(
-            target_sequence[..., None], dynamic_range, (-1, 1)
-        )
-        downstream_task, targets_dst, reconstructions_dst, _ = apply_downstream_task(
-            downstream_task,
-            agent_config,
-            target_sequence_preprocessed,
-            results.belief_distributions,
-        )
+        if downstream_task is not None:
+            target_sequence_preprocessed = zea.func.translate(
+                target_sequence[..., None], dynamic_range, (-1, 1)
+            )
+            downstream_task, targets_dst, reconstructions_dst, _ = (
+                apply_downstream_task(
+                    downstream_task,
+                    agent_config,
+                    target_sequence_preprocessed,
+                    results.belief_distributions,
+                )
+            )
 
         denormalized = results.to_uint8(agent.input_range)
+        start_time = time.perf_counter()
+        print("Computing metrics...")
         metrics_results = metrics(
             denormalized.target_imgs,
             denormalized.reconstructions,
             average_batches=False,
-            mapped_batch_size=28,  # to avoid OOM on LPIPS
+            mapped_batch_size=metrics_batch_size,  # to avoid OOM on LPIPS
+        )
+        print(
+            f"Time taken to compute metrics for file index {file_index}: "
+            f"{time.perf_counter() - start_time:.2f} seconds"
         )
         all_metrics_results.append(metrics_results)
         if circle_augmentation is not None:
@@ -489,6 +514,9 @@ def run_benchmark(
     shard_index=None,
     validate_dataset=True,
     debug_sweep=False,
+    reinitialize_every_file=False,
+    jit_options="pipeline",
+    metrics_batch_size=28,
 ):
     """
     Run benchmarking for ultrasound line-scanning agents.
@@ -572,6 +600,9 @@ def run_benchmark(
             run_level_subkey,
             circle_augmentation=circle_augmentation,
             save_dir=sweep_save_dir,
+            reinitialize_every_file=reinitialize_every_file,
+            jit_options=jit_options,
+            metrics_batch_size=metrics_batch_size,
         )
         all_metrics_results = out[0]
         agent = out[-1]

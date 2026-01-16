@@ -29,6 +29,7 @@ from skimage.exposure import match_histograms
 
 from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import color_to_value, postprocess_agent_results
+from ulsa.transmit_time import max_fps
 
 imshow_kwargs = {
     "vmin": 0,
@@ -65,13 +66,54 @@ def _init_grid(
     return fig, outer
 
 
+def find_best_cine_loop(
+    data,  # shape (n_frames, height, width)
+    min_sequence_length=30,
+    visualize=True,
+):
+    """Find the best cine loop by comparing frame differences to the first frame.
+
+    Args:
+        data: np.ndarray of shape (n_frames, height, width)
+        min_sequence_length: Minimum number of frames before considering loop closure.
+        visualize: Whether to save a plot of the frame differences.
+    """
+    first_frame = data[0]
+    other_frames = data[1:]
+    differences = np.sum(np.abs(other_frames - first_frame[None]), axis=(1, 2))
+    min_diff_idx = np.argmin(differences[min_sequence_length:]) + min_sequence_length
+
+    if visualize:
+        plt.plot(differences)
+        plt.axvline(min_sequence_length, color="red", linestyle="--")
+        plt.axvline(min_diff_idx, color="green", linestyle="--")
+        plt.title("Frame Differences from First Frame")
+        plt.xlabel("Frame Index (relative to first frame)")
+        plt.ylabel("Sum of Absolute Differences")
+        plt.savefig("frame_differences.png")
+        plt.close()
+        zea.log.info(
+            f"Saved frame differences plot to {zea.log.yellow('frame_differences.png')}"
+        )
+    return min_diff_idx
+
+
 def _load_from_run_dir(
     run_dir: Path | str,
     frame_idx=None,
     selection_strategy="greedy_entropy",
     scan_convert_resolution=0.1,
     dynamic_range=None,
+    fill_value="transparent",
+    distance_to_apex=7.0,
+    no_measurement_color="gray",
+    drop_first_n_frames: int = 0,
 ):
+    if drop_first_n_frames > 0:
+        assert frame_idx is None, (
+            "Cannot drop frames when a specific frame is selected."
+        )
+
     run_dir = Path(run_dir)
 
     focused_results = np.load(run_dir / "focused.npz", allow_pickle=True)
@@ -112,7 +154,9 @@ def _load_from_run_dir(
         dynamic_range = focused_results["dynamic_range"]
 
     measurements = keras.ops.where(
-        masks > 0, measurements, color_to_value(reconstruction_range, "gray")
+        masks > 0,
+        measurements,
+        color_to_value(reconstruction_range, no_measurement_color),
     )
 
     io_config = zea.Config(
@@ -120,15 +164,37 @@ def _load_from_run_dir(
         scan_conversion_angles=np.rad2deg(results["theta_range"]),
     )
 
+    _, height, width = focused.shape
+    coordinates, _ = zea.display.compute_scan_convert_2d_coordinates(
+        (height, width),
+        (0, height),
+        results["theta_range"],
+        scan_convert_resolution,
+        dtype=focused.dtype,
+        distance_to_apex=distance_to_apex,
+    )
+
+    # Find best cine loop
+    if frame_idx is None:
+        last_frame = find_best_cine_loop(focused[drop_first_n_frames:])
+        last_frame = last_frame + drop_first_n_frames
+        focused = focused[:last_frame]
+        diverging = diverging[:last_frame]
+        reconstructions = reconstructions[:last_frame]
+        measurements = measurements[:last_frame]
+        belief_distributions = belief_distributions[:last_frame]
+
     print("Postprocessing focused...")
     focused = postprocess_agent_results(
         focused,
         io_config,
         scan_convert_order=0,
         image_range=dynamic_range,
-        fill_value="transparent",
+        drop_first_n_frames=drop_first_n_frames,
+        fill_value=fill_value,
         scan_convert_resolution=scan_convert_resolution,
-        distance_to_apex=7.0,  # pixels
+        distance_to_apex=distance_to_apex,
+        coordinates=coordinates,
     )
     print("Postprocessing diverging...")
     diverging = postprocess_agent_results(
@@ -136,9 +202,11 @@ def _load_from_run_dir(
         io_config,
         scan_convert_order=0,
         image_range=dynamic_range,
-        fill_value="transparent",
+        drop_first_n_frames=drop_first_n_frames,
+        fill_value=fill_value,
         scan_convert_resolution=scan_convert_resolution,
-        distance_to_apex=7.0,  # pixels
+        distance_to_apex=distance_to_apex,
+        coordinates=coordinates,
     )
     print("Postprocessing reconstructions...")
     reconstructions = postprocess_agent_results(
@@ -146,10 +214,12 @@ def _load_from_run_dir(
         io_config,
         scan_convert_order=0,
         image_range=dynamic_range,
+        drop_first_n_frames=drop_first_n_frames,
         reconstruction_sharpness_std=0.02,
-        fill_value="transparent",
+        fill_value=fill_value,
         scan_convert_resolution=scan_convert_resolution,
-        distance_to_apex=7.0,  # pixels
+        distance_to_apex=distance_to_apex,
+        coordinates=coordinates,
     )
     print("Postprocessing measurements...")
     measurements = postprocess_agent_results(
@@ -157,24 +227,25 @@ def _load_from_run_dir(
         io_config,
         scan_convert_order=0,
         image_range=reconstruction_range,
-        fill_value="transparent",
+        drop_first_n_frames=drop_first_n_frames,
+        fill_value=fill_value,
         scan_convert_resolution=scan_convert_resolution,
-        distance_to_apex=7.0,  # pixels
+        distance_to_apex=distance_to_apex,
+        coordinates=coordinates,
     )
 
     print("Postprocessing entropy...")
-    belief_distributions = belief_distributions[frame_idx]
-    entropy = jnp.squeeze(
-        pixelwise_entropy(belief_distributions[None], entropy_sigma=255), axis=0
-    )
+    entropy = pixelwise_entropy(belief_distributions, entropy_sigma=255)
     entropy = postprocess_agent_results(
         entropy,
         io_config=io_config,
         scan_convert_order=1,
         image_range=[0, jnp.nanpercentile(entropy, 98.5)],
-        fill_value="transparent",
+        drop_first_n_frames=drop_first_n_frames,
+        fill_value=fill_value,
         scan_convert_resolution=scan_convert_resolution,
-        distance_to_apex=7.0,  # pixels
+        distance_to_apex=distance_to_apex,
+        coordinates=coordinates,
     )
 
     return (
@@ -354,6 +425,72 @@ def stack_plot_from_npz(
             )
 
 
+def animated_plot_from_npz(
+    run_dir: str,
+    plot_dir: str | Path,
+    scan_convert_resolution=0.5,
+    selection_strategy="greedy_entropy",
+    file_type="gif",
+    fill_value="black",
+    no_measurement_color="gray",
+    drop_first_n_frames=10,
+    fps=None,
+):
+    plot_dir = Path(plot_dir)
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    name = Path(run_dir).name
+
+    is_fundamental = "fundamental" in str(run_dir)
+    is_harmonic = "harmonic" in str(run_dir)
+    assert is_fundamental or is_harmonic, (
+        "Run dir should contain 'fundamental' or 'harmonic' to identify modality."
+    )
+
+    (
+        focused,
+        diverging,
+        reconstructions,
+        measurements,
+        entropy,
+        n_actions,
+        n_possible_actions,
+        _,
+    ) = _load_from_run_dir(
+        run_dir,
+        frame_idx=None,
+        selection_strategy=selection_strategy,
+        scan_convert_resolution=scan_convert_resolution,
+        fill_value=fill_value,
+        no_measurement_color=no_measurement_color,
+        drop_first_n_frames=drop_first_n_frames,
+    )
+
+    if is_harmonic:
+        n_possible_actions *= 2
+        n_actions *= 2
+
+    if fps is None:
+        fps = max_fps(n_tx=n_possible_actions + n_actions, processing_overhead=1.14)
+        print(f"Saving animations at {fps:.2f} FPS")
+
+    axis = -1  # concat along width
+    comparison = np.concatenate([focused, reconstructions, diverging], axis=axis)
+    zea.io_lib.save_video(
+        comparison,
+        plot_dir / f"target_reconstruction_diverging_{name}.{file_type}",
+        fps=fps,
+    )
+
+    measurements_reconstruction = np.concatenate(
+        [measurements, reconstructions], axis=axis
+    )
+    zea.io_lib.save_video(
+        measurements_reconstruction,
+        plot_dir / f"measurements_reconstruction_{name}.{file_type}",
+        fps=fps,
+    )
+
+
 if __name__ == "__main__":
     fundamental_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental/20240701_P1_A4CH_0001"
     harmonic_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/20251222_s3_a4ch_line_dw_0000"
@@ -363,10 +500,14 @@ if __name__ == "__main__":
     stack_plot_from_npz(
         [fundamental_file, harmonic_file],
         "output/in_house_cardiac",
-        context="styles/darkmode.mplstyle",
+        context="styles/ieee-tmi.mplstyle",
         frame_indices=frame_indices,
         arrows=arrows,
         ylabels=ylabels,
         selection_strategy="greedy_entropy",
         scan_convert_resolution=0.1,
+    )
+
+    animated_plot_from_npz(
+        harmonic_file, "output/in_house_cardiac/animations", scan_convert_resolution=0.2
     )

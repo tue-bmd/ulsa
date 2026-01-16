@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 import zea
-from ulsa.buffer import FrameBuffer, lifo_shift
+from ulsa.buffer import FrameBuffer, fifo_shift
 from ulsa.selection import (
     DownstreamTaskSelection,
     GreedyVariance,
@@ -125,9 +125,12 @@ class ActionSelectionConfig(Cfg):
         if self.n_possible_actions == "n_tx":
             self.n_possible_actions = n_tx
 
+        self._orig_shape = self.shape.copy()
+
         # For example: this converts [112, "2*n_tx"] to [112, 112] if n_tx=56
         self.shape = [
-            s if "n_tx" not in str(s) else eval(s, {"n_tx": n_tx}) for s in self.shape
+            s if "n_tx" not in str(s) else eval(s, {"n_tx": n_tx})
+            for s in self._orig_shape
         ]
 
 
@@ -369,7 +372,7 @@ def reset_agent_state(agent: Agent, seed, batch_size=None):
     selected_lines, mask_t, saliency_map = agent.initial_action_selection(
         particles=None, current_lines=None, seed=seed
     )
-    mask = lifo_shift(ops.zeros(agent.input_shape), mask_t)
+    mask = fifo_shift(ops.zeros(agent.input_shape), mask_t)
 
     return AgentState(
         measurement_buffer=FrameBuffer(
@@ -631,7 +634,7 @@ def recover(
     new_selected_lines, new_mask_t, saliency_map = action_selection(
         belief_distribution[..., 0], selected_lines, seed_2
     )
-    new_mask = lifo_shift(mask, new_mask_t)
+    new_mask = fifo_shift(mask, new_mask_t)
 
     # 4. create a reconstruction from the beliefs
     recovered_frame = beliefs_to_recovered_frame(

@@ -8,8 +8,9 @@ import keras
 
 import zea
 
-zea.init_device()
-keras.mixed_precision.set_global_policy("mixed_float16")
+if __name__ == "__main__":
+    zea.init_device()
+    keras.mixed_precision.set_global_policy("mixed_float16")
 import shutil
 from pathlib import Path
 

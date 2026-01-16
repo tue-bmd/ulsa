@@ -1,4 +1,4 @@
-# Patient-Adaptive Focused Transmit Beamforming using Cognitive Ultrasound
+# Patient-Adaptive Echocardiography using Cognitive Ultrasound
 
 The repo contains the code for the paper [Patient-Adaptive Focused Transmit Beamforming using Cognitive Ultrasound](https://tue-bmd.github.io/ulsa/). For more information, please refer to the [project page](https://tue-bmd.github.io/ulsa/).
 
@@ -60,8 +60,6 @@ For the 3D model, use [`active_sampling_temporal_3d.py`](./active_sampling_tempo
 ```bash
 python active_sampling_temporal_3d.py --config "configs/elevation_3d.yaml"
 ```
-
-Additionally, we have created a [Jupyter notebook](./example.ipynb), which implements our algorithm in step-by-step fashion.
 
 For educational purposes, we have also created a simplified version of our algorithm [in this notebook](https://zea.readthedocs.io/en/latest/notebooks/agent/agent_example.html).
 

@@ -1,3 +1,5 @@
+"""This script (and function) loads and reconstructs a cardiac ultrasound scan from raw data."""
+
 import os
 import sys
 
@@ -46,12 +48,6 @@ def cardiac_scan(
             file, n_frames, data_type="data/raw_data", type=type
         )
 
-    bandpass_rf = zea.func.get_band_pass_filter(
-        128,
-        scan.sampling_frequency,
-        scan.demodulation_frequency - bandwidth / 2,
-        scan.demodulation_frequency + bandwidth / 2,
-    )
     if polar_limits is not None:
         scan.polar_limits = list(polar_limits)
     else:
@@ -68,7 +64,7 @@ def cardiac_scan(
         )
 
     params = pipeline.prepare_parameters(
-        scan=scan, bandwidth=bandwidth, bandpass_rf=bandpass_rf, minval=0, **params
+        scan=scan, bandwidth=bandwidth, minval=0, **params
     )
 
     images, output = pipeline.run(

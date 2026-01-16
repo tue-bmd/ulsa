@@ -97,7 +97,7 @@ from keras.src import backend
 import zea.ops
 from ulsa import selection  # need to import this to update action selection registry
 from ulsa.agent import Agent, AgentConfig, AgentState, hard_projection, setup_agent
-from ulsa.downstream_task import downstream_task_registry
+from ulsa.downstream_task import DownstreamTask, downstream_task_registry
 from ulsa.io_utils import (
     make_save_dir,
     map_range,
@@ -121,7 +121,7 @@ def simple_scan(f, init, xs, length=None, disable_tqdm=False):
         xs = [None] * length
     carry = init
     ys = []
-    for x in tqdm(xs, leave=False, disable=disable_tqdm):
+    for x in tqdm(xs, leave=True, disable=disable_tqdm):
         carry, y = f(carry, x)
         if isinstance(y, (list, tuple)):
             y = [ops.convert_to_numpy(_y) for _y in y]
@@ -132,29 +132,26 @@ def simple_scan(f, init, xs, length=None, disable_tqdm=False):
 
 
 def apply_downstream_task(
-    downstream_task: Optional[Callable], agent_config, targets, belief_distributions
+    downstream_task: DownstreamTask, agent_config, targets, belief_distributions
 ):
-    if downstream_task is None:
-        return None, None, None, None
-    else:
-        n_frames, n_particles, h, w, c = ops.shape(belief_distributions)
-        beliefs_stacked = ops.reshape(
-            belief_distributions, (n_frames * n_particles, h, w, c)
-        )
-        beliefs_dst = vmap(
-            downstream_task.call_generic,
-            batch_size=agent_config.diffusion_inference.batch_size,
-            fn_supports_batch=True,
-        )(beliefs_stacked)
-        _, h, w, c = ops.shape(beliefs_dst)
-        beliefs_dst = ops.reshape(beliefs_dst, (n_frames, n_particles, h, w, c))
-        reconstructions_dst = downstream_task.beliefs_to_reconstruction(beliefs_dst)
-        targets_dst = vmap(
-            downstream_task.call_generic,
-            batch_size=agent_config.diffusion_inference.batch_size,
-            fn_supports_batch=True,
-        )(targets)
-        return downstream_task, targets_dst, reconstructions_dst, beliefs_dst
+    n_frames, n_particles, h, w, c = ops.shape(belief_distributions)
+    beliefs_stacked = ops.reshape(
+        belief_distributions, (n_frames * n_particles, h, w, c)
+    )
+    beliefs_dst = vmap(
+        downstream_task.call_generic,
+        batch_size=agent_config.diffusion_inference.batch_size,
+        fn_supports_batch=True,
+    )(beliefs_stacked)
+    _, h, w, c = ops.shape(beliefs_dst)
+    beliefs_dst = ops.reshape(beliefs_dst, (n_frames, n_particles, h, w, c))
+    reconstructions_dst = downstream_task.beliefs_to_reconstruction(beliefs_dst)
+    targets_dst = vmap(
+        downstream_task.call_generic,
+        batch_size=agent_config.diffusion_inference.batch_size,
+        fn_supports_batch=True,
+    )(targets)
+    return downstream_task, targets_dst, reconstructions_dst, beliefs_dst
 
 
 @dataclass
@@ -187,22 +184,26 @@ class AgentResults:
             return None
         return np.squeeze(data, axis=axis)
 
+    @staticmethod
+    def map_to_uint8(img, input_range):
+        if img is None:
+            return None
+        img = zea.func.translate(img, input_range, (0, 255))
+        img = ops.clip(img, 0, 255)
+        img = ops.cast(img, "uint8")
+        return ops.convert_to_numpy(img)
+
     def to_uint8(self, input_range=None):
         """
         Convert the results to uint8 format, mapping the input range to (0, 255).
         """
 
-        def map_to_uint8(data):
-            if data is None:
-                return None
-            return map_range(data, input_range, (0, 255)).astype(np.uint8)
-
         return AgentResults(
             self.masks,  # keep masks as is
-            map_to_uint8(self.target_imgs),
-            map_to_uint8(self.reconstructions),
-            map_to_uint8(self.belief_distributions),
-            map_to_uint8(self.measurements),
+            self.map_to_uint8(self.target_imgs, input_range),
+            self.map_to_uint8(self.reconstructions, input_range),
+            self.map_to_uint8(self.belief_distributions, input_range),
+            self.map_to_uint8(self.measurements, input_range),
             self.saliency_map,  # keep saliency map as is
         )
 
@@ -226,17 +227,10 @@ def run_active_sampling(
     # Prepare acquisition function
     if getattr(scan, "n_tx", None) is not None and scan.n_tx > 1:
         rx_apo = lines_rx_apo(scan.n_tx, scan.grid_size_z, scan.grid_size_x)
-        bandpass_rf = zea.func.get_band_pass_filter(
-            128,
-            scan.sampling_frequency,
-            scan.demodulation_frequency - bandwidth / 2,
-            scan.demodulation_frequency + bandwidth / 2,
-        )
         base_params = pipeline.prepare_parameters(
             scan=scan,
             rx_apo=rx_apo,
             bandwidth=bandwidth,
-            bandpass_rf=bandpass_rf,
             minval=0,
         )
 
@@ -365,10 +359,9 @@ def preload_data(
         scan = Scan(n_tx=1)
 
     is_in_house_dataset = scan.n_tx and data_type == "data/raw_data"
-    if is_in_house_dataset:  # TODO: does echonet still work?
+    if is_in_house_dataset:
         log.info("Assuming the data file is from the in-house dataset!")
-        _type = "unfocused" if type == "diverging" else type
-        scan.set_transmits(_type)
+        scan.set_transmits(type)
         update_scan_for_polar_grid(scan)
 
     # slice(None) means all frames.

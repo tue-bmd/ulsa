@@ -1,3 +1,5 @@
+"""Managing a frame buffer which can be used in jax."""
+
 from jax import tree_util
 from keras import ops
 
@@ -11,7 +13,9 @@ class FrameBuffer:
         """
         self.image_shape = tuple(image_shape)
         self.buffer_size = buffer_size
-        sample_shape = image_shape[:-1] if batch_size is None else [batch_size, *image_shape[:-1]]
+        sample_shape = (
+            image_shape[:-1] if batch_size is None else [batch_size, *image_shape[:-1]]
+        )
         self.buffer = ops.zeros(
             [*sample_shape, buffer_size]
         )  # shape: [h, w, buffer_size]
@@ -24,7 +28,7 @@ class FrameBuffer:
         return self.buffer[key]
 
     def shift(self, new_item):
-        self.buffer = lifo_shift(self.buffer, new_item)  # assumed defined elsewhere
+        self.buffer = fifo_shift(self.buffer, new_item)
 
     def latest(self):
         return self.buffer[..., -1]
@@ -50,5 +54,5 @@ class FrameBuffer:
         return obj
 
 
-def lifo_shift(existing_buffer, new_item):
+def fifo_shift(existing_buffer, new_item):
     return ops.concatenate([existing_buffer[..., 1:], new_item], axis=-1)
