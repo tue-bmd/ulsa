@@ -27,6 +27,12 @@ from plotting.plot_psnr_dice import (
 )
 from plotting.plot_utils import OverlappingHistogramPlotter, ViolinPlotter
 
+AXIS_LABEL_MAP_3D = {
+    "n_actions": "# Elevation Planes (out of 48)",
+    # Add more mappings as needed
+}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -90,7 +96,7 @@ if __name__ == "__main__":
 
     # Combined LPIPS and PSNR
     plotter = ViolinPlotter(
-        xlabel=get_axis_label(args.x_axis),
+        xlabel=get_axis_label(args.x_axis, AXIS_LABEL_MAP_3D),
         group_names=STRATEGY_NAMES,
         legend_loc="top",
         # scatter_kwargs={"alpha": 0.01, "s": 4},

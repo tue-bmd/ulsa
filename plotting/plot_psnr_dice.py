@@ -79,10 +79,10 @@ def _log_too_many_blobs_count(results_df: pd.DataFrame):
     )
 
 
-def get_axis_label(key):
+def get_axis_label(key, axis_label_map=AXIS_LABEL_MAP):
     """Get friendly label for axis keys."""
     base_key = key.split(".")[-1]
-    return AXIS_LABEL_MAP.get(base_key, base_key.replace("_", " ").title())
+    return axis_label_map.get(base_key, base_key.replace("_", " ").title())
 
 
 def sort_by_names(combined_results, names):

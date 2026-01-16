@@ -150,7 +150,7 @@ for p, run_dir in enumerate(patients):
     # List of (volume, cmap, title)
     vols = [
         (acquisitions, "grey", "Acquisitions"),
-        (reconstruction, "gray", "Reconstruction"),
+        (reconstruction, "gray", "Cognitive"),
         (entropy, "inferno", "Entropy"),
         (target, "gray", "Target"),
     ]
