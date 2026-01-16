@@ -51,7 +51,7 @@ from ulsa.io_utils import _scan_convert
 from zea.metrics import gcnr
 
 STRATEGY_NAMES = {
-    "greedy_entropy": "Active Perception",
+    "greedy_entropy": "Cognitive",
     "uniform_random": "Random",
     "equispaced": "Equispaced",
     "focused": "Focused",

@@ -149,7 +149,7 @@ def load_results():
     ]
 
     group_names = {
-        "reconstructions": "Active Perception",
+        "reconstructions": "Cognitive",
         "focused": "Focused",
         "diverging": "Diverging",
     }

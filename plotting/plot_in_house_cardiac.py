@@ -247,6 +247,7 @@ def _load_from_run_dir(
         distance_to_apex=distance_to_apex,
         coordinates=coordinates,
     )
+    entropy = np.squeeze(entropy)
 
     return (
         focused,
@@ -398,7 +399,7 @@ def stack_plot_from_npz(
             ax_big = fig.add_subplot(inner[:, 0])
             ax_big.imshow(reconstructions[frame_idx], **imshow_kwargs)
             if row_idx == 0:
-                ax_big.set_title(f"Reconstruction")
+                ax_big.set_title("Cognitive")
             ax_big.axis("off")
             if arrow is not None:
                 ax_big.add_patch(copy.copy(arrow))
@@ -508,6 +509,11 @@ if __name__ == "__main__":
         scan_convert_resolution=0.1,
     )
 
-    animated_plot_from_npz(
-        harmonic_file, "output/in_house_cardiac/animations", scan_convert_resolution=0.2
-    )
+    harmonic_dir = Path(harmonic_file).parent
+    harmonic_files = [f for f in harmonic_dir.iterdir() if f.is_dir()]
+    for harmonic_file in harmonic_files:
+        animated_plot_from_npz(
+            harmonic_file,
+            "output/in_house_cardiac/animations",
+            scan_convert_resolution=0.2,
+        )

@@ -43,7 +43,7 @@ STRATEGY_COLORS = {
 
 STRATEGY_NAMES = {
     "downstream_propagation_summed": "Measurement Information Gain",
-    "greedy_entropy": "Active Perception",
+    "greedy_entropy": "Cognitive",
     "uniform_random": "Random",
     "equispaced": "Equispaced",
 }

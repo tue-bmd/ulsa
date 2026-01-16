@@ -102,7 +102,7 @@ def load_results():
     ]
 
     group_names = {
-        "greedy_entropy": "Active Perception",
+        "greedy_entropy": "Cognitive",
         # "uniform_random": "Random",
         # "equispaced": "Equispaced",
         "focused": "Focused",
