@@ -46,8 +46,10 @@ def _init_grid(
     hspace=0.07,
     left_margin=0.0,
     right_margin=1.0,
+    top_margin=0.95,
+    fig_height_per_row=1.6,
 ):
-    fig = plt.figure(figsize=(7.16, 1.6 * n_rows))
+    fig = plt.figure(figsize=(7.16, fig_height_per_row * n_rows))
 
     grid_shape = (n_rows, grid_columns)
 
@@ -58,7 +60,7 @@ def _init_grid(
         hspace=hspace,
         left=left_margin,
         right=right_margin,
-        top=0.95,  # <1.0 to leave space for titles
+        top=top_margin,  # <1.0 to leave space for titles
         bottom=0.0,
         width_ratios=[1.0, 1.0, 1.45],
     )
@@ -317,6 +319,12 @@ def stack_plot_from_npz(
     ylabels: list | None = None,
     scan_convert_resolution=0.1,
     selection_strategy="greedy_entropy",
+    wspace_inner=-0.1,
+    hspace_inner=0.02,
+    left_margin=0.03,  # space for ylabels
+    top_margin=0.95,  # space for titles
+    hspace=0.0,
+    fig_height_per_row=1.5,
 ):
     plot_dir = Path(plot_dir)
     plot_path = plot_dir / f"qualitative_in_house_{selection_strategy}"
@@ -324,14 +332,18 @@ def stack_plot_from_npz(
     if context is None:
         context = "styles/darkmode.mplstyle"
 
+    # constants
+    grid_columns = 3
+    inner_grid_shape = (2, 2)
+
     with plt.style.context([context, {"figure.constrained_layout.use": False}]):
-        grid_columns = 3
-        wspace_inner = -0.1
-        hspace_inner = 0.02
-        inner_grid_shape = (2, 2)
-        # left_margin = 0.08 if ylabels is not None else 0.0
         fig, outer = _init_grid(
-            len(run_dirs), grid_columns=grid_columns, left_margin=0.03
+            len(run_dirs),
+            grid_columns=grid_columns,
+            left_margin=left_margin,
+            top_margin=top_margin,
+            hspace=hspace,
+            fig_height_per_row=fig_height_per_row,
         )
         for row_idx, run_dir in enumerate(run_dirs):
             is_fundamental = "fundamental" in str(run_dir)
@@ -381,7 +393,7 @@ def stack_plot_from_npz(
             ax = fig.add_subplot(outer[row_idx, 1])
             ax.imshow(diverging[frame_idx], **imshow_kwargs)
             if row_idx == 0:
-                ax.set_title("Diverging")
+                ax.set_title("Diverging (HFR)")
             ax.axis("off")
             if arrow is not None:
                 ax.add_patch(copy.copy(arrow))
@@ -399,7 +411,7 @@ def stack_plot_from_npz(
             ax_big = fig.add_subplot(inner[:, 0])
             ax_big.imshow(reconstructions[frame_idx], **imshow_kwargs)
             if row_idx == 0:
-                ax_big.set_title("Cognitive")
+                ax_big.set_title("Cognitive (HFR)")
             ax_big.axis("off")
             if arrow is not None:
                 ax_big.add_patch(copy.copy(arrow))
@@ -494,26 +506,40 @@ def animated_plot_from_npz(
 
 if __name__ == "__main__":
     fundamental_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental/20240701_P1_A4CH_0001"
-    harmonic_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/20251222_s3_a4ch_line_dw_0000"
-    frame_indices = [24, 68]
-    arrows = [get_arrow(), None]
-    ylabels = ["Fundamental", "Harmonic"]
+    harmonic_dir = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/")
+
     stack_plot_from_npz(
-        [fundamental_file, harmonic_file],
+        [
+            harmonic_dir / "20251222_s3_a4ch_line_dw_0000",
+            harmonic_dir / "20251222_s1_a4ch_line_dw_0000",
+            fundamental_file,
+        ],
         "output/in_house_cardiac",
         context="styles/ieee-tmi.mplstyle",
-        frame_indices=frame_indices,
-        arrows=arrows,
-        ylabels=ylabels,
+        frame_indices=[
+            68,
+            10,
+            24,
+        ],
+        arrows=[
+            None,
+            None,
+            get_arrow(),
+        ],
+        ylabels=[
+            "Harmonic",
+            "Harmonic",
+            "Fundamental",
+        ],
         selection_strategy="greedy_entropy",
         scan_convert_resolution=0.1,
     )
 
-    harmonic_dir = Path(harmonic_file).parent
     harmonic_files = [f for f in harmonic_dir.iterdir() if f.is_dir()]
     for harmonic_file in harmonic_files:
         animated_plot_from_npz(
             harmonic_file,
             "output/in_house_cardiac/animations",
             scan_convert_resolution=0.2,
+            file_type="gif",
         )
