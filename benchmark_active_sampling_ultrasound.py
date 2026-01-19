@@ -1,81 +1,12 @@
 """
-Script for running an ultrasound line-scanning agent that chooses which lines to scan
+Functions for running an ultrasound line-scanning agent that chooses which lines to scan
 based on samples from a distribution over full images conditioned on the lines observed
 so far.
 """
 
-import argparse
+import logging
 import os
 import time
-
-
-def parse_args():
-    """Parse arguments for training DDIM."""
-    parser = argparse.ArgumentParser(description="DDIM inference")
-    parser.add_argument(
-        "--agent_config",
-        type=str,
-        default="./configs/echonet_3_frames.yaml",
-        help="Path to agent config yaml.",
-    )
-    parser.add_argument(
-        "--sweep_names",
-        nargs="+",  # Allow multiple arguments
-        default=["action_selection.n_actions"],
-        help="Which config parameters to sweep on (multiple allowed).",
-        choices=[
-            "action_selection.selection_strategy",
-            "action_selection.n_actions",
-            "diffusion_inference.initial_step",
-        ],
-    )
-    parser.add_argument(
-        "--target_dir",
-        type=str,
-        default="/mnt/z/Ultrasound-BMd/data/oisin/echonet_val_debug",
-        help="A folder containing an ordered sequence of frames to sample from.",
-    )
-    parser.add_argument(
-        "--save_dir",
-        type=str,
-        default="./output",
-        help="Directory in which to save results",
-    )
-    parser.add_argument(
-        "--data_type",
-        type=str,
-        default="data/image",
-        help="Data key for loading hdf5",
-    )
-    parser.add_argument(
-        "--image_range",
-        type=int,
-        nargs=2,
-        default=(-60, 0),
-        help=(
-            "Range of pixel values in the images (e.g., --image_range 0 255), only used if "
-            "data_type is 'data/image'"
-        ),
-    )
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="auto:1",
-        help="GPU device index",
-    )
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-    os.environ["KERAS_BACKEND"] = "jax"
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-    from zea import init_device
-
-    init_device()
-
-import logging
-from collections import defaultdict
 from itertools import product
 from pathlib import Path
 from typing import List
@@ -95,96 +26,10 @@ from active_sampling_temporal import (
 from ulsa.agent import AgentConfig, reset_agent_state, setup_agent
 from ulsa.downstream_task import downstream_task_registry
 from ulsa.io_utils import make_save_dir
-from zea import Config, Dataset, init_device, log, set_data_paths
+from zea import Config, Dataset, log, set_data_paths
 from zea.config import Config
 from zea.data.augmentations import RandomCircleInclusion
 from zea.metrics import Metrics
-
-# Default parameter paths and values
-DEFAULT_SWEEP_VALUES = {
-    "diffusion_inference.initial_step": [
-        400,
-        420,
-        440,
-        460,
-        480,
-        490,
-        492,
-        494,
-        496,
-        498,
-    ],
-    "action_selection.selection_strategy": [
-        "covariance",
-        "greedy_entropy",
-        "uniform_random",
-        "equispaced",
-    ],
-    "action_selection.n_actions": [28, 14, 7],
-    "none": [None],
-}
-
-
-def get_sweep_param_values(config, sweep_name, custom_sweep_values=None):
-    """Get parameter values for sweeping.
-
-    Args:
-        config: Base configuration
-        sweep_name: Name of parameter to sweep
-        custom_sweep_values: Optional dict overriding default sweep values
-    """
-    sweep_values = custom_sweep_values or DEFAULT_SWEEP_VALUES
-
-    if sweep_name == "none":
-        return sweep_values["none"]
-    if sweep_name == "initial_step":
-        num_steps = config.diffusion_sampler.num_steps
-        return sweep_values["initial_step"].get(
-            num_steps, DEFAULT_SWEEP_VALUES["initial_step"][num_steps]
-        )
-    if sweep_name in sweep_values:
-        return sweep_values[sweep_name]
-    raise UserWarning(f"Unhandled sweep parameter: {sweep_name}")
-
-
-def get_config_value(config, key_path: str):
-    """Get value from config using dot notation path"""
-    ref = config
-    for key in key_path.split("."):
-        ref = ref[key]
-    return ref
-
-
-def update_config_value(base_config: Config, key_path: str, value):
-    """
-    Given a key path like 'a.b.c' and value X
-    sets base_config['a']['b']['c'] = X and returns the config
-
-    Args:
-        base_config: Config object to update
-        key_path: String of dot-separated keys (e.g. 'action_selection.selection_strategy')
-        value: Value to set at the specified path
-
-    Raises:
-        KeyError: If any part of the key path doesn't exist in the config
-    """
-    updated_config = base_config.copy()
-    ref = updated_config
-    key_chain = key_path.split(".")
-
-    # Check if path exists before modifying
-    for key in key_chain[:-1]:
-        if key not in ref:
-            raise KeyError(f"Config path '{key_path}' is invalid: '{key}' not found")
-        ref = ref[key]
-
-    if key_chain[-1] not in ref:
-        raise KeyError(
-            f"Config path '{key_path}' is invalid: '{key_chain[-1]}' not found"
-        )
-
-    ref[key_chain[-1]] = value
-    return updated_config
 
 
 def setup_sweep(agent_config: AgentConfig, sweep_params) -> List[AgentConfig]:
@@ -208,7 +53,6 @@ def setup_sweep(agent_config: AgentConfig, sweep_params) -> List[AgentConfig]:
         config = agent_config.copy()
         # Apply each parameter value in the combination
         for param_path, value in zip(param_paths, value_combination):
-            # config = update_config_value(config, param_path, value)
             config.update_config_value_from_key_path(key_path=param_path, value=value)
         sweep_configs.append(config)
 
@@ -231,19 +75,6 @@ def _setup_sweep_files(save_dir: Path, agent_config: Config, sweep_details: Conf
     sweep_details_path = save_dir / "sweep_details.yaml"
     if not sweep_details_path.exists():
         sweep_details.save_to_yaml(sweep_details_path)
-
-
-def get_target_files(target_dir, limit=None):
-    if target_dir.is_dir():
-        return [
-            os.path.join(target_dir, file_name)
-            for file_name in os.listdir(target_dir)
-            if file_name.endswith("hdf5")
-        ][:limit]
-    elif target_dir.is_file():
-        return [target_dir]
-    else:
-        raise UserWarning("❗️ target_dir should point to a file or directory.")
 
 
 def benchmark(
@@ -609,22 +440,3 @@ def run_benchmark(
         del agent  # for garbage collection
 
     return sweep_save_dir, all_metrics_results
-
-
-if __name__ == "__main__":
-    print(f"Using {keras.backend.backend()} backend 🔥")
-    data_paths = set_data_paths("users.yaml", local=False)
-
-    agent_config = AgentConfig.from_yaml(args.agent_config)
-    sweep_save_dir, metrics_results = run_benchmark(
-        agent_config=agent_config,
-        target_dir=args.target_dir.format(data_root=data_paths["data_root"]),
-        save_dir=args.save_dir,
-        sweep_params={
-            sweep_name: DEFAULT_SWEEP_VALUES[sweep_name]
-            for sweep_name in args.sweep_names
-        },
-        data_type=args.data_type,
-        image_range=args.image_range,
-        validate_dataset=False,
-    )

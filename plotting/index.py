@@ -8,10 +8,17 @@ import pandas as pd
 import scipy
 from tqdm import tqdm
 
-from benchmark_active_sampling_ultrasound import get_config_value
 from ulsa.downstream_task import compute_dice_score
 from zea import Config, log
 from zea.internal.cache import cache_output
+
+
+def get_config_value(config, key_path: str):
+    """Get value from config using dot notation path"""
+    ref = config
+    for key in key_path.split("."):
+        ref = ref[key]
+    return ref
 
 
 @cache_output(verbose=True)
