@@ -6,7 +6,7 @@ import argparse
 import os
 
 os.environ["KERAS_BACKEND"] = "numpy"
-import sys
+
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -21,10 +21,8 @@ from zea.func import translate
 
 if __name__ == "__main__":
     init_device("cpu")
-    sys.path.append("/ulsa")
 
-from plotting.index import extract_sweep_data, index_sweep_data
-from plotting.plot_utils import natural_sort
+from ulsa.plotting.index import extract_sweep_data, index_sweep_data
 
 STRATEGY_NAMES = {
     "greedy_entropy": "Cognitive",
@@ -462,7 +460,6 @@ def plot_linewise_entropy_curves(
     from matplotlib.cm import ScalarMappable
     from matplotlib.colors import Normalize
 
-    sys.path.append("/ulsa/zea")
     from zea.agent.selection import GreedyEntropy
 
     # Set random seed for reproducibility

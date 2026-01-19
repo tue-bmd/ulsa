@@ -1,9 +1,5 @@
 """This file generates assets for the documentation and website."""
 
-import sys
-
-sys.path.append("/ulsa")
-
 import keras
 
 import zea
@@ -14,7 +10,7 @@ if __name__ == "__main__":
 import shutil
 from pathlib import Path
 
-from active_sampling_temporal import active_sampling_single_file, save_results
+from ulsa.active_sampling_temporal import active_sampling_single_file, save_results
 
 
 def generate_assets(

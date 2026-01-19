@@ -17,4 +17,5 @@ RUN KERAS_VER=$(python3 -c "import keras; print(keras.__version__)") \
 COPY . /ulsa
 WORKDIR /ulsa
 
-RUN pip install --no-cache-dir -e zea
+RUN pip install --no-cache-dir -e zea \
+    && pip install --no-cache-dir -e .

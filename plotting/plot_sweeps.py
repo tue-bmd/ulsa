@@ -18,22 +18,9 @@ from zea import Config, init_device, log
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
     init_device("cpu")
-    sys.path.append("/ulsa")
 
-from plotting.index import extract_sweep_data
-
-# from plotting.plot_n_frames_sweep import add_n_frames_column
-
-STRATEGY_NAMES = {
-    "greedy_entropy": "Cognitive",
-    "uniform_random": "Random",
-    "equispaced": "Equispaced",
-}
-
-METRIC_NAMES = {
-    "psnr": "PSNR (→) [dB]",
-    "lpips": "LPIPS (←) [-]",
-}
+from ulsa.plotting.index import extract_sweep_data
+from ulsa.plotting.plot_utils import METRIC_NAMES
 
 # Colors for different n_actions values
 N_ACTIONS_COLORS = {

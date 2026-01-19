@@ -17,7 +17,7 @@ import numpy as np
 from keras import ops
 
 import zea
-from active_sampling_temporal import (
+from ulsa.active_sampling_temporal import (
     apply_downstream_task,
     make_pipeline,
     preload_data,

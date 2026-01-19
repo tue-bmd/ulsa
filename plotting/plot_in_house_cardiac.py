@@ -4,7 +4,6 @@ for the in-house cardiac dataset.
 """
 
 import os
-import sys
 
 import matplotlib.pyplot as plt
 
@@ -13,7 +12,6 @@ import zea
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "jax"
     zea.init_device()
-    sys.path.append("/ulsa")
     plt.rcdefaults()
 
 import copy

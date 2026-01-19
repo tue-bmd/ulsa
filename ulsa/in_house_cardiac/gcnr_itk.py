@@ -9,83 +9,29 @@ import zea
 
 if __name__ == "__main__":
     zea.init_device()
-import sys
+
 from itertools import product
 from pathlib import Path
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import SimpleITK as sitk
 from keras import ops
-from matplotlib.animation import FuncAnimation
 
-from zea.internal.cache import cache_output
-from zea.tools.selection_tool import remove_masks_from_axs
-from zea.visualize import plot_shape_from_mask
-
-sys.path.append("/ulsa")
-from in_house_cardiac.gcnr import (
+from ulsa.in_house_cardiac.gcnr import (
     METRIC_LABEL,
     filter_empty,
     plot_gcnr_over_time,
     sort_by_names,
     swap_layer,
 )
-from plotting.plot_utils import ViolinPlotter, write_roman
 from ulsa.metrics import gcnr_per_frame
+from ulsa.plotting.masks import visualize_masks
+from ulsa.plotting.plot_utils import ViolinPlotter, write_roman
+from zea.internal.cache import cache_output
 
 SAVE_DIR = Path("output/gcnr")
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def update_imshow_with_masks(
-    frame_no: int,
-    axs: matplotlib.axes.Axes,
-    imshow_obj: matplotlib.image.AxesImage,
-    images: np.ndarray,
-    masks: np.ndarray,
-):
-    colors = ["red", "blue", "green", "yellow", "cyan", "magenta"]
-    imshow_obj.set_array(images[frame_no])
-
-    remove_masks_from_axs(axs)
-
-    for _masks, color in zip(masks, colors):
-        plot_shape_from_mask(
-            axs,
-            _masks[frame_no],
-            alpha=0.5,
-            facecolor=color,
-            edgecolor=color,
-            linewidth=2.0,
-        )
-
-
-def visualize_masks(images, valve, myocardium, ventricle, filepath, fps=10):
-    def update(frame_no):
-        update_imshow_with_masks(
-            frame_no,
-            axs,
-            imshow_obj,
-            images,
-            [
-                ventricle,
-                myocardium,
-                valve,
-            ],
-        )
-
-    fig, axs = plt.subplots()
-    imshow_obj = axs.imshow(images[0], cmap="gray")
-    interval = 1000 / fps  # milliseconds
-    ani = FuncAnimation(
-        fig,
-        update,
-        frames=len(images),
-        interval=interval,
-    )
-    ani.save(filepath, writer="pillow")
 
 
 @cache_output(verbose=True)

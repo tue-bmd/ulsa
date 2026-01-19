@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run 3D benchmark evaluation.")
@@ -18,7 +17,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    sys.path.append("/ulsa")
     os.environ["KERAS_BACKEND"] = "jax"
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     from zea import init_device, set_data_paths
@@ -28,7 +26,7 @@ if __name__ == "__main__":
 
 from pathlib import Path
 
-from benchmark_active_sampling_ultrasound import AgentConfig, run_benchmark
+from ulsa.benchmark_active_sampling_ultrasound import AgentConfig, run_benchmark
 
 if __name__ == "__main__":
     if args.target_dir is not None:

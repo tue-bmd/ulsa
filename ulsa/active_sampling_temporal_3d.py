@@ -95,8 +95,8 @@ import jax
 from keras.src import backend
 
 import zea.ops
-from active_sampling_temporal import run_active_sampling
-from elevation_interpolation.tools import (
+from ulsa.active_sampling_temporal import run_active_sampling
+from ulsa.elevation_interpolation.tools import (
     TITLE_LOOKUP,
     animate_slices_from_3d_volumes,
     plot_slices_from_3d_volumes,

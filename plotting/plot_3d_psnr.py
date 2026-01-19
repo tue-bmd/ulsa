@@ -1,11 +1,8 @@
 import argparse
 import os
-import sys
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
@@ -14,18 +11,15 @@ from zea import init_device, log
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
     init_device("cpu")
-    sys.path.append("/ulsa")
 
-# Import plotting constants/utilities from plot_psnr_dice.py
-from plotting.plot_psnr_dice import (
+from ulsa.plotting.index import df_to_dict, extract_sweep_data, get_axis_label
+from ulsa.plotting.plot_utils import (
     METRIC_NAMES,
     STRATEGY_COLORS,
     STRATEGY_NAMES,
-    df_to_dict,
-    extract_sweep_data,
-    get_axis_label,
+    OverlappingHistogramPlotter,
+    ViolinPlotter,
 )
-from plotting.plot_utils import OverlappingHistogramPlotter, ViolinPlotter
 
 AXIS_LABEL_MAP_3D = {
     "n_actions": "# Elevation Planes (out of 48)",

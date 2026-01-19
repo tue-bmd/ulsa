@@ -5,17 +5,13 @@ suggesting no bias against outlier patients.
 """
 
 import os
-import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd  # pip install pandas
-import yaml
+import pandas as pd
 
-sys.path.append("/ulsa")
-
-from plotting.index import extract_sweep_data
+from ulsa.plotting.index import extract_sweep_data
 
 
 def load_ef_data(csv_path):

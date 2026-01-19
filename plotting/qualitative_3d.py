@@ -1,9 +1,7 @@
 import os
-import sys
 
 os.environ["KERAS_BACKEND"] = "numpy"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-sys.path.append("/ulsa")
 
 import random
 from functools import partial
@@ -14,7 +12,7 @@ import numpy as np
 import yaml
 from keras import ops
 
-from elevation_interpolation.tools import postprocess_3d_data
+from ulsa.elevation_interpolation.tools import postprocess_3d_data
 from ulsa.entropy import pixelwise_entropy
 from zea import Config
 from zea.visualize import plot_biplanes

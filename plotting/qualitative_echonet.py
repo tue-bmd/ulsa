@@ -3,7 +3,7 @@
 import os
 
 os.environ["KERAS_BACKEND"] = "numpy"
-import sys
+
 from pathlib import Path
 
 import matplotlib.gridspec as gridspec
@@ -13,12 +13,9 @@ import pandas as pd
 from keras import ops
 from keras.utils import Progbar
 
-sys.path.append("/ulsa")
-
-from plotting.index import load_patients_by_name, random_patients
-from plotting.plot_utils import get_inset
 from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import color_to_value, postprocess_agent_results
+from ulsa.plotting.index import load_patients_by_name, random_patients
 from zea import Config
 
 DATA_ROOT = "/mnt/z/usbmd/Wessel/ulsa/Np_2"

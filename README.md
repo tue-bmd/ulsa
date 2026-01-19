@@ -17,6 +17,12 @@ cp users.yaml.example users.yaml  # edit!
 
 ### 2. Dependencies
 
+Install this repository in editable mode:
+
+```bash
+pip install -e .
+```
+
 Install [`zea`](https://github.com/tue-bmd/zea), the cognitive ultrasound toolbox, preferably
 through the the submodule in this repo:
 

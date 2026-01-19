@@ -20,6 +20,20 @@ METRIC_NAMES = {
     "gcnr": "gCNR (→) [-]",
 }
 
+STRATEGY_COLORS = {
+    "downstream_propagation_summed": "#d62728",  # Red
+    "greedy_entropy": "#1f77b4",  # Blue
+    "equispaced": "#2ca02c",  # Green
+    "uniform_random": "#ff7f0e",  # Orange
+}
+
+STRATEGY_NAMES = {
+    "downstream_propagation_summed": "Measurement Information Gain",
+    "greedy_entropy": "Cognitive",
+    "uniform_random": "Random",
+    "equispaced": "Equispaced",
+}
+
 
 def natural_sort(l: list):
     """Sort a list of strings or numbers in a natural order.

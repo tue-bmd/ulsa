@@ -26,16 +26,14 @@ Example usage:
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend
-import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
+
 import numpy as np
-from matplotlib.patches import Circle, FancyArrowPatch
+from matplotlib.patches import FancyArrowPatch
 
 from zea import init_device, log
 from zea.func import translate
@@ -43,7 +41,6 @@ from zea.func import translate
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
     init_device("cpu")
-    sys.path.append("/ulsa")
 
 from skimage import exposure
 

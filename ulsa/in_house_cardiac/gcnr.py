@@ -5,7 +5,7 @@ import os
 
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
-import sys
+
 from itertools import product
 from pathlib import Path
 
@@ -13,11 +13,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import zea
-from zea.internal.cache import cache_output
-
-sys.path.append("/ulsa")
-from plotting.plot_utils import METRIC_NAMES, ViolinPlotter, write_roman
 from ulsa.metrics import gcnr_per_frame
+from ulsa.plotting.plot_utils import METRIC_NAMES, ViolinPlotter, write_roman
+from zea.internal.cache import cache_output
 
 METRIC_LABEL = "Relative " + METRIC_NAMES["gcnr"]
 SAVE_DIR = Path("output/gcnr")

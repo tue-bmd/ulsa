@@ -45,10 +45,8 @@ sbatch --time=00:14:00 --array=0,1 \
 
 import argparse
 import os
-import sys
 
 if __name__ == "__main__":
-    sys.path.append("/ulsa")
     os.environ["KERAS_BACKEND"] = "jax"
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     from zea import init_device, set_data_paths
@@ -60,7 +58,7 @@ from pathlib import Path
 
 import keras
 
-from benchmark_active_sampling_ultrasound import AgentConfig, run_benchmark
+from ulsa.benchmark_active_sampling_ultrasound import AgentConfig, run_benchmark
 
 
 def parse_args():

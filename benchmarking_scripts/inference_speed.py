@@ -3,15 +3,13 @@ import os
 
 os.environ["KERAS_BACKEND"] = "jax"
 
-import sys
 
 import zea
 
-sys.path.append("/ulsa")
 import keras
 import numpy as np
 
-from active_sampling_temporal import active_sampling_single_file
+from ulsa.active_sampling_temporal import active_sampling_single_file
 
 
 def parse_args():

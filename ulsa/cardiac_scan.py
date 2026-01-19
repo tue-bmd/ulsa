@@ -1,21 +1,19 @@
 """This script (and function) loads and reconstructs a cardiac ultrasound scan from raw data."""
 
 import os
-import sys
 
 import zea
 
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "jax"
     zea.init_device(allow_preallocate=False)
-    sys.path.append("/ulsa")
 
 import matplotlib.pyplot as plt
 import numpy as np
 from keras import ops
 
 import ulsa.ops
-from active_sampling_temporal import preload_data
+from ulsa.active_sampling_temporal import preload_data
 from ulsa.pipeline import make_pipeline
 from zea.display import scan_convert_2d
 from zea.func import translate

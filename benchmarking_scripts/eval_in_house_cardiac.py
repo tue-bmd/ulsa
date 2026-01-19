@@ -3,11 +3,7 @@ Evaluate in-house (cardiac) data using different sampling strategies.
 Also saves focused and diverging wave reconstructions.
 """
 
-import sys
-
 import zea
-
-sys.path.append("/ulsa")  # for relative imports
 
 if __name__ == "__main__":
     zea.init_device(allow_preallocate=True)
@@ -17,9 +13,9 @@ from pathlib import Path
 
 import numpy as np
 
-from active_sampling_temporal import active_sampling_single_file
-from in_house_cardiac.cardiac_scan import cardiac_scan
-from in_house_cardiac.to_itk import npz_to_itk
+from ulsa.in_house_cardiac.to_itk import npz_to_itk
+from ulsa.active_sampling_temporal import active_sampling_single_file
+from ulsa.cardiac_scan import cardiac_scan
 
 
 def parse_args():

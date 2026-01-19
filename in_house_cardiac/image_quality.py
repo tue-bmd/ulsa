@@ -10,21 +10,15 @@ os.environ["ZEA_DISABLE_CACHE"] = "1"
 import zea
 
 zea.init_device("cpu")
-import sys
-from pathlib import Path
-
-sys.path.append("/ulsa")
-
 import os
-import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from plotting.index import extract_sweep_data
-from plotting.plot_utils import METRIC_NAMES
+from ulsa.plotting.index import extract_sweep_data
+from ulsa.plotting.plot_utils import METRIC_NAMES, STRATEGY_COLORS, STRATEGY_NAMES
 
 DATA_ROOT = Path("/ulsa/output/eval_in_house/image_quality")
 SUBSAMPLED_PATHS = [
@@ -32,17 +26,6 @@ SUBSAMPLED_PATHS = [
     DATA_ROOT / "sweep_2026_01_15_161530_443066",
 ]
 
-STRATEGY_COLORS = {
-    "greedy_entropy": "#1f77b4",
-    "equispaced": "#2ca02c",
-    "uniform_random": "#ff7f0e",
-}
-
-STRATEGY_NAMES = {
-    "greedy_entropy": "Cognitive",
-    "uniform_random": "Random",
-    "equispaced": "Equispaced",
-}
 
 STRATEGIES_TO_PLOT = [
     "greedy_entropy",

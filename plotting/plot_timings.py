@@ -1,7 +1,6 @@
 """Compares normal diffusion and sequential diffusion PSNR vs diffusion steps."""
 
 import os
-import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -9,9 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-sys.path.append("/ulsa")
-
-from plotting.plot_utils import METRIC_NAMES
+from ulsa.plotting.plot_utils import METRIC_NAMES
 
 
 def load_yaml(filepath):

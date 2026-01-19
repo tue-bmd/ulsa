@@ -1,14 +1,11 @@
 import os
-import sys
 from pathlib import Path
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import keras
 import numpy as np
-
 import wandb
-from benchmark_active_sampling_ultrasound import benchmark
+
+from ulsa.benchmark_active_sampling_ultrasound import benchmark
 from ulsa.io_utils import postprocess_agent_results, side_by_side_gif
 from zea import Config, Dataset
 from zea.metrics import Metrics

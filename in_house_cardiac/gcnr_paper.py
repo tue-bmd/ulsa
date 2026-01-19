@@ -10,22 +10,16 @@ import zea
 if __name__ == "__main__":
     zea.init_device()
 
-import sys
+from itertools import product
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 
+from ulsa.in_house_cardiac.gcnr import METRIC_LABEL, sort_by_names, swap_layer
+from ulsa.in_house_cardiac.gcnr import load_results as load_fundamental_results
+from ulsa.in_house_cardiac.gcnr_itk import load_results as load_harmonic_results
+from ulsa.plotting.plot_utils import ViolinPlotter, write_roman
 from zea import log
-
-sys.path.append("/ulsa")
-
-
-from itertools import product
-
-from in_house_cardiac.gcnr import METRIC_LABEL, sort_by_names, swap_layer
-from in_house_cardiac.gcnr import load_results as load_fundamental_results
-from in_house_cardiac.gcnr_itk import load_results as load_harmonic_results
-from plotting.plot_utils import ViolinPlotter, write_roman
 
 SAVE_DIR = Path("output/gcnr")
 
