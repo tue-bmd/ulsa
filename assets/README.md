@@ -8,11 +8,12 @@
 
 ### Side-by-side video
 
-Video comparisons of (from left to right) target created using 56 transmit events, cognitive reconstruction with 22 transmit events, and diverging wave with 22 transmit events.
+Video comparisons of in-house dataset, acquired using tissue harmonic imaging.
+From left to right: target created using 56 x 2 focused transmit events, one for each polarity,
+cognitive reconstruction with 11 x 2 transmit events,
+and diverging wave with 11 x 2 transmit events.
 
 ![target_reconstruction_diverging_20251222_s3_a4ch_line_dw_0000](https://github.com/user-attachments/assets/b85b151d-2638-4fb4-98d6-7d4521525af1)
-
-
 
 ![target_reconstruction_diverging_20251222_s1_a4ch_line_dw_0000](https://github.com/user-attachments/assets/0792bc27-9333-4d4f-b4a2-080585e19758)
 
