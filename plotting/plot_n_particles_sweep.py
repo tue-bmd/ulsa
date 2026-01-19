@@ -27,7 +27,7 @@ from plotting.index import extract_sweep_data, index_sweep_data
 from plotting.plot_utils import natural_sort
 
 STRATEGY_NAMES = {
-    "greedy_entropy": "Active Perception",
+    "greedy_entropy": "Cognitive",
     "uniform_random": "Random",
     "equispaced": "Equispaced",
 }

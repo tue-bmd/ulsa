@@ -124,12 +124,13 @@ if __name__ == "__main__":
     ]
     ulsa_agent_configs = [
         AgentConfig.from_yaml("/ulsa/configs/cardiac_112_3_frames.yaml"),
+        AgentConfig.from_yaml("/ulsa/configs/cardiac_112_3_frames_harmonic.yaml"),
     ]
 
-    for TARGET_DIR, ulsa_agent_config in zip(TARGET_DIRS, ulsa_agent_configs):
+    for target_dir, ulsa_agent_config in zip(TARGET_DIRS, ulsa_agent_configs):
         sweep_save_dir, all_metrics_results = run_benchmark(
             agent_config=ulsa_agent_config,
-            target_dir=TARGET_DIR,
+            target_dir=target_dir,
             save_dir=Path(args.save_dir),
             sweep_params={
                 "action_selection.n_actions": args.n_actions,

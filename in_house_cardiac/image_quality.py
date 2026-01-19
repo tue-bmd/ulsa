@@ -3,108 +3,137 @@
 import os
 
 os.environ["KERAS_BACKEND"] = "jax"
+
+# to fix a bug with zea caching (should be fixed in https://github.com/tue-bmd/zea/pull/236)
+os.environ["ZEA_DISABLE_CACHE"] = "1"
+
 import zea
 
-zea.init_device()
+zea.init_device("cpu")
 import sys
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
-from skimage import exposure  # pip install scikit-image
-
 sys.path.append("/ulsa")
 
-import ulsa.metrics  # for nrmse
-from plotting.plot_utils import METRIC_NAMES, ViolinPlotter, write_roman
-from zea.metrics import Metrics
+import os
+import sys
+from pathlib import Path
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
-def df_to_dict(df: pd.DataFrame, metric_name: str):
-    result = {}
-    for _, row in df.iterrows():
-        strategy = row["strategy"]
-        subject = row["subject"]
-        metric = row[metric_name]
-        if strategy not in result:
-            result[strategy] = {}
-        result[strategy][subject] = metric
+from plotting.index import extract_sweep_data
+from plotting.plot_utils import METRIC_NAMES
 
-    return result
+DATA_ROOT = Path("/ulsa/output/eval_in_house/image_quality")
+SUBSAMPLED_PATHS = [
+    DATA_ROOT / "sweep_2026_01_15_141144_039279",
+    DATA_ROOT / "sweep_2026_01_15_161530_443066",
+]
 
+STRATEGY_COLORS = {
+    "greedy_entropy": "#1f77b4",
+    "equispaced": "#2ca02c",
+    "uniform_random": "#ff7f0e",
+}
 
-def main():
-    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental/")
-    SAVE_DIR = Path("output/in_house_cardiac/")
-    SAVE_DIR.mkdir(parents=True, exist_ok=True)
-    subjects = [
-        "20240701_P1_A4CH_0001",
-        "20241021_P9_A4CH_0000",
-        "20240710_P7_A4CH_0000",
-    ]
+STRATEGY_NAMES = {
+    "greedy_entropy": "Cognitive",
+    "uniform_random": "Random",
+    "equispaced": "Equispaced",
+}
 
-    group_names = {
-        "reconstructions": "Active Perception",
-        "focused": "Focused",
-        "diverging": "Diverging",
-    }
+STRATEGIES_TO_PLOT = [
+    "greedy_entropy",
+    "uniform_random",
+    "equispaced",
+]
 
-    metric_names = ["psnr", "lpips", "nrmse"]
-    drop_first_n_frames = 3  # filter startup artifacts of temporal model
-    metrics = Metrics(metric_names, image_range=[0, 255])
-    group_names.pop("focused")
+combined_results = extract_sweep_data(
+    SUBSAMPLED_PATHS,
+    keys_to_extract=["mse", "psnr", "dice", "lpips", "ssim"],
+    x_axis_key="action_selection.n_actions",
+)
 
-    subject_names = []
-    data_frame = []
-    for i, subject in enumerate(subjects):
-        # Load annotations and results
-        subject_name = write_roman(i + 1)
-        subject_names.append(subject_name)
-        rf = DATA_ROOT / f"{subject}_results.npz"
-        results = np.load(rf, allow_pickle=True)
+rng = np.random.default_rng(42)
 
-        focused = results["focused"][drop_first_n_frames:]
-        focused_uint8 = zea.display.to_8bit(
-            focused, results["focused_dynamic_range"], pillow=False
-        )
-        diverging = results["diverging"][drop_first_n_frames:]
-        diverging = exposure.match_histograms(diverging, focused)
-        diverging_uint8 = zea.display.to_8bit(
-            diverging, results["focused_dynamic_range"], pillow=False
-        )
-        reconstructions = results["reconstructions"][drop_first_n_frames:]
-        reconstructions = zea.display.to_8bit(
-            reconstructions, results["reconstruction_range"], pillow=False
-        )
+with plt.style.context("styles/ieee-tmi.mplstyle"):
+    # Create paired dot plot with facets for different x_values
+    fig, axes = plt.subplots(1, 3, sharey=True)
 
-        assert focused_uint8.shape == diverging_uint8.shape == reconstructions.shape, (
-            "Shapes of focused, diverging and reconstructions must be the same."
-        )
-        div_res = metrics(
-            focused_uint8[..., None], diverging_uint8[..., None], average_batches=False
-        )
-        rec_res = metrics(
-            focused_uint8[..., None], reconstructions[..., None], average_batches=False
-        )
-        data_frame.append({"subject": subject_name, "strategy": "diverging", **div_res})
-        data_frame.append(
-            {"subject": subject_name, "strategy": "reconstructions", **rec_res}
-        )
-    data_frame = pd.DataFrame(data_frame)
+    # Get unique x_values and sort them
+    x_values = sorted(combined_results["x_value"].unique())
 
-    for metric_name in metric_names:
-        data_dict = df_to_dict(data_frame, metric_name)
+    # Get unique filestems to connect with lines
+    filestems = combined_results["filestem"].unique()
 
-        # Violin plot & over time plot for all
-        violin = ViolinPlotter(group_names, xlabel="Subjects")
-        for ext in [".png", ".pdf"]:
-            violin.plot(
-                data_dict,
-                SAVE_DIR / f"in_house_{metric_name}_violin{ext}",
-                metric_name=METRIC_NAMES[metric_name],
-                context="styles/ieee-tmi.mplstyle",
+    for idx, x_val in enumerate(x_values):
+        ax = axes[idx]
+
+        # Filter data for this x_value
+        data_subset = combined_results[combined_results["x_value"] == x_val]
+
+        # Plot points for each strategy
+        for i, strategy in enumerate(STRATEGIES_TO_PLOT):
+            strategy_data = data_subset[data_subset["selection_strategy"] == strategy]
+
+            # Add jitter to x position for visibility
+            jitter = rng.normal(0, 0.02, len(strategy_data))
+            x_pos = i + jitter
+
+            ax.scatter(
+                x_pos,
+                strategy_data["psnr"],
+                color=STRATEGY_COLORS[strategy],
+                alpha=0.6,
+                label=STRATEGY_NAMES[strategy] if idx == 0 else None,
             )
 
+        # Draw lines connecting the same filestem across strategies
+        for filestem in filestems:
+            filestem_data = data_subset[data_subset["filestem"] == filestem]
 
-if __name__ == "__main__":
-    main()
+            # Sort by strategy order
+            filestem_data = filestem_data.set_index("selection_strategy")
+            filestem_data = filestem_data.reindex(STRATEGIES_TO_PLOT)
+
+            is_harmonic = "harmonic" in str(filestem_data["filepath"])
+
+            if len(filestem_data) == len(STRATEGIES_TO_PLOT):
+                x_positions = list(range(len(STRATEGIES_TO_PLOT)))
+                y_positions = filestem_data["psnr"].values
+                ax.plot(
+                    x_positions,
+                    y_positions,
+                    "k-" if is_harmonic else "k--",
+                    alpha=0.2,
+                    zorder=0,
+                )
+
+        # Formatting
+        ax.set_xlabel(f"{int(x_val)}")
+        ax.set_xticks([])
+        ax.grid(
+            True,
+            # alpha=0.3,
+            axis="y",
+        )
+
+        if idx == 0:
+            ax.set_ylabel(METRIC_NAMES["psnr"])
+
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(
+        h,
+        l,
+        loc="outside upper center",
+        ncol=3,
+        frameon=False,
+    )
+    fig.supxlabel("# Scan Lines")
+
+    plt.savefig(DATA_ROOT / "paired_dot_plot_psnr.png", dpi=300)
+    plt.show()
+
+    print(f"Plot saved to {DATA_ROOT / 'paired_dot_plot_psnr.png'}")

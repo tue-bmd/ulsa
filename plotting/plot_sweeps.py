@@ -25,7 +25,7 @@ from plotting.index import extract_sweep_data
 # from plotting.plot_n_frames_sweep import add_n_frames_column
 
 STRATEGY_NAMES = {
-    "greedy_entropy": "Active Perception",
+    "greedy_entropy": "Cognitive",
     "uniform_random": "Random",
     "equispaced": "Equispaced",
 }
