@@ -55,6 +55,41 @@ combined_results = extract_sweep_data(
     keys_to_extract=["mse", "psnr", "dice", "lpips", "ssim"],
     x_axis_key="action_selection.n_actions",
 )
+# metric = "rmse"
+# relative_to = "greedy_entropy"
+metric = "psnr"
+relative_to = None
+
+
+METRIC_NAMES[f"relative_{metric}"] = "Relative " + METRIC_NAMES[metric]
+
+# add RMSE
+combined_results["rmse"] = np.sqrt(combined_results["mse"] / (255**2))
+
+# add relative metric (per filestem)
+if relative_to is not None:
+    for strategy in combined_results["selection_strategy"].unique():
+        for x_value in combined_results["x_value"].unique():
+            for filestem in combined_results["filestem"].unique():
+                mask = (
+                    (combined_results["selection_strategy"] == strategy)
+                    & (combined_results["x_value"] == x_value)
+                    & (combined_results["filestem"] == filestem)
+                )
+                baseline_mask = (
+                    (combined_results["selection_strategy"] == relative_to)
+                    & (combined_results["x_value"] == x_value)
+                    & (combined_results["filestem"] == filestem)
+                )
+
+                if baseline_mask.sum() > 0 and mask.sum() > 0:
+                    baseline_res = combined_results.loc[baseline_mask, metric].values[0]
+                    assert np.isscalar(baseline_res)
+                    combined_results.loc[mask, f"relative_{metric}"] = (
+                        combined_results.loc[mask, metric].values / baseline_res
+                    )
+    metric = f"relative_{metric}"
+
 
 rng = np.random.default_rng(42)
 
@@ -84,7 +119,7 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
 
             ax.scatter(
                 x_pos,
-                strategy_data["psnr"],
+                strategy_data[metric],
                 color=STRATEGY_COLORS[strategy],
                 alpha=0.6,
                 label=STRATEGY_NAMES[strategy] if idx == 0 else None,
@@ -92,7 +127,9 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
 
         # Draw lines connecting the same filestem across strategies
         for filestem in filestems:
-            filestem_data = data_subset[data_subset["filestem"] == filestem]
+            filestem_data: pd.DataFrame = data_subset[
+                data_subset["filestem"] == filestem
+            ]
 
             # Sort by strategy order
             filestem_data = filestem_data.set_index("selection_strategy")
@@ -102,7 +139,7 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
 
             if len(filestem_data) == len(STRATEGIES_TO_PLOT):
                 x_positions = list(range(len(STRATEGIES_TO_PLOT)))
-                y_positions = filestem_data["psnr"].values
+                y_positions = filestem_data[metric].values
                 ax.plot(
                     x_positions,
                     y_positions,
@@ -121,7 +158,7 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
         )
 
         if idx == 0:
-            ax.set_ylabel(METRIC_NAMES["psnr"])
+            ax.set_ylabel(METRIC_NAMES[metric])
 
     h, l = axes[0].get_legend_handles_labels()
     fig.legend(
@@ -133,6 +170,7 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
     )
     fig.supxlabel("# Scan Lines")
 
-    plt.savefig(DATA_ROOT / "paired_dot_plot_psnr.png")
-    plt.savefig(DATA_ROOT / "paired_dot_plot_psnr.pdf")
-    print(f"Plot saved to {DATA_ROOT / 'paired_dot_plot_psnr.png'}")
+    savepath = DATA_ROOT / f"paired_dot_plot_{metric}.png"
+    plt.savefig(savepath)
+    plt.savefig(savepath.with_suffix(".pdf"))
+    print(f"Plot saved to {savepath}")
