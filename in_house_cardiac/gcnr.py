@@ -16,10 +16,10 @@ import zea
 from zea.internal.cache import cache_output
 
 sys.path.append("/ulsa")
-from plotting.plot_utils import ViolinPlotter, write_roman
+from plotting.plot_utils import METRIC_NAMES, ViolinPlotter, write_roman
 from ulsa.metrics import gcnr_per_frame
 
-METRIC_LABEL = "Relative gCNR [-]"
+METRIC_LABEL = "Relative " + METRIC_NAMES["gcnr"]
 SAVE_DIR = Path("output/gcnr")
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 

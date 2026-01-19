@@ -1,12 +1,17 @@
 """Compares normal diffusion and sequential diffusion PSNR vs diffusion steps."""
 
 import os
+import sys
 from collections import defaultdict
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import yaml
+
+sys.path.append("/ulsa")
+
+from plotting.plot_utils import METRIC_NAMES
 
 
 def load_yaml(filepath):
@@ -66,12 +71,7 @@ def extract_sweep_data(sweep_dir, keys_to_extract=["mse", "psnr"]):
 
 
 def plot_timings(
-    results: list,
-    names: list,
-    save_root=None,
-    metric="psnr",
-    context=None,
-    dark=False,
+    results: list, names: list, save_root=None, metric="psnr", context=None
 ):
     """Plots all sweeps on the same figure with error bars showing SEM."""
 
@@ -81,7 +81,7 @@ def plot_timings(
     markers = ["o", "x", "D", "^", "v", "x", "*"]
 
     with plt.style.context(context):
-        plt.figure(figsize=(3.5, 2.5))
+        plt.figure(figsize=(3.5, 2.0))
         # Create broken axis plot: left axis for steps < 100, right axis for step 500
         fig, (ax, ax2) = plt.subplots(
             1, 2, sharey=True, gridspec_kw={"width_ratios": [7, 1]}
@@ -112,7 +112,7 @@ def plot_timings(
         ax.set_xlim(0, 105)
         ax2.set_xlim(490, 510)
         fig.supxlabel("Diffusion Steps [-]")
-        ax.set_ylabel("PSNR [dB]")
+        ax.set_ylabel(METRIC_NAMES.get(metric, metric.upper()))
         ax.grid(True)
         ax2.grid(True)
         ax.spines["right"].set_visible(False)
@@ -142,8 +142,7 @@ def plot_timings(
             save_path = os.path.join(save_root, "ulsa_timings" + ext)
             plt.savefig(
                 save_path,
-                dpi=300,
-                transparent=True,
+                # transparent=True,
             )
             print(f"Saved to {save_path}")
 
@@ -156,7 +155,6 @@ if __name__ == "__main__":
     x = extract_sweep_data(seqdiff)
     y = extract_sweep_data(normal_diff)
 
-    # context = Path("styles/nvmu.mplstyle")
     context = Path("styles/ieee-tmi.mplstyle")
     assert context.exists(), f"Context file {context} does not exist."
     plot_timings(
@@ -164,5 +162,4 @@ if __name__ == "__main__":
         ["SeqDiff", "Regular"],
         save_root=SAVE_ROOT,
         context=context,
-        dark=False,
     )

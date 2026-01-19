@@ -60,7 +60,7 @@ rng = np.random.default_rng(42)
 
 with plt.style.context("styles/ieee-tmi.mplstyle"):
     # Create paired dot plot with facets for different x_values
-    fig, axes = plt.subplots(1, 3, sharey=True)
+    fig, axes = plt.subplots(1, 3, sharey=True, figsize=(3.5, 2.0))
 
     # Get unique x_values and sort them
     x_values = sorted(combined_results["x_value"].unique())
@@ -133,7 +133,6 @@ with plt.style.context("styles/ieee-tmi.mplstyle"):
     )
     fig.supxlabel("# Scan Lines")
 
-    plt.savefig(DATA_ROOT / "paired_dot_plot_psnr.png", dpi=300)
-    plt.show()
-
+    plt.savefig(DATA_ROOT / "paired_dot_plot_psnr.png")
+    plt.savefig(DATA_ROOT / "paired_dot_plot_psnr.pdf")
     print(f"Plot saved to {DATA_ROOT / 'paired_dot_plot_psnr.png'}")

@@ -17,6 +17,7 @@ METRIC_NAMES = {
     "mse": "MSE (←) [-]",  # on [0, 1] scale
     "rmse": "RMSE (←) [-]",  # on [0, 1] scale
     "nrmse": "NRMSE (←) [-]",
+    "gcnr": "gCNR (→) [-]",
 }
 
 
