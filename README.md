@@ -47,6 +47,15 @@ Alternatively, we have provided a [Dockerfile](./Dockerfile) to build a Docker i
     python -m zea.data.convert.echonet --source /path/to/echonet-dynamic --target /path/to/echonet-dynamic-polar --splits /path/to/splits
     ```
 
+## Training
+
+To train the video diffusion model, use the `models/train_diffusion.py` script. Architectural details are specified in the config `configs/training/echonet_diffusion_3_frames.yaml`.
+
+```bash
+python models/train_diffusion.py
+```
+
+
 ## Inference
 
 The main file to use for inference is [`active_sampling_temporal.py`](./active_sampling_temporal.py) in combination with a config file.
