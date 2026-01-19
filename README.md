@@ -49,7 +49,7 @@ Alternatively, we have provided a [Dockerfile](./Dockerfile) to build a Docker i
 
 ## Training
 
-To train the video diffusion model, use the `models/train_diffusion.py` script. Architectural details are specified in the config `configs/training/echonet_diffusion_3_frames.yaml`.
+To train the video diffusion model, use the `models/train_diffusion.py` script. The [time conditional U-Net architecture](https://github.com/tue-bmd/zea/blob/8613512de47d64ae72e5fe03f30c47dfd2b12f46/zea/models/unet.py#L157) implemented by [`zea`](https://zea.readthedocs.io/en/latest/) is used for the denoiser. You can modify architectural and training hyperparameters in the config `configs/training/echonet_diffusion_3_frames.yaml`.
 
 ```bash
 python models/train_diffusion.py
