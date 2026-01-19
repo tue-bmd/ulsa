@@ -12,13 +12,14 @@ if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "numpy"
     init_device("cpu")
 
-from ulsa.plotting.index import df_to_dict, extract_sweep_data, get_axis_label
+from ulsa.plotting.index import df_to_dict, extract_sweep_data
 from ulsa.plotting.plot_utils import (
     METRIC_NAMES,
     STRATEGY_COLORS,
     STRATEGY_NAMES,
     OverlappingHistogramPlotter,
     ViolinPlotter,
+    get_axis_label,
 )
 
 AXIS_LABEL_MAP_3D = {
@@ -180,7 +181,9 @@ if __name__ == "__main__":
     for metric_name in ["psnr"]:
         table = Table(title=f"{metric_name.upper()} Results", show_lines=True)
         table.add_column("Strategy", style="cyan", no_wrap=True)
-        table.add_column(get_axis_label(args.x_axis), style="magenta")
+        table.add_column(
+            get_axis_label(args.x_axis, AXIS_LABEL_MAP_3D), style="magenta"
+        )
         table.add_column("Mean", style="green")
         table.add_column("Std", style="yellow")
         table.add_column("Count", style="white")

@@ -285,12 +285,6 @@ def extract_sweep_data(sweep_dirs: str, **kwargs):
     return pd.DataFrame(results)
 
 
-def get_axis_label(key, axis_label_map=AXIS_LABEL_MAP):
-    """Get friendly label for axis keys."""
-    base_key = key.split(".")[-1]
-    return axis_label_map.get(base_key, base_key.replace("_", " ").title())
-
-
 def sort_by_names(combined_results, names):
     """Sort combined results by strategy names."""
     return {k: combined_results[k] for k in names if k in combined_results}

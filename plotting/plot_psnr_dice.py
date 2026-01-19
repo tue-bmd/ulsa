@@ -19,11 +19,12 @@ if __name__ == "__main__":
     init_device("cpu")
 
 
-from ulsa.plotting.index import extract_sweep_data
+from ulsa.plotting.index import df_to_dict, extract_sweep_data
 from ulsa.plotting.plot_utils import (
     METRIC_NAMES,
     STRATEGY_NAMES,
     ViolinPlotter,
+    get_axis_label,
     natural_sort,
 )
 
@@ -86,7 +87,7 @@ if __name__ == "__main__":
     _log_too_many_blobs_count(combined_results)
 
     plotter = ViolinPlotter(
-        xlabel=get_axis_label(args.x_axis),
+        xlabel=get_axis_label(args.x_axis, AXIS_LABEL_MAP),
         group_names=STRATEGY_NAMES,
         legend_loc="top",
         # scatter_kwargs={"alpha": 0.01, "s": 4},
@@ -179,7 +180,7 @@ if __name__ == "__main__":
     for metric_name in ["dice", "psnr"]:
         table = Table(title=f"{metric_name.upper()} Results", show_lines=True)
         table.add_column("Strategy", style="cyan", no_wrap=True)
-        table.add_column(get_axis_label(args.x_axis), style="magenta")
+        table.add_column(get_axis_label(args.x_axis, AXIS_LABEL_MAP), style="magenta")
         table.add_column("Mean", style="green")
         table.add_column("Std", style="yellow")
         table.add_column("Count", style="white")

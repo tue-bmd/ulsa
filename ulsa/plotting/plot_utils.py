@@ -35,6 +35,12 @@ STRATEGY_NAMES = {
 }
 
 
+def get_axis_label(key, axis_label_map: dict):
+    """Get friendly label for axis keys."""
+    base_key = key.split(".")[-1]
+    return axis_label_map.get(base_key, base_key.replace("_", " ").title())
+
+
 def natural_sort(l: list):
     """Sort a list of strings or numbers in a natural order.
     This means that '10' comes after '2', and 'file1' comes before 'file10'."""
