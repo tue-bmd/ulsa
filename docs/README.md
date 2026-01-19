@@ -5,7 +5,7 @@ This folder contains the files for the project webpage.
 ## Local Development
 
 ```bash
-cd /ulsa/docs/
+cd ./docs/
 python3 -m http.server 8000
 ```
 
