@@ -79,7 +79,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     os.environ["KERAS_BACKEND"] = "jax"
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
     from zea import init_device
 
     init_device()

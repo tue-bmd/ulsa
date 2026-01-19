@@ -21,7 +21,7 @@ import os
 
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "jax"
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
     from zea import init_device, set_data_paths
 
     init_device()

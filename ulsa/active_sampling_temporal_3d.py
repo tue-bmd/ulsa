@@ -80,7 +80,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     os.environ["KERAS_BACKEND"] = "jax"
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
     from zea import init_device
 
     init_device()
@@ -96,13 +96,13 @@ from keras.src import backend
 
 import zea.ops
 from ulsa.active_sampling_temporal import run_active_sampling
+from ulsa.agent import AgentConfig, reset_agent_state, setup_agent
 from ulsa.elevation_interpolation.tools import (
     TITLE_LOOKUP,
     animate_slices_from_3d_volumes,
     plot_slices_from_3d_volumes,
     postprocess_3d_data,
 )
-from ulsa.agent import AgentConfig, reset_agent_state, setup_agent
 from zea import File, Pipeline, log, set_data_paths
 from zea.func import translate
 from zea.io_lib import load_image, save_to_gif

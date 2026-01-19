@@ -13,7 +13,7 @@ from pathlib import Path
 if __name__ == "__main__":
     os.environ["KERAS_BACKEND"] = "tensorflow"
     os.environ["MPLBACKEND"] = "Agg"
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
     from zea import init_device
 
     init_device()
