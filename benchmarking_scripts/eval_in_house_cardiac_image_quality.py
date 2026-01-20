@@ -1,45 +1,10 @@
 """
-Linux-server:
+This script evaluates the image reconstruction quality of in-house cardiac ultrasound images
+using the same benchmarking framework as use as for echonet. This script does not compare to
+diverging waves, use `benchmarking_scripts/eval_in_house_cardiac.py` for that.
 
 ```bash
-./launch/start_container.sh python benchmarking_scripts/eval_echonet_dynamic.py
-```
-
-Snellius
-
-(check comment in snellius_entry.sh to make sure the code is used):
-```bash
-sbatch --time=05:00:00 launch/snellius_entry.sh python benchmarking_scripts/eval_echonet_dynamic.py
-```
-
-Snellius (sharding):
-
-(make sure that the number of shards is actually needed for the sweep)
-(assume ≈2 minutes of startup time per shard)
-
-e.g.
-
-500 files, 15 sweep entries, 100 frames = 750,000 frames
-assume 2 fps
-375,000 s ≈ 6,250 min
-assume 750 shards -> 9 min per shard
-
-
-```bash
-sbatch --time=00:15:00 --array=0-749 \
-    --output=slurm/slurm-%A_%a.out launch/snellius_sharded.sh \
-    python benchmarking_scripts/eval_echonet_dynamic.py \
-    --save_dir "/path/to/sharding_sweep_$(date +"%Y-%m-%d_%H-%M-%S")" --num_shards 750 \
-    --split val
-```
-
-> [!TIP]
-> Test one or two shards before starting all (to see if the code works and the time is sufficient).
-
-```bash
-sbatch --time=00:14:00 --array=0,1 \
-    --output=slurm/slurm-%A_%a.out launch/snellius_sharded.sh \
-    python benchmarking_scripts/eval_echonet_dynamic.py ...
+./launch/start_container.sh python benchmarking_scripts/eval_in_house_cardiac_image_quality.py
 ```
 """
 
