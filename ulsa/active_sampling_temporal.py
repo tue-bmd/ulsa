@@ -520,7 +520,7 @@ def compute_metrics(results, agent, metric_keys=["lpips", "psnr"]):
 
 
 def save_results(
-    results,
+    results: AgentResults,
     downstream_task,
     targets_dst,
     reconstructions_dst,

@@ -22,8 +22,8 @@ from ulsa.plotting.plot_utils import METRIC_NAMES, STRATEGY_COLORS, STRATEGY_NAM
 
 DATA_ROOT = Path("/ulsa/output/eval_in_house/image_quality")
 SUBSAMPLED_PATHS = [
-    DATA_ROOT / "sweep_2026_01_15_141144_039279",
-    DATA_ROOT / "sweep_2026_01_15_161530_443066",
+    DATA_ROOT / "sweep_2026_01_20_103617_291774",
+    DATA_ROOT / "sweep_2026_01_20_113307_398439",
 ]
 
 
