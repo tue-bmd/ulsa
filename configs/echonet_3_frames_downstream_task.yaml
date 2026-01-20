@@ -2,11 +2,11 @@ action_selection:
   n_possible_actions: 112
   n_actions: 2
   shape: [112, 112]
-  selection_strategy: "downstream_task_selection" # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
+  selection_strategy: downstream_task_selection # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
   kwargs:
-    downstream_task_key: "echonet_segmentation"
+    downstream_task_key: echonet_segmentation
 
-downstream_task: "echonet_segmentation"
+downstream_task: echonet_segmentation
 
 diffusion_inference:
   # run_dir: "{output_dir}/ddim/2025_02_26_160545_ddim_train_echonet_112_3_frames/hub"
@@ -16,7 +16,7 @@ diffusion_inference:
   batch_size: 2 # posterior samples
   guidance_kwargs:
     omega: 10
-  reconstruction_method: "choose_first" # "choose_first" | "maximum_likelihood" | "mean"
+  reconstruction_method: choose_first # "choose_first" | "maximum_likelihood" | "mean"
   hard_project: true
 
 io_config:

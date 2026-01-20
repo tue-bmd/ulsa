@@ -1,3 +1,5 @@
+"""Plot qualitative 3D results as biplanes."""
+
 import os
 
 os.environ["KERAS_BACKEND"] = "numpy"

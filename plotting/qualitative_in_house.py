@@ -1,5 +1,5 @@
 """
-This script makes a figure with the target, reconstruction, and measurements
+This script makes a figure with the target, reconstruction, measurements and entropy
 for the in-house cardiac dataset.
 """
 

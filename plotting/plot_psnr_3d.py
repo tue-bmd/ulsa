@@ -1,3 +1,5 @@
+"""Plot PSNR and LPIPS results for 3D ultrasound active sampling experiments."""
+
 import argparse
 import os
 

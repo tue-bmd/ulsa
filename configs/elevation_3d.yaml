@@ -2,7 +2,7 @@ action_selection:
   n_possible_actions: 48
   n_actions: 8
   shape: [400, 48]
-  selection_strategy: "greedy_entropy" # "uniform_random"
+  selection_strategy: greedy_entropy # "uniform_random"
   kwargs:
     average_entropy_across_batch: true
   
@@ -17,7 +17,7 @@ diffusion_inference:
   guidance_kwargs:
     omega: 3
     initial_omega: 1
-  reconstruction_method: "choose_first" # "choose_first" | "maximum_likelihood" | "mean"
+  reconstruction_method: choose_first # "choose_first" | "maximum_likelihood" | "mean"
   hard_project: true
 
 io_config:
