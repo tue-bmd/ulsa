@@ -1,233 +1,297 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <meta name="description"
-        content="This work presents a patient-adaptive focused transmit scheme for echocardiography that uses a temporal diffusion model to actively select the most informative ultrasound transmits, enabling high-quality imaging with drastically fewer acquisitions. The method outperforms conventional subsampling and diverging wave approaches and achieves robust real-time performance.">
-  <meta name="keywords" content="Beamforming, cognitive ultrasound, diffusion models">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Patient-Adaptive Echocardiography using Cognitive Ultrasound</title>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="description"
+      content="This work presents a patient-adaptive focused transmit scheme for echocardiography that uses a temporal diffusion model to actively select the most informative ultrasound transmits, enabling high-quality imaging with drastically fewer acquisitions. The method outperforms conventional subsampling and diverging wave approaches and achieves robust real-time performance."
+    />
+    <meta
+      name="keywords"
+      content="Beamforming, cognitive ultrasound, diffusion models"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Patient-Adaptive Echocardiography using Cognitive Ultrasound</title>
 
-  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
-        rel="stylesheet">
+    <link
+      href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+      rel="stylesheet"
+    />
 
-  <link rel="stylesheet" href="./static/css/bulma.min.css">
-  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
-  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
-  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
-  <link rel="stylesheet"
-        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
-  <link rel="stylesheet" href="./static/css/index.css">
-  <!-- <link rel="icon" href="./static/images/favicon.svg"> -->
+    <link rel="stylesheet" href="./static/css/bulma.min.css" />
+    <link rel="stylesheet" href="./static/css/bulma-carousel.min.css" />
+    <link rel="stylesheet" href="./static/css/bulma-slider.min.css" />
+    <link rel="stylesheet" href="./static/css/fontawesome.all.min.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css"
+    />
+    <link rel="stylesheet" href="./static/css/index.css" />
+    <!-- <link rel="icon" href="./static/images/favicon.svg"> -->
 
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-  <script defer src="./static/js/fontawesome.all.min.js"></script>
-  <script src="./static/js/bulma-carousel.min.js"></script>
-  <script src="./static/js/bulma-slider.min.js"></script>
-  <script src="./static/js/index.js"></script>
-</head>
-<body class="dark-mode">
-
-<nav class="navbar" role="navigation" aria-label="main navigation">
-  <div class="navbar-brand">
-    <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
-      <span aria-hidden="true"></span>
-      <span aria-hidden="true"></span>
-      <span aria-hidden="true"></span>
-    </a>
-  </div>
-  <div class="navbar-menu">
-    <div class="navbar-start" style="flex-grow: 1; justify-content: center;">
-      <div class="navbar-item has-dropdown is-hoverable">
-        <a class="navbar-link">
-          More Research
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script defer src="./static/js/fontawesome.all.min.js"></script>
+    <script src="./static/js/bulma-carousel.min.js"></script>
+    <script src="./static/js/bulma-slider.min.js"></script>
+    <script src="./static/js/index.js"></script>
+  </head>
+  <body class="dark-mode">
+    <nav class="navbar" role="navigation" aria-label="main navigation">
+      <div class="navbar-brand">
+        <a
+          role="button"
+          class="navbar-burger"
+          aria-label="menu"
+          aria-expanded="false"
+        >
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
         </a>
-        <div class="navbar-dropdown">
-          <a class="navbar-item" href="https://active-diffusion-subsampling.github.io/">
-            Active Diffusion Subsampling
-          </a>
-          <a class="navbar-item" href="https://dehazing-diffusion.github.io/">
-            Dehazing Ultrasound using Diffusion Models
-          </a>
-          <a class="navbar-item" href="https://ieeexplore.ieee.org/document/10689436">
-            Cognitive Ultrasound
-          </a>
-          <a class="navbar-item" href="https://doi.org/10.1109/ICASSP49660.2025.10889044">
-            Deep Variational Sequential Monte Carlo
-          </a>
-          <a class="navbar-item" href="https://3d-ultrasound-diffusion.github.io/">
-            High Volume Rate 3D Ultrasound
-          </a>
-        </div>
       </div>
-    </div>
-
-  </div>
-</nav>
-
-
-<section class="hero">
-  <div class="hero-body">
-    <div class="container is-max-desktop">
-      <div class="columns is-centered">
-        <div class="column has-text-centered">
-          <h1 class="title is-1 publication-title">Patient-Adaptive Echocardiography using Cognitive Ultrasound</h1>
-          <div class="is-size-5 publication-authors">
-            <span class="author-block">
-              <a href="https://wesselvannierop.com">Wessel L. van Nierop</a><sup>*1</sup>,</span>
-            <span class="author-block">
-              <a href="https://scholar.google.com/citations?user=CcnvcSgAAAAJ&hl=en">Oisín Nolan</a><sup>*1</sup>,</span>
-            <span class="author-block">
-              <a href="https://tristan-deep.github.io/">Tristan S.W. Stevens</a><sup>1</sup>,
-            </span>
-            <span class="author-block">
-              <a href="https://www.tue.nl/en/research/researchers/ruud-van-sloun/">Ruud J.G. van Sloun</a><sup>1</sup>,
-            </span>
-          </div>
-
-          <div class="is-size-5 publication-authors">
-            <span class="author-block"><sup>1</sup>Eindhoven University of Technology,</span>
-            <span class="author-block"><sup>*</sup>contributed equally,</span>
-          </div>
-
-          <div class="column has-text-centered">
-            <div class="publication-links">
-              <!-- PDF Link. -->
-              <span class="link-block">
-                <a href="https://arxiv.org/pdf/2508.08782"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="fas fa-file-pdf"></i>
-                  </span>
-                  <span>Paper</span>
-                </a>
-              </span>
-              <span class="link-block">
-                <a href="https://arxiv.org/abs/2508.08782"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="ai ai-arxiv"></i>
-                  </span>
-                  <span>arXiv</span>
-                </a>
-              </span>
-              <!-- Code Link. -->
-              <span class="link-block">
-                <a href="https://github.com/tue-bmd/ulsa"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <i class="fab fa-github"></i>
-                  </span>
-                  <span>Code</span>
-                  </a>
-              </span>
-              <!-- HF Link. -->
-              <span class="link-block">
-                <a href="https://huggingface.co/zeahub/ulsa"
-                   class="external-link button is-normal is-rounded is-dark">
-                  <span class="icon">
-                      <img src="./static/images/huggingface_logo-noborder.svg" alt="Hugging Face Logo" style="width: 1.3em;">
-                  </span>
-                  <span>Hugging Face</span>
-                  </a>
-              </span>
+      <div class="navbar-menu">
+        <div class="navbar-start" style="flex-grow: 1; justify-content: center">
+          <div class="navbar-item has-dropdown is-hoverable">
+            <a class="navbar-link"> More Research </a>
+            <div class="navbar-dropdown">
+              <a
+                class="navbar-item"
+                href="https://active-diffusion-subsampling.github.io/"
+              >
+                Active Diffusion Subsampling
+              </a>
+              <a
+                class="navbar-item"
+                href="https://dehazing-diffusion.github.io/"
+              >
+                Dehazing Ultrasound using Diffusion Models
+              </a>
+              <a
+                class="navbar-item"
+                href="https://ieeexplore.ieee.org/document/10689436"
+              >
+                Cognitive Ultrasound
+              </a>
+              <a
+                class="navbar-item"
+                href="https://doi.org/10.1109/ICASSP49660.2025.10889044"
+              >
+                Deep Variational Sequential Monte Carlo
+              </a>
+              <a
+                class="navbar-item"
+                href="https://3d-ultrasound-diffusion.github.io/"
+              >
+                High Volume Rate 3D Ultrasound
+              </a>
             </div>
-
           </div>
         </div>
       </div>
-    </div>
-  </div>
-</section>
+    </nav>
 
-<section class="hero teaser">
-  <div class="container is-max-desktop">
-    <div class="hero-body">
-      <video id="teaser" autoplay muted loop playsinline height="100%">
-        <source src="./static/videos/heatmap_reconstruction_example_14.webm"
-                type="video/webm">
-      </video>
-      <h2 class="subtitle has-text-centered">
-        Patient-Adaptive Echocardiography selects the most informative ultrasound transmits
-        using Cognitive Ultrasound.
-      </h2>
-    </div>
-  </div>
-</section>
+    <section class="hero">
+      <div class="hero-body">
+        <div class="container is-max-desktop">
+          <div class="columns is-centered">
+            <div class="column has-text-centered">
+              <h1 class="title is-1 publication-title">
+                Patient-Adaptive Echocardiography using Cognitive Ultrasound
+              </h1>
+              <div class="is-size-5 publication-authors">
+                <span class="author-block">
+                  <a href="https://wesselvannierop.com">Wessel L. van Nierop</a
+                  ><sup>*1</sup>,</span
+                >
+                <span class="author-block">
+                  <a
+                    href="https://scholar.google.com/citations?user=CcnvcSgAAAAJ&hl=en"
+                    >Oisín Nolan</a
+                  ><sup>*1</sup>,</span
+                >
+                <span class="author-block">
+                  <a href="https://tristan-deep.github.io/"
+                    >Tristan S.W. Stevens</a
+                  ><sup>1</sup>,
+                </span>
+                <span class="author-block">
+                  <a
+                    href="https://www.tue.nl/en/research/researchers/ruud-van-sloun/"
+                    >Ruud J.G. van Sloun</a
+                  ><sup>1</sup>,
+                </span>
+              </div>
 
-<section class="section">
-  <div class="container is-max-desktop">
+              <div class="is-size-5 publication-authors">
+                <span class="author-block"
+                  ><sup>1</sup>Eindhoven University of Technology,</span
+                >
+                <span class="author-block"
+                  ><sup>*</sup>contributed equally,</span
+                >
+              </div>
 
-    <!-- Animation. -->
-    <div class="columns is-centered">
-      <div class="column is-full-width">
-        <h2 class="title is-3">Examples</h2>
-
-        <!-- Interpolating. -->
-        <h3 class="title is-4">Select number of transmits</h3>
-        <div class="content has-text-justified">
-          <p>
-            Let's run active perception for various numbers of transmits.  Use the slider to choose
-            the number of transmits yourself.
-          </p>
-        </div>
-        <div class="columns is-vcentered interpolation-panel">
-          <div class="column interpolation-video-column">
-            <div id="interpolation-image-wrapper">
-              Loading...
+              <div class="column has-text-centered">
+                <div class="publication-links">
+                  <!-- PDF Link. -->
+                  <span class="link-block">
+                    <a
+                      href="https://arxiv.org/pdf/2508.08782"
+                      class="external-link button is-normal is-rounded is-dark"
+                    >
+                      <span class="icon">
+                        <i class="fas fa-file-pdf"></i>
+                      </span>
+                      <span>Paper</span>
+                    </a>
+                  </span>
+                  <span class="link-block">
+                    <a
+                      href="https://arxiv.org/abs/2508.08782"
+                      class="external-link button is-normal is-rounded is-dark"
+                    >
+                      <span class="icon">
+                        <i class="ai ai-arxiv"></i>
+                      </span>
+                      <span>arXiv</span>
+                    </a>
+                  </span>
+                  <!-- Code Link. -->
+                  <span class="link-block">
+                    <a
+                      href="https://github.com/tue-bmd/ulsa"
+                      class="external-link button is-normal is-rounded is-dark"
+                    >
+                      <span class="icon">
+                        <i class="fab fa-github"></i>
+                      </span>
+                      <span>Code</span>
+                    </a>
+                  </span>
+                  <!-- HF Link. -->
+                  <span class="link-block">
+                    <a
+                      href="https://huggingface.co/zeahub/ulsa"
+                      class="external-link button is-normal is-rounded is-dark"
+                    >
+                      <span class="icon">
+                        <img
+                          src="./static/images/huggingface_logo-noborder.svg"
+                          alt="Hugging Face Logo"
+                          style="width: 1.3em"
+                        />
+                      </span>
+                      <span>Hugging Face</span>
+                    </a>
+                  </span>
+                </div>
+              </div>
             </div>
-            <div class="has-text-centered" style="margin-top: 1rem;">
-              <input class="slider is-large is-info"
-                   id="interpolation-slider"
-                   step="1" min="0" max="6" value="3" type="range"
-                   list="slider-ticks"
-                   style="width: 60%; max-width: 400px;">
-              <datalist id="slider-ticks">
-                <option value="0" label="2"></option>
-                <option value="1" label="4"></option>
-                <option value="2" label="7"></option>
-                <option value="3" label="14"></option>
-                <option value="4" label="28"></option>
-                <option value="5" label="56"></option>
-                <option value="6" label="112"></option>
-              </datalist>
-            </div>
-            <div class="has-text-centered" style="margin-top: 0.5em;">
-              <span id="slider-value-label">14</span>
-            </div>
-            <script>
-              const slider = document.getElementById('interpolation-slider');
-              const label = document.getElementById('slider-value-label');
-              const values = [2, 4, 7, 14, 28, 56, 112];
-              // Set initial label to match initial slider value
-              label.textContent = values[parseInt(slider.value, 10)];
-              slider.addEventListener('input', function() {
-                label.textContent = values[parseInt(slider.value, 10)];
-              });
-            </script>
           </div>
         </div>
-        <br/>
-        <!--/ Interpolating. -->
-
       </div>
-    </div>
-    <!--/ Animation. -->
-  </div>
-</section>
+    </section>
 
-<section class="section">
-  <div class="container is-max-desktop content">
-    <h2 class="title">Additional material</h2>
-    We have provided <a href="https://github.com/tue-bmd/ulsa/tree/main/assets">supplemental visual assets on github</a>, these include cine-loops of the in-house dataset.
-    Additionally, you can find <a href="https://github.com/tue-bmd/ulsa/tree/main/additional_results">more results on github</a>, for example, using an out-of-distribution phantom.
-  </div>
-</section>
+    <section class="hero teaser">
+      <div class="container is-max-desktop">
+        <div class="hero-body">
+          <video id="teaser" autoplay muted loop playsinline height="100%">
+            <source
+              src="./static/videos/heatmap_reconstruction_example_14.webm"
+              type="video/webm"
+            />
+          </video>
+          <h2 class="subtitle has-text-centered">
+            Patient-Adaptive Echocardiography selects the most informative
+            ultrasound transmits using Cognitive Ultrasound.
+          </h2>
+        </div>
+      </div>
+    </section>
 
-<section class="section" id="BibTeX">
-  <div class="container is-max-desktop content">
-    <h2 class="title">BibTeX</h2>
-    <pre><code>@misc{nieropnolan2025,
+    <section class="section">
+      <div class="container is-max-desktop">
+        <!-- Animation. -->
+        <div class="columns is-centered">
+          <div class="column is-full-width">
+            <h2 class="title is-3">Examples</h2>
+
+            <!-- Interpolating. -->
+            <h3 class="title is-4">Select number of transmits</h3>
+            <div class="content has-text-justified">
+              <p>
+                Let's run active perception for various numbers of transmits.
+                Use the slider to choose the number of transmits yourself.
+              </p>
+            </div>
+            <div class="columns is-vcentered interpolation-panel">
+              <div class="column interpolation-video-column">
+                <div id="interpolation-image-wrapper">Loading...</div>
+                <div class="has-text-centered" style="margin-top: 1rem">
+                  <input
+                    class="slider is-large is-info"
+                    id="interpolation-slider"
+                    step="1"
+                    min="0"
+                    max="6"
+                    value="3"
+                    type="range"
+                    list="slider-ticks"
+                    style="width: 60%; max-width: 400px"
+                  />
+                  <datalist id="slider-ticks">
+                    <option value="0" label="2"></option>
+                    <option value="1" label="4"></option>
+                    <option value="2" label="7"></option>
+                    <option value="3" label="14"></option>
+                    <option value="4" label="28"></option>
+                    <option value="5" label="56"></option>
+                    <option value="6" label="112"></option>
+                  </datalist>
+                </div>
+                <div class="has-text-centered" style="margin-top: 0.5em">
+                  <span id="slider-value-label">14</span>
+                </div>
+                <script>
+                  const slider = document.getElementById(
+                    "interpolation-slider",
+                  );
+                  const label = document.getElementById("slider-value-label");
+                  const values = [2, 4, 7, 14, 28, 56, 112];
+                  // Set initial label to match initial slider value
+                  label.textContent = values[parseInt(slider.value, 10)];
+                  slider.addEventListener("input", function () {
+                    label.textContent = values[parseInt(slider.value, 10)];
+                  });
+                </script>
+              </div>
+            </div>
+            <br />
+            <!--/ Interpolating. -->
+          </div>
+        </div>
+        <!--/ Animation. -->
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container is-max-desktop content">
+        <h2 class="title">Additional material</h2>
+        We have provided
+        <a href="https://github.com/tue-bmd/ulsa/tree/main/assets"
+          >supplemental visual assets on github</a
+        >, these include cine-loops of the in-house dataset. Additionally, you
+        can find
+        <a href="https://github.com/tue-bmd/ulsa/tree/main/additional_results"
+          >more results on github</a
+        >, for example, using an out-of-distribution phantom.
+      </div>
+    </section>
+
+    <section class="section" id="BibTeX">
+      <div class="container is-max-desktop content">
+        <h2 class="title">BibTeX</h2>
+        <pre><code>@misc{nieropnolan2025,
       title={Patient-Adaptive Focused Transmit Beamforming using Cognitive Ultrasound}, 
       author={Wessel L. van Nierop and Oisín Nolan and Tristan S. W. Stevens and Ruud J. G. van Sloun},
       year={2025},
@@ -236,34 +300,43 @@
       primaryClass={eess.SP},
       url={https://arxiv.org/abs/2508.08782}, 
 }</code></pre>
-  </div>
-</section>
+      </div>
+    </section>
 
-
-<footer class="footer">
-  <div class="container">
-    <div class="content has-text-centered">
-      <a class="icon-link" href="https://github.com/tue-bmd/ulsa" class="external-link" disabled>
-        <i class="fab fa-github"></i>
-      </a>
-    </div>
-    <div class="columns is-centered">
-      <div class="column is-8">
-        <div class="content">
-          <p>
-            This website is licensed under a <a rel="license"
-                                                href="http://creativecommons.org/licenses/by-sa/4.0/">Creative
-            Commons Attribution-ShareAlike 4.0 International License</a>.
-          </p>
-          <p>
-            Website adapted from the following <a
-              href="https://github.com/nerfies/nerfies.github.io">source code</a>.
-          </p>
+    <footer class="footer">
+      <div class="container">
+        <div class="content has-text-centered">
+          <a
+            class="icon-link"
+            href="https://github.com/tue-bmd/ulsa"
+            class="external-link"
+            disabled
+          >
+            <i class="fab fa-github"></i>
+          </a>
+        </div>
+        <div class="columns is-centered">
+          <div class="column is-8">
+            <div class="content">
+              <p>
+                This website is licensed under a
+                <a
+                  rel="license"
+                  href="http://creativecommons.org/licenses/by-sa/4.0/"
+                  >Creative Commons Attribution-ShareAlike 4.0 International
+                  License</a
+                >.
+              </p>
+              <p>
+                Website adapted from the following
+                <a href="https://github.com/nerfies/nerfies.github.io"
+                  >source code</a
+                >.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
-</footer>
-
-</body>
+    </footer>
+  </body>
 </html>
