@@ -1,6 +1,8 @@
+"""Defines downstream tasks for ultrasound active sampling,
+including an EchoNet-based segmentation task."""
+
 from abc import ABC
 
-import cv2
 import jax
 import numpy as np
 from keras import ops

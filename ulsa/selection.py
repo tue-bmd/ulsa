@@ -1,7 +1,5 @@
 """
-
 Prototypes for additional `zea` selection functions
-
 """
 
 import jax

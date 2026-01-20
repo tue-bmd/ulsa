@@ -1,3 +1,6 @@
+"""Defines the Agent and AgentState dataclasses, containing the logic for
+action selection, reconstruction, and state management."""
+
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path

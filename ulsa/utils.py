@@ -1,3 +1,5 @@
+"""Utility functions."""
+
 import numpy as np
 
 from zea import Scan

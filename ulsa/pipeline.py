@@ -1,3 +1,5 @@
+"""Extensions for a zea.Pipeline, and convenience functions for building one."""
+
 from typing import List, Union
 
 import keras

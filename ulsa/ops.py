@@ -1,4 +1,4 @@
-from pathlib import Path
+"""Custom operations that can be used in a zea.Pipeline"""
 
 import jax
 import jax.numpy as jnp

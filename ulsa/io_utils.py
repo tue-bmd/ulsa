@@ -1,3 +1,5 @@
+"""IO utilities for ultrasound active sampling."""
+
 import os
 from pathlib import Path
 

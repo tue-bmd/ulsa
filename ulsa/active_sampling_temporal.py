@@ -7,15 +7,35 @@ so far.
 import argparse
 import json
 import os
-
-os.environ["MPLBACKEND"] = "Agg"
-import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
 
+import jax
+import keras
 import numpy as np
+from keras import ops
+from keras.src import backend
 from tqdm import tqdm
+
+import zea.ops
+from ulsa import selection  # need to import this to update action selection registry
+from ulsa.agent import Agent, AgentConfig, AgentState, hard_projection, setup_agent
+from ulsa.downstream_task import DownstreamTask, downstream_task_registry
+from ulsa.io_utils import (
+    make_save_dir,
+    map_range,
+    plot_belief_distribution_for_presentation,
+    plot_downstream_task_beliefs,
+    plot_downstream_task_output_for_presentation,
+    plot_frames_for_presentation,
+)
+from ulsa.ops import lines_rx_apo
+from ulsa.pipeline import make_pipeline
+from ulsa.utils import update_scan_for_polar_grid
+from zea import File, Pipeline, Scan, init_device, log, set_data_paths
+from zea.func import func_with_one_batch_dim, vmap
+from zea.metrics import Metrics
+from zea.utils import FunctionTimer
 
 
 def parse_args():
@@ -77,42 +97,13 @@ def parse_args():
 
 
 if __name__ == "__main__":
-    args = parse_args()
     os.environ["KERAS_BACKEND"] = "jax"
-
-    from zea import init_device
+    os.environ["MPLBACKEND"] = "Agg"
 
     init_device()
 
-
-import keras
-from keras import ops
-
-if __name__ == "__main__":
+    args = parse_args()
     keras.mixed_precision.set_global_policy(args.precision)
-
-import jax
-from keras.src import backend
-
-import zea.ops
-from ulsa import selection  # need to import this to update action selection registry
-from ulsa.agent import Agent, AgentConfig, AgentState, hard_projection, setup_agent
-from ulsa.downstream_task import DownstreamTask, downstream_task_registry
-from ulsa.io_utils import (
-    make_save_dir,
-    map_range,
-    plot_belief_distribution_for_presentation,
-    plot_downstream_task_beliefs,
-    plot_downstream_task_output_for_presentation,
-    plot_frames_for_presentation,
-)
-from ulsa.ops import lines_rx_apo
-from ulsa.pipeline import make_pipeline
-from ulsa.utils import update_scan_for_polar_grid
-from zea import File, Pipeline, Scan, log, set_data_paths
-from zea.func import func_with_one_batch_dim, vmap
-from zea.metrics import Metrics
-from zea.utils import FunctionTimer
 
 
 def simple_scan(f, init, xs, length=None, disable_tqdm=False):

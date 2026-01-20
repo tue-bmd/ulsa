@@ -1,7 +1,5 @@
 """
-Functions for running an ultrasound line-scanning agent that chooses which lines to scan
-based on samples from a distribution over full images conditioned on the lines observed
-so far.
+Functions for benchmarking ultrasound line-scanning agents with active sampling.
 """
 
 import logging

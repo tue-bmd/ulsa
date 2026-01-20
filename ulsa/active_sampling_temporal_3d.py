@@ -1,3 +1,7 @@
+"""
+Script for running an ultrasound line-scanning agent that chooses which elevation planes to scan.
+"""
+
 import argparse
 import json
 import os
