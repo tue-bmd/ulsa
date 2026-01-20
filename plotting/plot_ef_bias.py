@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from ulsa.plotting.index import extract_sweep_data
+from ulsa.plotting.plot_utils import METRIC_NAMES
 
 
 def load_ef_data(csv_path):
@@ -115,7 +116,7 @@ def plot_ef_psnr_correlation(df, save_path=None):
 
     # Customize plots
     ax_joint.set_xlabel("Ejection Fraction [%]")
-    ax_joint.set_ylabel("PSNR [dB]")
+    ax_joint.set_ylabel(METRIC_NAMES["psnr"])
 
     # Turn off tick labels on marginals
     ax_marg_x.tick_params(labelbottom=False)
@@ -152,6 +153,7 @@ if __name__ == "__main__":
         [DATA_FOLDER], keys_to_extract=["psnr"], ef_lookup=ef_lookup
     )
 
+    # Use n_actions = 14
     df = results_df[results_df["x_value"] == 14]
 
     # Create plots
