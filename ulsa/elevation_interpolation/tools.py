@@ -1,3 +1,5 @@
+"""Tools for elevation interpolation visualization and processing."""
+
 import functools
 import inspect
 from pathlib import Path

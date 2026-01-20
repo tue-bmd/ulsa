@@ -1,3 +1,5 @@
+"""Functions for visualizing masks on top of images with matplotlib."""
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np

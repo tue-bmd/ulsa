@@ -1,3 +1,5 @@
+"""Utility functions for plotting ULSA results with matplotlib."""
+
 import re
 from collections import OrderedDict
 from collections.abc import Iterable

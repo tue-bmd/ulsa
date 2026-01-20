@@ -1,3 +1,5 @@
+"""Functions for indexing and extracting data from ULSA sweeps."""
+
 import concurrent.futures
 import os
 from pathlib import Path
