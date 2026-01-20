@@ -37,7 +37,7 @@ plt.rcParams["axes.titlepad"] = 10.0  # default is 6.0
 
 
 # --- CONFIG ---
-data_root = Path("/mnt/z/usbmd/Wessel/ulsa/Np_2/eval_3d/qualitative")
+data_root = Path("/mnt/z/usbmd/ulsa/Np_2/eval_3d/qualitative")
 n_patients = 3
 frame_idx = 4  # or whichever frame you want to visualize
 normalization_range = (0, 255)

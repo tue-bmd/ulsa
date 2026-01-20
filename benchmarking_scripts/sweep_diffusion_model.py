@@ -1,18 +1,18 @@
 """
 
 python benchmarking_scripts/sweep_diffusion_model.py \
-    --save_dir /mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/diffusion_model_path \
+    --save_dir /mnt/z/usbmd/ulsa/hyperparam_sweeps/diffusion_model_path \
     --n_actions 7 14 28 \
     --limit_n_samples 20 \
     --limit_n_frames 100 \
     --selection_strategy greedy_entropy \
     --diffusion_model_paths \
-        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_122343_057300_echonet_diffusion_1_frame/hub \
-        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_122428_505743_echonet_diffusion_2_frames/hub \
-        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_122443_731941_echonet_diffusion_3_frames/hub \
-        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_123033_778339_echonet_diffusion_4_frames/hub \
-        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_123045_908961_echonet_diffusion_5_frames/hub \
-        /mnt/z/Ultrasound-BMd/pretrained/diffusion/2025_11_07_123115_976983_echonet_diffusion_6_frames/hub
+        /mnt/z/usbmd/ulsa/diffusion/2025_11_07_122343_057300_echonet_diffusion_1_frame/hub \
+        /mnt/z/usbmd/ulsa/diffusion/2025_11_07_122428_505743_echonet_diffusion_2_frames/hub \
+        /mnt/z/usbmd/ulsa/diffusion/2025_11_07_122443_731941_echonet_diffusion_3_frames/hub \
+        /mnt/z/usbmd/ulsa/diffusion/2025_11_07_123033_778339_echonet_diffusion_4_frames/hub \
+        /mnt/z/usbmd/ulsa/diffusion/2025_11_07_123045_908961_echonet_diffusion_5_frames/hub \
+        /mnt/z/usbmd/ulsa/diffusion/2025_11_07_123115_976983_echonet_diffusion_6_frames/hub
 
 """
 
@@ -62,7 +62,7 @@ def parse_args():
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="/mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/n_particles_choose_first",
+        default="/mnt/z/usbmd/ulsa/hyperparam_sweeps/n_particles_choose_first",
         help="Directory to save the benchmark results.",
     )
     parser.add_argument(

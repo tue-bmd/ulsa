@@ -139,7 +139,7 @@ def plot_ef_psnr_correlation(df, save_path=None):
 
 
 if __name__ == "__main__":
-    DATA_ROOT = "/mnt/z/usbmd/Wessel/ulsa"
+    DATA_ROOT = "/mnt/z/usbmd/ulsa"
     DATA_FOLDER = (
         Path(DATA_ROOT)
         / "Np_2/eval_echonet_dynamic_test_set/sweep_2026_01_08_225505_654881"

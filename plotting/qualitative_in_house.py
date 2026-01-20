@@ -503,8 +503,10 @@ def animated_plot_from_npz(
 
 
 if __name__ == "__main__":
-    fundamental_file = "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental/20240701_P1_A4CH_0001"
-    harmonic_dir = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/")
+    fundamental_file = (
+        "/mnt/z/usbmd/ulsa/eval_in_house/cardiac_fundamental/20240701_P1_A4CH_0001"
+    )
+    harmonic_dir = Path("/mnt/z/usbmd/ulsa/eval_in_house/cardiac_harmonic/")
 
     stack_plot_from_npz(
         [

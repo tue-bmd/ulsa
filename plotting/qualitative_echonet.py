@@ -18,7 +18,7 @@ from ulsa.io_utils import color_to_value, postprocess_agent_results
 from ulsa.plotting.index import load_patients_by_name, random_patients
 from zea import Config
 
-DATA_ROOT = "/mnt/z/usbmd/Wessel/ulsa/Np_2"
+DATA_ROOT = "/mnt/z/usbmd/ulsa/Np_2"
 DATA_FOLDER = Path(DATA_ROOT) / "eval_echonet_dynamic_test_set"
 SUBSAMPLED_PATHS = [
     # DATA_FOLDER / "sharding_sweep_2025-08-05_14-35-11",

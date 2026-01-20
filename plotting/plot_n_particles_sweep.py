@@ -696,7 +696,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sweep-path",
         type=str,
-        default="/mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/n_particles_choose_first/sweep_2025_11_04_100001_597713",
+        default="/mnt/z/usbmd/ulsa/hyperparam_sweeps/n_particles_choose_first/sweep_2025_11_04_100001_597713",
         help="Path to the sweep directory",
     )
     parser.add_argument(

@@ -134,11 +134,9 @@ def plot_gcnr_over_time(
 @cache_output(verbose=True)
 def load_results():
     ANNOTATIONS_ROOT = Path(
-        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental_annotations/"
+        "/mnt/z/usbmd/ulsa/eval_in_house/cardiac_fundamental_annotations/"
     )
-    DATA_ROOT = Path(
-        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_fundamental_for_gcnr/"
-    )
+    DATA_ROOT = Path("/mnt/z/usbmd/ulsa/eval_in_house/cardiac_fundamental_for_gcnr/")
 
     subjects = [
         "20240701_P1_A4CH_0001",

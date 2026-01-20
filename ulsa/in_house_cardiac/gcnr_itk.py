@@ -36,9 +36,9 @@ SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 @cache_output(verbose=True)
 def load_results():
-    DATA_ROOT = Path("/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/")
+    DATA_ROOT = Path("/mnt/z/usbmd/ulsa/eval_in_house/cardiac_harmonic/")
     ANNOTATION_ROOT = Path(
-        "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic_annotations/"
+        "/mnt/z/usbmd/ulsa/eval_in_house/cardiac_harmonic_annotations/"
     )
 
     subjects = [

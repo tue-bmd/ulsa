@@ -145,8 +145,10 @@ def plot_timings(
 
 
 if __name__ == "__main__":
-    seqdiff = "/mnt/z/usbmd/Wessel/ulsa/timings/recon_vs_fps2/sweep_2025_04_08_124401"
-    normal_diff = "/mnt/z/usbmd/Wessel/ulsa/timings/normal_diffusion_num_steps2/sweep_2025_04_08_115535"
+    seqdiff = "/mnt/z/usbmd/ulsa/timings/recon_vs_fps2/sweep_2025_04_08_124401"
+    normal_diff = (
+        "/mnt/z/usbmd/ulsa/timings/normal_diffusion_num_steps2/sweep_2025_04_08_115535"
+    )
     SAVE_ROOT = "."
 
     x = extract_sweep_data(seqdiff)

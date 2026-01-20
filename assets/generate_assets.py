@@ -14,7 +14,7 @@ from ulsa.active_sampling_temporal import active_sampling_single_file, save_resu
 
 
 def generate_assets(
-    file_path="/mnt/USBMD_datasets/echonet_legacy/val/0X10A5FC19152B50A5.hdf5",
+    file_path="/mnt/USBMD_datasets/_LEGACY/echonet_legacy/val/0X10A5FC19152B50A5.hdf5",
     n_actions: int = 7,
 ):
     run_dir, run_id = save_results(
@@ -67,7 +67,8 @@ if __name__ == "__main__":
 
     # For teaser
     run_dir, run_id = generate_assets(
-        "/mnt/USBMD_datasets/echonet_legacy/test/0X329210815212AA6A.hdf5", n_actions=14
+        "/mnt/USBMD_datasets/_LEGACY/echonet_legacy/test/0X329210815212AA6A.hdf5",
+        n_actions=14,
     )
     glob_copy_files(
         run_dir,

@@ -1,7 +1,7 @@
 """
 
 python benchmarking_scripts/sweep_num_particles.py \
-    --save_dir /mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/n_particles_choose_first \
+    --save_dir /mnt/z/usbmd/ulsa/hyperparam_sweeps/n_particles_choose_first \
     --n_actions 7 14 28 \
     --limit_n_samples 20 \
     --limit_n_frames 100 \
@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="/mnt/z/Ultrasound-BMd/data/oisin/ULSA_hyperparam_sweeps/n_particles_choose_first",
+        default="/mnt/z/usbmd/ulsa/hyperparam_sweeps/n_particles_choose_first",
         help="Directory to save the benchmark results.",
     )
     parser.add_argument(

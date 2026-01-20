@@ -8,7 +8,7 @@ comparison figure with reconstructions and FWHM traces.
 
 Example usage:
     python plotting/plot_CIRS_fwhm_gcnr.py \
-        --data-dir "/mnt/z/usbmd/Wessel/ulsa/eval_in_house/phantom/20251118_CIRS_0000" \
+        --data-dir "/mnt/z/usbmd/ulsa/eval_in_house/phantom/20251118_CIRS_0000" \
         --save-dir ./output \
         --frame-idx 10 \
         --point1 135 640 \

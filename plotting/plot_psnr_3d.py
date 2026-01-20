@@ -42,8 +42,8 @@ if __name__ == "__main__":
 
     # Define your sweep paths here
     SWEEPS = [
-        "/mnt/z/usbmd/Wessel/ulsa/Np_2/eval_3d/sweep_2026_01_09_150907_746810",
-        "/mnt/z/usbmd/Wessel/ulsa/Np_2/eval_3d/sweep_2026_01_09_170631_559863",
+        "/mnt/z/usbmd/ulsa/Np_2/eval_3d/sweep_2026_01_09_150907_746810",
+        "/mnt/z/usbmd/ulsa/Np_2/eval_3d/sweep_2026_01_09_170631_559863",
     ]
 
     keys_to_extract = ["psnr", "lpips"]

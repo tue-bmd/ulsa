@@ -83,7 +83,7 @@ def parse_args():
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="/mnt/z/usbmd/Wessel/ulsa/eval_echonet_dynamic",
+        default="/mnt/z/usbmd/ulsa/eval_echonet_dynamic",
         help="Directory to save the benchmark results.",
     )
     parser.add_argument(

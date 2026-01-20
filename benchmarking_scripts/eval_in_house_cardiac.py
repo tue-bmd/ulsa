@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="/mnt/z/usbmd/Wessel/ulsa/eval_in_house/cardiac_harmonic/",
+        default="/mnt/z/usbmd/ulsa/eval_in_house/cardiac_harmonic/",
         help="Directory to save results.",
     )
     parser.add_argument(
@@ -37,9 +37,9 @@ def parse_args():
         type=str,
         nargs="+",
         default=[
-            "/mnt/datasets/2026_USBMD_A4CH_S51_V2/20251222_s1_a4ch_line_dw_0000.hdf5",
-            "/mnt/datasets/2026_USBMD_A4CH_S51_V2/20251222_s2_a4ch_line_dw_0000.hdf5",
-            "/mnt/datasets/2026_USBMD_A4CH_S51_V2/20251222_s3_a4ch_line_dw_0000.hdf5",
+            "/mnt/z/usbmd/ulsa/2026_ULSA_A4CH_S51/harmonic/20251222_s1_a4ch_line_dw_0000.hdf5",
+            "/mnt/z/usbmd/ulsa/2026_ULSA_A4CH_S51/harmonic/20251222_s2_a4ch_line_dw_0000.hdf5",
+            "/mnt/z/usbmd/ulsa/2026_ULSA_A4CH_S51/harmonic/20251222_s3_a4ch_line_dw_0000.hdf5",
         ],
         help="Can be a list of folders and/or files containing in-house cardiac data HDF5 files.",
     )

@@ -71,31 +71,3 @@ def cardiac_scan(
 
     scan.dynamic_range = ops.convert_to_numpy(output["dynamic_range"]).tolist()
     return images, scan
-
-
-if __name__ == "__main__":
-    type = "focused"  # or "focused"
-    images, scan = cardiac_scan(
-        "/mnt/USBMD_datasets/2024_USBMD_cardiac_S51/HDF5/20240701_P1_A4CH_0001.hdf5",
-        n_frames=None,
-        type=type,
-    )
-    dynamic_range = scan.dynamic_range
-
-    images, _ = scan_convert_2d(
-        images,
-        rho_range=(0, images.shape[-2]),
-        theta_range=scan.theta_range,
-        resolution=0.1,
-        fill_value=np.nan,
-        order=0,
-    )
-    np.savez(f"output/{type}.npz", images=images, dynamic_range=dynamic_range)
-
-    _images = translate(images, dynamic_range, (0, 255))
-    _images = np.clip(_images, 0, 255).astype(np.uint8)
-    save_to_gif(_images, f"output/{type}.gif", fps=30)
-    plt.imshow(images[24], cmap="gray", vmin=dynamic_range[0], vmax=dynamic_range[1])
-    plt.axis("off")
-    plt.savefig(f"output/{type}.png", dpi=300, bbox_inches="tight")
-    zea.log.info(f"Saved frames to output/{type}.png")
