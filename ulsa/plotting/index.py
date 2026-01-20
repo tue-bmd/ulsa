@@ -42,9 +42,6 @@ def index_sweep_data(sweep_dirs: str | List[str]):
             print(f"Skipping incomplete run: {run_path}")
             return None
         target_file = Config.from_yaml(str(filepath_yaml))["target_filepath"]
-        target_file = str(target_file).replace(
-            "/projects/0/prjs0966/data", "/mnt/z/Ultrasound-BMd/data"
-        )
         filename = Path(target_file).name
         return (run_path, target_file, filename)
 

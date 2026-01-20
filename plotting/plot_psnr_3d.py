@@ -40,13 +40,8 @@ if __name__ == "__main__":
 
     # Define your sweep paths here
     SWEEPS = [
-        # "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_07_30_075551_576866",
-        # Old results, N_p=4:
-        # "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_08_05_135605_502495",
-        # "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d/sweep_2025_08_08_073153_126915",
-        # New results, N_p=2:
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d_Np=2/sweep_2026_01_09_150907_746810",
-        "/mnt/z/Ultrasound-BMd/data/oisin/ULSA_benchmarks/3d_Np=2/sweep_2026_01_09_170631_559863",
+        "/mnt/z/usbmd/Wessel/ulsa/Np_2/eval_3d/sweep_2026_01_09_150907_746810",
+        "/mnt/z/usbmd/Wessel/ulsa/Np_2/eval_3d/sweep_2026_01_09_170631_559863",
     ]
 
     keys_to_extract = ["psnr", "lpips"]
