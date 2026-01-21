@@ -23,7 +23,8 @@ interpolation = "nearest"
 vmin = 0
 vmax = 255
 drop_first_n_frames = 4
-scan_convert_resolution = 0.2
+scan_convert_resolution = 0.3
+n_samples = 20
 
 io_config = zea.Config(scan_convert=True, scan_conversion_angles=(-45, 45))
 scan_convert_order = 0
@@ -37,7 +38,7 @@ patients = random_patients(
     [
         "/mnt/z/usbmd/ulsa/Np_2/eval_echonet_dynamic_test_set/sweep_2026_01_08_225505_654881"
     ],
-    n_samples=3,
+    n_samples=n_samples,
 )
 
 # Preload relevant data
@@ -59,6 +60,9 @@ for run_dirs, name in patients:
         )
 patients = pd.DataFrame(results)
 patient_names = patients["name"].unique()
+patient_stems = [str(n).split(".")[0] for n in patient_names]
+print("Patients to process:")
+print(patient_stems)
 
 # Generate gifs
 print("Generating gifs...")
@@ -128,7 +132,7 @@ for patient_id, patient_name in enumerate(patient_names):
         )
 
         patient_stem = str(patient_name).split(".")[0]
-        save_path = save_dir / patient_name
+        save_path = save_dir / patient_stem
         save_path.mkdir(parents=True, exist_ok=True)
         side_by_side_gif(
             save_path / f"{n_actions}.webm",

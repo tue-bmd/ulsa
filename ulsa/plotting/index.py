@@ -62,7 +62,8 @@ def random_patients(sweep_dirs, n_samples: int, seed=42):
     data_frame = pd.DataFrame(generator, columns=["run_path", "filepath", "filename"])
     unique_filenames = data_frame["filename"].unique()
     rng = np.random.default_rng(seed)
-    random_filenames = rng.choice(unique_filenames, size=n_samples, replace=False)
+    randperm = rng.permutation(len(unique_filenames))[:n_samples]
+    random_filenames = unique_filenames[randperm]
 
     for random_filename in random_filenames:
         sample_rows = data_frame[data_frame["filename"] == random_filename]
