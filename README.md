@@ -50,7 +50,7 @@ Alternatively, we have provided a [Dockerfile](./Dockerfile) to build a Docker i
 - Convert the dataset to the polar format:
 
     ```bash
-    python -m zea.data.convert.echonet --source /path/to/echonet-dynamic --target /path/to/echonet-dynamic-polar --splits /path/to/splits
+    python -m zea.data.convert echonet /path/to/echonet-dynamic /path/to/echonet-dynamic-polar --split_path /path/to/split.yaml
     ```
 
 ## Training
