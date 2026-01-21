@@ -28,6 +28,7 @@ from skimage.exposure import match_histograms
 from ulsa.entropy import pixelwise_entropy
 from ulsa.io_utils import color_to_value, postprocess_agent_results
 from ulsa.transmit_time import max_fps
+from ulsa.utils import find_best_cine_loop
 
 imshow_kwargs = {
     "vmin": 0,
@@ -64,38 +65,6 @@ def _init_grid(
     )
 
     return fig, outer
-
-
-def find_best_cine_loop(
-    data,  # shape (n_frames, height, width)
-    min_sequence_length=30,
-    visualize=True,
-):
-    """Find the best cine loop by comparing frame differences to the first frame.
-
-    Args:
-        data: np.ndarray of shape (n_frames, height, width)
-        min_sequence_length: Minimum number of frames before considering loop closure.
-        visualize: Whether to save a plot of the frame differences.
-    """
-    first_frame = data[0]
-    other_frames = data[1:]
-    differences = np.sum(np.abs(other_frames - first_frame[None]), axis=(1, 2))
-    min_diff_idx = np.argmin(differences[min_sequence_length:]) + min_sequence_length
-
-    if visualize:
-        plt.plot(differences)
-        plt.axvline(min_sequence_length, color="red", linestyle="--")
-        plt.axvline(min_diff_idx, color="green", linestyle="--")
-        plt.title("Frame Differences from First Frame")
-        plt.xlabel("Frame Index (relative to first frame)")
-        plt.ylabel("Sum of Absolute Differences")
-        plt.savefig("frame_differences.png")
-        plt.close()
-        zea.log.info(
-            f"Saved frame differences plot to {zea.log.yellow('frame_differences.png')}"
-        )
-    return min_diff_idx
 
 
 def _load_from_run_dir(

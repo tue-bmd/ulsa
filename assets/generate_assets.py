@@ -42,7 +42,10 @@ def generate_assets(
     return run_dir, run_id
 
 
-def glob_copy_files(run_dir, pattern, dest_dir, dest_stem):
+def glob_copy_files(run_dir, pattern, dest_dir, dest_stem: str):
+    dest_dir = Path(dest_dir)
+    assert dest_dir.exists(), f"Destination directory {dest_dir} does not exist"
+
     files = list(run_dir.glob(pattern))
     assert len(files) == 1, f"Expected one file matching {pattern}, found {len(files)}"
     file = files[0]
@@ -61,7 +64,7 @@ if __name__ == "__main__":
         glob_copy_files(
             run_dir,
             "measurements_reconstruction_*",
-            new_assets_dir,
+            "./docs/videos/n_actions_slider/",
             f"measurements_reconstruction_{n_actions}",
         )
 
@@ -73,6 +76,6 @@ if __name__ == "__main__":
     glob_copy_files(
         run_dir,
         "heatmap_reconstruction_*",
-        new_assets_dir,
+        "./docs/videos/",
         "heatmap_reconstruction_example_14",
     )
