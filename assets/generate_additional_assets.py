@@ -24,7 +24,7 @@ interpolation = "nearest"
 vmin = 0
 vmax = 255
 drop_first_n_frames = 4
-scan_convert_resolution = 0.8
+scan_convert_resolution = 0.5
 n_samples = 20
 
 io_config = zea.Config(scan_convert=True, scan_conversion_angles=(-45, 45))
@@ -41,6 +41,11 @@ patients = random_patients(
     ],
     n_samples=n_samples,
 )
+patients = list(patients)
+
+patient_stems = [str(n).split(".")[0] for _, n in patients]
+print("Patients to process:")
+print(patient_stems)
 
 already_done = list(save_dir.glob("*.webm"))
 already_done_dict = []
@@ -90,9 +95,6 @@ for run_dirs, name in patients:
         )
 patients = pd.DataFrame(results)
 patient_names = patients["name"].unique()
-patient_stems = [str(n).split(".")[0] for n in patient_names]
-print("Patients to process:")
-print(patient_stems)
 
 # Generate gifs
 print("Generating gifs...")
