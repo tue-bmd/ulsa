@@ -224,7 +224,13 @@
             </div>
             <div class="columns is-vcentered action-panel">
               <div class="column action-video-column">
-                <div id="action-image-wrapper">Loading...</div>
+                <div
+                  id="action-image-wrapper"
+                  data-video-folder="n_actions_slider"
+                  data-n-actions="2,4,7,14,28,56,112"
+                >
+                  Loading...
+                </div>
                 <div class="has-text-centered" style="margin-top: 1rem">
                   <input
                     class="slider is-large is-info"
@@ -251,9 +257,7 @@
                   <span id="slider-value-label">14</span>
                 </div>
                 <script>
-                  const slider = document.getElementById(
-                    "action-slider",
-                  );
+                  const slider = document.getElementById("action-slider");
                   const label = document.getElementById("slider-value-label");
                   const values = [2, 4, 7, 14, 28, 56, 112];
                   // Set initial label to match initial slider value

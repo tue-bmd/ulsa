@@ -1,36 +1,37 @@
-var SLIDER_BASE = "./static/videos/n_actions_slider";
-var N_ACTIONS = [2, 4, 7, 14, 28, 56, 112];
-var NUM_VIDEOS = N_ACTIONS.length;
-
-var interp_videos = [];
+var videos = [];
 var videosLoaded = 0;
 var allVideosStarted = false;
 var currentVideoIndex = -1;
+
+var sliderElement;
+var SLIDER_BASE;
+var N_ACTIONS;
+var NUM_VIDEOS;
 
 function preloadActionSliderVideos() {
   for (var i = 0; i < NUM_VIDEOS; i++) {
     var path =
       SLIDER_BASE + "/measurements_reconstruction_" + N_ACTIONS[i] + ".webm";
-    interp_videos[i] = document.createElement("video");
-    interp_videos[i].src = path;
-    interp_videos[i].loop = true;
-    interp_videos[i].muted = true;
-    interp_videos[i].controls = false;
-    interp_videos[i].preload = "auto";
+    videos[i] = document.createElement("video");
+    videos[i].src = path;
+    videos[i].loop = true;
+    videos[i].muted = true;
+    videos[i].controls = false;
+    videos[i].preload = "auto";
 
     // Use absolute positioning but maintain proper video sizing
-    interp_videos[i].style.position = "absolute";
-    interp_videos[i].style.top = "0";
-    interp_videos[i].style.left = "0";
-    interp_videos[i].style.width = "100%";
-    interp_videos[i].style.height = "auto";
-    interp_videos[i].style.maxWidth = "100%";
-    interp_videos[i].style.objectFit = "contain";
-    interp_videos[i].style.zIndex = "1";
-    interp_videos[i].style.opacity = "0";
+    videos[i].style.position = "absolute";
+    videos[i].style.top = "0";
+    videos[i].style.left = "0";
+    videos[i].style.width = "100%";
+    videos[i].style.height = "auto";
+    videos[i].style.maxWidth = "100%";
+    videos[i].style.objectFit = "contain";
+    videos[i].style.zIndex = "1";
+    videos[i].style.opacity = "0";
 
     // Use loadeddata event which is more reliable
-    interp_videos[i].addEventListener("loadeddata", function () {
+    videos[i].addEventListener("loadeddata", function () {
       videosLoaded++;
       if (videosLoaded === NUM_VIDEOS && !allVideosStarted) {
         startAllVideosSimultaneously();
@@ -63,12 +64,12 @@ function preloadActionSliderVideos() {
       }
     });
 
-    interp_videos[i].addEventListener("error", function (e) {
+    videos[i].addEventListener("error", function (e) {
       console.error("Video loading error for path:", this.src);
     });
 
     // Add all videos to the wrapper but keep them hidden
-    $("#action-image-wrapper").append(interp_videos[i]);
+    $("#action-image-wrapper").append(videos[i]);
   }
 }
 
@@ -78,7 +79,7 @@ function startAllVideosSimultaneously() {
 
   // Start all videos at the same time
   for (var i = 0; i < NUM_VIDEOS; i++) {
-    interp_videos[i].play().catch(function (error) {
+    videos[i].play().catch(function (error) {
       console.error("Error playing video:", error);
     });
   }
@@ -93,7 +94,7 @@ function setVideo(i) {
     return; // Same video, don't change anything
   }
 
-  var video = interp_videos[i];
+  var video = videos[i];
   if (!video) {
     return;
   }
@@ -110,15 +111,22 @@ function setVideo(i) {
   video.style.zIndex = "2";
 
   // Hide the previously visible video
-  if (currentVideoIndex >= 0 && interp_videos[currentVideoIndex]) {
-    interp_videos[currentVideoIndex].style.opacity = "0";
-    interp_videos[currentVideoIndex].style.zIndex = "1";
+  if (currentVideoIndex >= 0 && videos[currentVideoIndex]) {
+    videos[currentVideoIndex].style.opacity = "0";
+    videos[currentVideoIndex].style.zIndex = "1";
   }
 
   currentVideoIndex = i;
 }
 
 $(document).ready(function () {
+  // Initialize variables after DOM is ready
+  sliderElement = document.getElementById("action-image-wrapper");
+  SLIDER_BASE = "./static/videos/" + sliderElement.dataset.videoFolder;
+  N_ACTIONS = sliderElement.dataset.nActions;
+  N_ACTIONS = N_ACTIONS.split(',').map(Number);
+  NUM_VIDEOS = N_ACTIONS.length;
+
   // Check for click events on the navbar burger icon
   $(".navbar-burger").click(function () {
     // Toggle the "is-active" class on both the "navbar-burger" and the "navbar-menu"
