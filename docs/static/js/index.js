@@ -1,5 +1,3 @@
-window.HELP_IMPROVE_VIDEOJS = false;
-
 var SLIDER_BASE = "./static/videos/n_actions_slider";
 var N_ACTIONS = [2, 4, 7, 14, 28, 56, 112];
 var NUM_VIDEOS = N_ACTIONS.length;
@@ -7,6 +5,7 @@ var NUM_VIDEOS = N_ACTIONS.length;
 var interp_videos = [];
 var videosLoaded = 0;
 var allVideosStarted = false;
+var currentVideoIndex = -1;
 
 function preloadActionSliderVideos() {
   for (var i = 0; i < NUM_VIDEOS; i++) {
@@ -43,9 +42,9 @@ function preloadActionSliderVideos() {
         // Set height immediately if metadata is already loaded
         if (video.videoHeight && video.videoWidth) {
           var aspectRatio = video.videoHeight / video.videoWidth;
-          var containerWidth = $("#interpolation-image-wrapper").width();
+          var containerWidth = $("#action-image-wrapper").width();
           var containerHeight = containerWidth * aspectRatio;
-          $("#interpolation-image-wrapper").css(
+          $("#action-image-wrapper").css(
             "height",
             containerHeight + "px",
           );
@@ -53,9 +52,9 @@ function preloadActionSliderVideos() {
           // Otherwise wait for metadata
           video.addEventListener("loadedmetadata", function () {
             var aspectRatio = video.videoHeight / video.videoWidth;
-            var containerWidth = $("#interpolation-image-wrapper").width();
+            var containerWidth = $("#action-image-wrapper").width();
             var containerHeight = containerWidth * aspectRatio;
-            $("#interpolation-image-wrapper").css(
+            $("#action-image-wrapper").css(
               "height",
               containerHeight + "px",
             );
@@ -69,16 +68,8 @@ function preloadActionSliderVideos() {
     });
 
     // Add all videos to the wrapper but keep them hidden
-    $("#interpolation-image-wrapper").append(interp_videos[i]);
+    $("#action-image-wrapper").append(interp_videos[i]);
   }
-
-  // Make the wrapper positioned relative and ensure it has proper height
-  $("#interpolation-image-wrapper").css({
-    position: "relative",
-    width: "100%",
-    "min-height": "300px", // Ensure minimum space for slider
-    display: "block",
-  });
 }
 
 function startAllVideosSimultaneously() {
@@ -95,7 +86,7 @@ function startAllVideosSimultaneously() {
   // Show the initial video
   setVideo(3);
 }
-var currentVideoIndex = -1;
+
 
 function setVideo(i) {
   if (currentVideoIndex === i) {
@@ -137,18 +128,10 @@ $(document).ready(function () {
 
   preloadActionSliderVideos();
 
-  // Fallback: if videos don't start within 3 seconds, try to start them anyway
-  setTimeout(function () {
-    if (!allVideosStarted) {
-      console.log("Fallback: forcing video start");
-      startAllVideosSimultaneously();
-    }
-  }, 3000);
-
-  $("#interpolation-slider").on("input", function (event) {
+  $("#action-slider").on("input", function (event) {
     setVideo(this.value);
   });
-  $("#interpolation-slider").prop("max", NUM_VIDEOS - 1);
+  $("#action-slider").prop("max", NUM_VIDEOS - 1);
 
   bulmaSlider.attach();
 });
