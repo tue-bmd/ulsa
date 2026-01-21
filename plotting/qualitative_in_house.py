@@ -145,7 +145,7 @@ def _load_from_run_dir(
 
     # Find best cine loop
     if frame_idx is None:
-        last_frame = find_best_cine_loop(focused[drop_first_n_frames:])
+        last_frame = find_best_cine_loop(focused[drop_first_n_frames:], visualize=True)
         last_frame = last_frame + drop_first_n_frames
         focused = focused[:last_frame]
         diverging = diverging[:last_frame]

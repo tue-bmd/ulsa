@@ -15,15 +15,16 @@ from ulsa.plotting.index import random_patients
 from ulsa.utils import find_best_cine_loop
 
 # Parameters
-save_dir = "./docs/static/videos/echonet/"
+save_dir = "./output/echonet-examples/"
 save_dir = Path(save_dir)
+save_dir.mkdir(parents=True, exist_ok=True)
 METHOD = "greedy_entropy"
 N_ACTIONS = [7, 14, 28]
 interpolation = "nearest"
 vmin = 0
 vmax = 255
 drop_first_n_frames = 4
-scan_convert_resolution = 0.3
+scan_convert_resolution = 0.8
 n_samples = 20
 
 io_config = zea.Config(scan_convert=True, scan_conversion_angles=(-45, 45))
@@ -41,6 +42,30 @@ patients = random_patients(
     n_samples=n_samples,
 )
 
+already_done = list(save_dir.glob("*.webm"))
+already_done_dict = []
+for done in already_done:
+    stem = done.stem
+    parts = stem.split("_")
+    if len(parts) < 2:
+        continue
+    name = parts[0]
+    n_actions = int(parts[-1])
+
+    already_done_dict.append({"name": name, "n_actions": n_actions})
+already_done_df = pd.DataFrame(already_done_dict)
+
+
+def _check_if_done(name, n_actions):
+    if already_done_df.empty:
+        return False
+
+    done = already_done_df[
+        (already_done_df["name"] == name) & (already_done_df["n_actions"] == n_actions)
+    ]
+    return not done.empty
+
+
 # Preload relevant data
 print("Preloading relevant data...")
 results = []
@@ -49,7 +74,12 @@ for run_dirs, name in patients:
         agent_config = zea.Config.from_yaml(run_dir / "config.yaml")
         if agent_config.action_selection.selection_strategy != METHOD:
             continue
-        if agent_config.action_selection.n_actions not in N_ACTIONS:
+        n_actions = agent_config.action_selection.n_actions
+        if n_actions not in N_ACTIONS:
+            continue
+        stem = str(name).split(".")[0]
+        if _check_if_done(stem, agent_config.action_selection.n_actions):
+            print(f"Skipping already done: {name} with {n_actions} actions")
             continue
         results.append(
             {
@@ -132,10 +162,8 @@ for patient_id, patient_name in enumerate(patient_names):
         )
 
         patient_stem = str(patient_name).split(".")[0]
-        save_path = save_dir / patient_stem
-        save_path.mkdir(parents=True, exist_ok=True)
         side_by_side_gif(
-            save_path / f"{n_actions}.webm",
+            save_dir / f"{patient_stem}_{n_actions}.webm",
             measurements,
             reconstructions,
             targets,

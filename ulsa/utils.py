@@ -10,7 +10,7 @@ from zea import Scan
 def find_best_cine_loop(
     data,  # shape (n_frames, height, width)
     min_sequence_length=30,
-    visualize=True,
+    visualize=False,
 ):
     """Find the best cine loop by comparing frame differences to the first frame.
 
@@ -18,15 +18,41 @@ def find_best_cine_loop(
         data: np.ndarray of shape (n_frames, height, width)
         min_sequence_length: Minimum number of frames before considering loop closure.
         visualize: Whether to save a plot of the frame differences.
+
+    Returns:
+        Index of the frame that best matches the first frame after min_sequence_length. To create
+        the best cine loop, use data[:best_frame_index], or data[:best_frame_index + 1] to
+        include the matching frame (this may introduce a very similar frame at the loop point).
     """
+    n_frames = np.shape(data)[0]
+    assert np.ndim(data) == 3, (
+        "Data must be a 3D array of shape (n_frames, height, width)."
+    )
+    assert n_frames >= 2, "Data must contain at least two frames."
+    assert min_sequence_length >= 2, "min_sequence_length must be at least 2"
+
+    # Return full length if min_sequence_length exceeds available frames
+    if min_sequence_length > n_frames:
+        zea.log.warning(
+            f"min_sequence_length {min_sequence_length} is greater than number of frames {n_frames}. "
+        )
+        return n_frames
+
     first_frame = data[0]
     other_frames = data[1:]
+
+    # Compute sum of absolute differences from the first frame,
+    # this results in an array of shape (n_frames - 1,)
     differences = np.sum(np.abs(other_frames - first_frame[None]), axis=(1, 2))
-    min_diff_idx = np.argmin(differences[min_sequence_length:]) + min_sequence_length
+
+    min_diff_idx = (
+        np.argmin(differences[min_sequence_length - 1 :]) + min_sequence_length
+    )
 
     if visualize:
+        _differences = np.concatenate(([0], differences))
         plt.figure()
-        plt.plot(differences)
+        plt.plot(_differences)
         plt.axvline(min_sequence_length, color="red", linestyle="--")
         plt.axvline(min_diff_idx, color="green", linestyle="--")
         plt.title("Frame Differences from First Frame")
