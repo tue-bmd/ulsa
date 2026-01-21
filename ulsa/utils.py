@@ -1,171 +1,105 @@
-import copy
-from typing import List
+"""Utility functions."""
 
-import jax
-import keras
+import matplotlib.pyplot as plt
 import numpy as np
-from keras import ops
-from tqdm import tqdm
 
 import zea
-from ulsa.pipeline import beamforming
 from zea import Scan
 
-# Some constants for the in-house cardiac dataset.
-FOCUSED_TRANSMITS_LIMS = (0, 90)
-DIVERGING_TRANSMITS_LIMS = (90, 101)
 
-FOCUSED_TRANSMITS = np.arange(*FOCUSED_TRANSMITS_LIMS)
-DIVERGING_TRANSMITS = np.arange(*DIVERGING_TRANSMITS_LIMS)
-
-
-def select_transmits_from_pfield(pfield, transmits):
-    # pfield: (n_tx, grid_size_z, grid_size_x)
-    # transmits: (n_indices, c) -- indices into n_tx
-    # Output: (grid_size_z, grid_size_x, c)
-
-    # Gather for each column in transmits
-    def gather_column(transmits):
-        # transmits: (n_indices,)
-        return pfield[transmits, :, :]  # (n_indices, grid_size_z, grid_size_x)
-
-    # Apply over columns of transmits
-    gathered = jax.vmap(gather_column, out_axes=-1)(transmits.T)
-    # gathered: (n_indices, grid_size_z, grid_size_x, c)
-
-    output = ops.sum(gathered, axis=0)  # (grid_size_z, grid_size_x, c)
-    return output
-
-
-def lines_to_pfield(
-    selected_lines,  # mask: [c, n_possible_actions]
-    pfield,
-    n_actions,
-    alpha=2.0,
-    threshold=0.06,
+def find_best_cine_loop(
+    data,  # shape (n_frames, height, width)
+    min_sequence_length=30,
+    visualize=False,
 ):
-    transmits = zea.agent.masks.k_hot_to_indices(
-        selected_lines, n_actions
-    ).T  # (nonzero_w, c)
-    summed_pfield = select_transmits_from_pfield(
-        pfield**alpha, transmits
-    )  # (grid_size_z, grid_size_x, c)
+    """Find the best cine loop by comparing frame differences to the first frame.
 
-    # Normalize depth wise
-    # Each row of pixels must sum to grid_size_x (width of the image)
-    summed_pfield = summed_pfield / ops.sum(summed_pfield, axis=1, keepdims=True)
+    Args:
+        data: np.ndarray of shape (n_frames, height, width)
+        min_sequence_length: Minimum number of frames before considering loop closure.
+        visualize: Whether to save a plot of the frame differences.
 
-    # Normalize to [0, 1]
-    max_vals = ops.max(summed_pfield, axis=(0, 1), keepdims=True)
-    # Avoid division by zero: only divide where max_vals > 0, else keep as zero
-    summed_pfield = ops.where(
-        max_vals > 0,
-        summed_pfield / max_vals,
-        ops.zeros_like(summed_pfield),
+    Returns:
+        Index of the frame that best matches the first frame after min_sequence_length. To create
+        the best cine loop, use data[:best_frame_index], or data[:best_frame_index + 1] to
+        include the matching frame (this may introduce a very similar frame at the loop point).
+    """
+    n_frames = np.shape(data)[0]
+    assert np.ndim(data) == 3, (
+        "Data must be a 3D array of shape (n_frames, height, width)."
+    )
+    assert n_frames >= 2, "Data must contain at least two frames."
+    assert min_sequence_length >= 2, "min_sequence_length must be at least 2"
+
+    # Return full length if min_sequence_length exceeds available frames
+    if min_sequence_length > n_frames:
+        zea.log.warning(
+            f"min_sequence_length {min_sequence_length} is greater than number of frames {n_frames}. "
+        )
+        return n_frames
+
+    first_frame = data[0]
+    other_frames = data[1:]
+
+    # Compute sum of absolute differences from the first frame,
+    # this results in an array of shape (n_frames - 1,)
+    differences = np.sum(np.abs(other_frames - first_frame[None]), axis=(1, 2))
+
+    min_diff_idx = (
+        np.argmin(differences[min_sequence_length - 1 :]) + min_sequence_length
     )
 
-    # Apply threshold
-    summed_pfield = ops.where(
-        summed_pfield < threshold, ops.zeros_like(summed_pfield), summed_pfield
-    )
+    if visualize:
+        _differences = np.concatenate(([0], differences))
+        plt.figure()
+        plt.plot(_differences)
+        plt.axvline(min_sequence_length, color="red", linestyle="--")
+        plt.axvline(min_diff_idx, color="green", linestyle="--")
+        plt.title("Frame Differences from First Frame")
+        plt.xlabel("Frame Index (relative to first frame)")
+        plt.ylabel("Sum of Absolute Differences")
+        plt.savefig("frame_differences.png")
+        plt.close()
+        zea.log.info(
+            f"Saved frame differences plot to {zea.log.yellow('frame_differences.png')}"
+        )
+    return min_diff_idx
 
-    return summed_pfield
 
-
-def select_transmits(scan, type="focused"):
-    if type == "focused":
-        scan.selected_transmits = FOCUSED_TRANSMITS
-    elif type == "diverging":
-        scan.selected_transmits = DIVERGING_TRANSMITS
-    else:
-        raise ValueError(f"Unknown scan type: {type}. Use 'focused' or 'diverging'.")
+def round_cm_down(x):
+    """Round down to the nearest centimeter."""
+    return np.floor(x * 100) / 100
 
 
 def update_scan_for_polar_grid(
-    scan: Scan, pfield_kwargs=None, f_number=0, ray_multiplier: int = 1
+    scan: Scan,
+    pfield_kwargs=None,
+    f_number=0.3,
+    ray_multiplier: int = 6,
+    pixels_per_wavelength=4,
+    apply_lens_correction: bool = True,
 ):
     """Update the scan object for line scanning."""
     if pfield_kwargs is None:
         pfield_kwargs = {}
-    scan.pfield_kwargs = {"downsample": 1, "downmix": 1} | pfield_kwargs
+    scan.pfield_kwargs = {
+        "downsample": 1,
+        "downmix": 1,
+        "percentile": 1,
+        "alpha": 0.5,
+        "norm": False,
+    } | pfield_kwargs
     scan.f_number = float(f_number)
     scan.grid_type = "polar"
     scan.grid_size_x = scan.n_tx * ray_multiplier
     scan.polar_limits = scan.polar_angles.min(), scan.polar_angles.max()
+    scan.pixels_per_wavelength = pixels_per_wavelength
+    scan.zlims = (round_cm_down(scan.zlims[0]), round_cm_down(scan.zlims[1]))
+    if hasattr(scan, "n_ch"):
+        delattr(scan, "n_ch")
 
-
-def copy_transmits_from_scan(scan: zea.Scan, transmits) -> zea.Scan:
-    """This will create a new Scan object with the only selected transmits. The
-    other transmits are removed."""
-    scan.set_transmits(transmits)
-    scan_dict = copy.deepcopy(scan._params)
-    for property_name in scan._properties:
-        if property_name not in scan.VALID_PARAMS:
-            continue
-        scan_dict[property_name] = getattr(scan, property_name)
-    return zea.Scan(**scan_dict)
-
-
-def load_subsampled_data(
-    file: zea.File, data_type: str, frame_nr: int, selected_lines, n_actions: int
-):
-    if data_type == "data/raw_data":
-        # We can actually subsample the raw data here.
-        transmits = selected_lines_to_transmits(selected_lines, n_actions)
-        measurement = file.load_data(data_type, [frame_nr, transmits])
-    else:
-        # Here we assume that every transmit event is a line.
-        image_shape = file.shape(data_type)[1:]
-        mask = zea.agent.masks.lines_to_im_size(selected_lines[None], image_shape)
-        mask = keras.ops.squeeze(mask, 0)
-        target = file.load_data(data_type, frame_nr)
-        measurement = target * mask
-
-    return measurement
-
-
-def selected_lines_to_transmits(selected_lines, n_actions: int) -> List[int]:
-    transmits = zea.agent.masks.k_hot_to_indices(selected_lines[None], n_actions)
-    transmits = keras.ops.squeeze(transmits, 0)
-    transmits = list(keras.ops.convert_to_numpy(transmits))
-    return transmits
-
-
-def get_subsampled_parameters(
-    data_type: str, scan: zea.Scan, selected_lines, rx_apo, n_actions: int
-):
-    if data_type == "data/raw_data":
-        transmits = selected_lines_to_transmits(selected_lines, n_actions)
-        scan.set_transmits(transmits)
-        _rx_apo = rx_apo[transmits]
-        return {
-            "scan": scan,
-            "rx_apo": _rx_apo,
-        }
-    else:
-        return {}
-
-
-def precompute_dynamic_range(file: zea.File, scan: zea.Scan, params: dict):
-    """Uses all the transmits to compute the dynamic range and max value"""
-    pipeline = zea.Pipeline(beamforming(), with_batch_dim=False)
-    scan.set_transmits("all")
-    data = file.load_data("data/raw_data", (0, scan.selected_transmits))
-    output = pipeline(data=data, **{**pipeline.prepare_parameters(scan=scan), **params})
-    return {"maxval": output["maxval"], "dynamic_range": output["dynamic_range"]}
-
-
-def scan_sequence(data, pipeline, parameters, keep_keys=None, **kwargs):
-    """
-    Process a sequence of data frames through the pipeline.
-    """
-    if keep_keys is None:
-        keep_keys = []
-    images = []
-    for raw_data in tqdm(data):
-        output = pipeline(data=raw_data, **parameters, **kwargs)
-        for key in keep_keys:
-            if key in output:
-                kwargs[key] = output[key]
-        images.append(keras.ops.convert_to_numpy(output["data"]))
-    return keras.ops.stack(images, axis=0)
+    # For Philips S5-1 probes!
+    if apply_lens_correction:
+        scan.apply_lens_correction = True
+        scan.lens_thickness = 1e-3
+        scan.lens_sound_speed = 1000

@@ -5,17 +5,14 @@ suggesting no bias against outlier patients.
 """
 
 import os
-import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd  # pip install pandas
-import yaml
+import pandas as pd
 
-sys.path.append("/ulsa")
-
-from plotting.plot_psnr_dice import extract_and_combine_sweep_data
+from ulsa.plotting.index import extract_sweep_data
+from ulsa.plotting.plot_utils import METRIC_NAMES
 
 
 def load_ef_data(csv_path):
@@ -119,7 +116,7 @@ def plot_ef_psnr_correlation(df, save_path=None):
 
     # Customize plots
     ax_joint.set_xlabel("Ejection Fraction [%]")
-    ax_joint.set_ylabel("PSNR [dB]")
+    ax_joint.set_ylabel(METRIC_NAMES["psnr"])
 
     # Turn off tick labels on marginals
     ax_marg_x.tick_params(labelbottom=False)
@@ -143,29 +140,20 @@ def plot_ef_psnr_correlation(df, save_path=None):
 
 
 if __name__ == "__main__":
-    DATA_ROOT = "/mnt/z/prjs0966"
-    DATA_FOLDER = Path(DATA_ROOT) / "oisin/ULSA_out/eval_echonet_dynamic_test_set"
-    SUBSAMPLED_PATHS = [
-        DATA_FOLDER / "sharding_sweep_2025-08-05_14-35-11",
-        DATA_FOLDER / "sharding_sweep_2025-08-05_14-42-40",
-    ]
-    EF_CSV_PATH = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/USBMD_datasets/_RAW/EchoNet-Dynamic/FileList.csv"
-    SAVE_ROOT = "."
+    DATA_ROOT = "/mnt/z/usbmd/ulsa"
+    DATA_FOLDER = (
+        Path(DATA_ROOT)
+        / "Np_2/eval_echonet_dynamic_test_set/sweep_2026_01_08_225505_654881"
+    )
+    EF_CSV_PATH = "/mnt/USBMD_datasets/_RAW/EchoNet-Dynamic/FileList.csv"
+    SAVE_ROOT = "./output/"
 
-    TEMP_FILE = Path("/tmp/plot_ef_bias.pkl")
-    if Path(TEMP_FILE).exists():
-        print(f"Loading cached results from {TEMP_FILE}")
-        results_df = pd.read_pickle(TEMP_FILE)
-    else:
-        # Load EF lookup table
-        ef_lookup = load_ef_data(EF_CSV_PATH)
+    ef_lookup = load_ef_data(EF_CSV_PATH)
+    results_df = extract_sweep_data(
+        [DATA_FOLDER], keys_to_extract=["psnr"], ef_lookup=ef_lookup
+    )
 
-        # Extract PSNR and EF data
-        results_df = extract_and_combine_sweep_data(
-            SUBSAMPLED_PATHS, keys_to_extract=["psnr"], ef_lookup=ef_lookup
-        )
-        results_df.to_pickle(TEMP_FILE)
-
+    # Use n_actions = 14
     df = results_df[results_df["x_value"] == 14]
 
     # Create plots

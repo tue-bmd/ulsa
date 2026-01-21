@@ -2,28 +2,25 @@ action_selection:
   n_possible_actions: 112
   n_actions: 7
   shape: [112, 112]
-  selection_strategy: "greedy_entropy" # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
-  kwargs: {}
+  selection_strategy: greedy_entropy # "downstream_gradient_descent" | "downstream_propagation" | "greedy_entropy" | "uniform_random" | "covariance"
 
-downstream_task: "echonet_segmentation"
+downstream_task: null # "echonet_segmentation"
 
 diffusion_inference:
   # run_dir: "{output_dir}/ddim/2025_02_26_160545_ddim_train_echonet_112_3_frames/hub"
   run_dir: hf://zeahub/ulsa
   num_steps: 500
   initial_step: 450 # [0, num_steps]
-  batch_size: 4 # posterior samples
+  batch_size: 2 # posterior samples
   guidance_kwargs:
     omega: 10
-  reconstruction_method: "choose_first" # "choose_first" | "maximum_likelihood" | "mean"
+  reconstruction_method: choose_first # "choose_first" | "maximum_likelihood" | "mean"
   hard_project: true
 
 io_config:
   plot_step_overview: false
-  plot_frame_overview: false
   plot_frames_for_presentation: true
   save_target_img: false
-  save_animation: true
   scan_convert: true
   scan_conversion_angles: [-45, 45]
   frame_cutoff: 50
@@ -32,6 +29,6 @@ io_config:
   reconstruction_sharpness_std: 0.025
 
 data:
-  target_sequence: "{data_root}/USBMD_datasets/echonet_legacy/val/0X10A5FC19152B50A5.hdf5"
+  target_sequence: "{data_root}/USBMD_datasets/_LEGACY/echonet_legacy/val/0X10A5FC19152B50A5.hdf5"
   data_type: data/image
   image_range: [-60, 0]

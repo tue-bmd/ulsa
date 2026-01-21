@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ulsa"
+version = "1.0.0"
+description = "Package for Patient-Adaptive Echocardiography using Cognitive Ultrasound"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["ulsa*"]
+exclude = ["zea*"]

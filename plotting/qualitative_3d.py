@@ -1,9 +1,9 @@
+"""Plot qualitative 3D results as biplanes."""
+
 import os
-import sys
 
 os.environ["KERAS_BACKEND"] = "numpy"
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-sys.path.append("/ulsa")
 
 import random
 from functools import partial
@@ -14,7 +14,7 @@ import numpy as np
 import yaml
 from keras import ops
 
-from elevation_interpolation.tools import postprocess_3d_data
+from ulsa.elevation_interpolation.tools import postprocess_3d_data
 from ulsa.entropy import pixelwise_entropy
 from zea import Config
 from zea.visualize import plot_biplanes
@@ -37,9 +37,7 @@ plt.rcParams["axes.titlepad"] = 10.0  # default is 6.0
 
 
 # --- CONFIG ---
-data_root = Path(
-    "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/oisin/ULSA_out/3d_test_3_frame/to_plot"
-)
+data_root = Path("/mnt/z/usbmd/ulsa/Np_2/eval_3d/qualitative")
 n_patients = 3
 frame_idx = 4  # or whichever frame you want to visualize
 normalization_range = (0, 255)
@@ -87,7 +85,7 @@ for p, run_dir in enumerate(patients):
     #     rho = f["/scan/frustum/rho"][()]
     #     theta = f["/scan/frustum/theta"][()]
     #     phi = f["/scan/frustum/phi"][()]
-    grid = np.load("/ulsa/styles/grid.npz")
+    grid = np.load("./styles/grid.npz")
     rho, theta, phi = grid["rho"], grid["theta"], grid["phi"]
     rho_range = (float(np.min(rho)), float(np.max(rho)))
     theta_range = (float(np.min(theta)), float(np.max(theta)))
@@ -149,7 +147,7 @@ for p, run_dir in enumerate(patients):
     # List of (volume, cmap, title)
     vols = [
         (acquisitions, "grey", "Acquisitions"),
-        (reconstruction, "gray", "Reconstruction"),
+        (reconstruction, "gray", "Cognitive"),
         (entropy, "inferno", "Entropy"),
         (target, "gray", "Target"),
     ]
