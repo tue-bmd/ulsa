@@ -25,6 +25,7 @@ def find_best_cine_loop(
     min_diff_idx = np.argmin(differences[min_sequence_length:]) + min_sequence_length
 
     if visualize:
+        plt.figure()
         plt.plot(differences)
         plt.axvline(min_sequence_length, color="red", linestyle="--")
         plt.axvline(min_diff_idx, color="green", linestyle="--")

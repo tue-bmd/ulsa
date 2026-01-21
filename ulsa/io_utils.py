@@ -34,6 +34,18 @@ def map_range(img, from_range=(-1, 1), to_range=(0, 255)):
     return np.clip(img, to_range[0], to_range[1])
 
 
+def map_range_gpu(
+    img, from_range=(-1, 1), to_range=(0, 255), to_uint8=True, to_numpy=True
+):
+    img = zea.func.translate(img, from_range, to_range)
+    img = ops.clip(img, to_range[0], to_range[1])
+    if to_uint8:
+        img = ops.cast(img, "uint8")
+    if to_numpy:
+        img = ops.convert_to_numpy(img)
+    return img
+
+
 def deg2rad(x: float):
     return x * (np.pi / 180)
 
@@ -342,9 +354,7 @@ def postprocess_agent_results(
         )
 
     # To uint8
-    data = map_range(data, image_range, (0, 255))
-    if to_uint8:
-        data = data.astype(np.uint8)
+    data = map_range_gpu(data, image_range, (0, 255), to_uint8=to_uint8)
 
     return data
 
