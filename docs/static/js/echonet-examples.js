@@ -39,7 +39,7 @@ function preloadActionSliderVideos() {
 
   for (var i = 0; i < NUM_VIDEOS; i++) {
     var path =
-      SLIDER_BASE + "/" + currentPatient + "/" + N_ACTIONS[i] + ".webm";
+      SLIDER_BASE + "/" + currentPatient + "_" + N_ACTIONS[i] + ".webm";
     videos[i] = document.createElement("video");
     videos[i].src = path;
     videos[i].loop = true;
@@ -197,7 +197,13 @@ function generatePatientButtons() {
 $(document).ready(function () {
   // Initialize variables after DOM is ready
   sliderElement = document.getElementById("action-image-wrapper");
-  SLIDER_BASE = "./static/videos/" + sliderElement.dataset.videoFolder;
+  videoFolder = sliderElement.dataset.videoFolder;
+  // check if videoFolder is a full URL
+  if (videoFolder.startsWith("http://") || videoFolder.startsWith("https://")) {
+    SLIDER_BASE = videoFolder;
+  } else {
+    SLIDER_BASE = "./static/videos/" + sliderElement.dataset.videoFolder;
+  }
   N_ACTIONS = sliderElement.dataset.nActions;
   N_ACTIONS = N_ACTIONS.split(",").map(Number);
   NUM_VIDEOS = N_ACTIONS.length;
