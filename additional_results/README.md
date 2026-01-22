@@ -17,6 +17,6 @@ The figure shows that the reconstruction quality is independent of the patientâ€
 
 ### SeqDiff
 
-The following figure shows the relation of the number of diffusion steps to the reconstruction quality in terms of PSNR for regular and [SeqDiff](https://ieeexplore.ieee.org/document/10889752/), which motivates employing SeqDiff for enhanced reconstruction quality and speed.
+The following figure shows the relation of the number of diffusion steps to the reconstruction quality in terms of PSNR for regular and [SeqDiff](https://ieeexplore.ieee.org/document/10889752/), when using our method, which motivates employing SeqDiff for enhanced reconstruction quality and speed.
 
 <img width="1050" height="750" alt="seqdiff_vs_regular_diffusion" src="https://github.com/user-attachments/assets/21307368-a0ef-4707-967c-4fb81834ad0c" />
