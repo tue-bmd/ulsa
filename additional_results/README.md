@@ -14,3 +14,9 @@ In the figure below, we plot the reconstruction quality as measured by PSNR agai
 The figure shows that the reconstruction quality is independent of the patient’s ejection fraction, indicating a lack of bias against outlier patients.
 
 <img width="1050" height="750" alt="ef_psnr_correlation_cogntive_ultrasound" src="https://github.com/user-attachments/assets/54d20903-d139-4234-a8b4-e27bdcdd3b17" />
+
+### SeqDiff
+
+The following figure shows the relation of the number of diffusion steps to the reconstruction quality in terms of PSNR for regular and [SeqDiff](https://ieeexplore.ieee.org/document/10889752/), which motivates employing SeqDiff for enhanced reconstruction quality and speed.
+
+<img width="1050" height="750" alt="seqdiff_vs_regular_diffusion" src="https://github.com/user-attachments/assets/21307368-a0ef-4707-967c-4fb81834ad0c" />
