@@ -149,7 +149,7 @@ if __name__ == "__main__":
     normal_diff = (
         "/mnt/z/usbmd/ulsa/timings/normal_diffusion_num_steps2/sweep_2025_04_08_115535"
     )
-    SAVE_ROOT = "."
+    SAVE_ROOT = "./output"
 
     x = extract_sweep_data(seqdiff)
     y = extract_sweep_data(normal_diff)

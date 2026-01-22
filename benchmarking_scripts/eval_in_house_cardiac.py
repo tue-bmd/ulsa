@@ -13,9 +13,10 @@ from pathlib import Path
 
 import numpy as np
 
-from ulsa.in_house_cardiac.to_itk import npz_to_itk
 from ulsa.active_sampling_temporal import active_sampling_single_file
 from ulsa.cardiac_scan import cardiac_scan
+from ulsa.in_house_cardiac.to_itk import npz_to_itk
+from zea.agent.selection import action_selection_registry
 
 
 def parse_args():
@@ -50,6 +51,13 @@ def parse_args():
         help="Path to agent configuration file.",
     )
     parser.add_argument(
+        "--selection_strategies",
+        type=str,
+        nargs="+",
+        default=None,
+        help="List of selection strategies to evaluate (default: all).",
+    )
+    parser.add_argument(
         "--low_pct",
         type=float,
         default=44,
@@ -60,6 +68,12 @@ def parse_args():
         type=float,
         default=99.99,
         help="High percentile for dynamic range calculation.",
+    )
+    parser.add_argument(
+        "--n_transmits",
+        type=int,
+        default=11,
+        help="Number of transmits to use for diverging/focused wave reconstructions.",
     )
     return parser.parse_args()
 
@@ -75,11 +89,19 @@ def eval_in_house_data(
     selection_strategies=None,
     low_pct=18,
     high_pct=95,
+    n_transmits=11,
 ):
     zea.log.info(f"Processing {file.stem}...")
 
     if selection_strategies is None:
         selection_strategies = ["greedy_entropy", "equispaced", "uniform_random"]
+
+    for selection_strategy in selection_strategies:
+        if selection_strategy not in action_selection_registry.registry:
+            raise ValueError(
+                f"Selection strategy {selection_strategy} not found in registry. "
+                f"Available strategies: {list(action_selection_registry.registry.keys())}"
+            )
 
     save_dir = Path(save_dir) / file.stem
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -120,6 +142,7 @@ def eval_in_house_data(
         resize_to=resize_to,
         low_pct=low_pct,
         high_pct=high_pct,
+        n_transmits=n_transmits,
     )
     np.savez(
         save_dir / f"diverging.npz",
@@ -134,6 +157,14 @@ def eval_in_house_data(
     override_config = zea.Config(override_config)
     if "action_selection" not in override_config:
         override_config["action_selection"] = {}
+
+    if "n_actions" in override_config["action_selection"] and n_transmits is not None:
+        raise ValueError(
+            "n_actions should not be specified in override_config when n_transmits is given."
+        )
+
+    if n_transmits is not None:
+        override_config["action_selection"]["n_actions"] = n_transmits
 
     for selection_strategy in selection_strategies:
         print(f"Running active perception with {selection_strategy}...")
@@ -201,8 +232,10 @@ def main():
             args.n_frames,
             args.agent_config_path,
             override_config,
+            selection_strategies=args.selection_strategies,
             low_pct=args.low_pct,
             high_pct=args.high_pct,
+            n_transmits=args.n_transmits,
         )
 
 

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from keras import ops
 from matplotlib.animation import FuncAnimation
+from scipy.ndimage import gaussian_filter
 
 import zea
 from zea import log
@@ -179,9 +180,8 @@ def get_heatmap(
     cmap="inferno",
     sc_order=1,
     window_size=9,
+    distance_to_apex=0.0,
 ):
-    from scipy.ndimage import gaussian_filter
-
     heatmap = mask_heatmap_moving_average(masks, window_size=window_size)
 
     # Smooth
@@ -197,6 +197,7 @@ def get_heatmap(
             order=sc_order,
             fill_value=np.nan,
             resolution=resolution,
+            distance_to_apex=distance_to_apex,
         )
 
     if normalize:

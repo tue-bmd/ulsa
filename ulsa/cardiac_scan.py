@@ -30,6 +30,7 @@ def cardiac_scan(
     polar_limits=None,
     low_pct=18,
     high_pct=95,
+    n_transmits=None,
 ):
     pipeline = make_pipeline(
         "data/raw_data",
@@ -43,7 +44,11 @@ def cardiac_scan(
 
     with zea.File(target_sequence) as file:
         raw_data_sequence, scan = preload_data(
-            file, n_frames, data_type="data/raw_data", type=type
+            file,
+            n_frames,
+            data_type="data/raw_data",
+            type=type,
+            n_transmits=n_transmits,
         )
 
     if polar_limits is not None:

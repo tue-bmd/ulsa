@@ -342,6 +342,7 @@ def preload_data(
     n_frames: int,  # if there are less than n_frames, it will load all frames
     data_type="data/image",
     type="focused",  # 'focused' or 'diverging'
+    n_transmits=None,
 ):
     # Get scan from file
     try:
@@ -354,6 +355,19 @@ def preload_data(
         log.info("Assuming the data file is from the in-house dataset!")
         scan.set_transmits(type)
         update_scan_for_polar_grid(scan)
+
+        # equispaced subsampling of transmits
+        if n_transmits is not None:
+            selected_transmits = scan.selected_transmits.copy()
+            assert n_transmits <= len(selected_transmits), (
+                f"n_transmits {n_transmits} is larger than available "
+                f"transmits {len(selected_transmits)}"
+            )
+
+            _subsampled_idx = np.linspace(
+                0, len(selected_transmits) - 1, n_transmits
+            ).astype(int)
+            scan.set_transmits(np.array(selected_transmits)[_subsampled_idx])
 
     # slice(None) means all frames.
     if data_type in ["data/raw_data"]:
