@@ -6,6 +6,14 @@ In order to evaluate the generalizability of the proposed algorithm, it was appl
 
 <img width="1106" height="775" alt="Screenshot 2026-01-14 at 16 07 02" src="https://github.com/user-attachments/assets/3267fc2c-a6d7-4fbc-a680-d9af85058cd8" />
 
+### New Cardiac View (PLAX)
+In order to evaluate the model's performance in a realistic out-of-distribution scenario, we benchmarked CASL with an EchoNet-Dynamic prior on target sequences from the [EchoNet-LVH dataset](https://echonet.github.io/lvh/), which constists of parasternal long-axis (PLAX) view echocardiograms, resized to 112x112 to match the input size expected by the EchoNet-Dynamic diffusion model. Because EchoNet-Dynamic contains only the apical 4-chamber view, these PLAX view targets represent out-of-distribution samples. We ran the model on 10 sequences from different patients, each containing 100 frames. The following shows the reconstruction accuracy, as well as an example cine-loop of the reconstructed video using only 7/112 scan lines.
+
+<img width="1050" height="750" alt="LVH_lpips_psnr" src="https://github.com/user-attachments/assets/14bdd674-43f0-4c95-bc10-e8aa9dc193df" />
+
+![target_reconstruction_plax_7_lines](https://github.com/user-attachments/assets/8997aae1-119e-45a6-9216-760c3b9a23a9)
+
+
 ### Robustness across patients
 
 An essential feature of any image reconstruction method in medical imaging is robustness against outliers, ensuring that the performance is consistent across patients.
