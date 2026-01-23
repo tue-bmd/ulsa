@@ -324,11 +324,7 @@ if __name__ == "__main__":
             10,
             24,
         ],
-        arrows=[
-            None,
-            None,
-            get_arrow(),
-        ],
+        arrows=[None, None, None],
         ylabels=[
             "Harmonic",
             "Harmonic",
