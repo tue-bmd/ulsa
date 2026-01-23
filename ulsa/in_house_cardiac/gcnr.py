@@ -249,6 +249,7 @@ def load_results():
         gcnr_valve_all[subject] = gcnr_valve_results
 
     gcnr_valve_all = filter_empty(gcnr_valve_all)
+    relative_gcnr_valve_all = filter_empty(relative_gcnr_valve_all)
     return (
         subjects,
         group_names,
