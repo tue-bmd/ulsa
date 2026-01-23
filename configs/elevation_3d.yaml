@@ -21,12 +21,9 @@ diffusion_inference:
   hard_project: true
 
 io_config:
-  plot_step_overview: false
   plot_frames_for_presentation: true
-  save_target_img: false
   scan_convert: true
   scan_conversion_angles: [-45, 45]
   frame_cutoff: 100
   gif_fps: 30
-  verbose: false
   reconstruction_sharpness_std: 0.05
