@@ -1,0 +1,50 @@
+seed: 42
+data:
+  train_folder: "{data_root}/USBMD_datasets/_LEGACY/echonet_legacy/train"
+  val_folder: "{data_root}/USBMD_datasets/_LEGACY/echonet_legacy/val"
+dataloader:
+  image_size: [112, 112]
+  n_frames: 2
+  insert_frame_axis: true
+  dataset_repetitions: 1
+  batch_size: 32
+  key: "data/image"
+  image_range: [-60, 0]
+  normalization_range: [-1, 1]
+  resize_type: "resize"
+  shuffle: true
+  cache: false
+  drop_remainder: true
+  assert_image_range: false
+  overlapping_blocks: true
+
+evaluation:
+  batch_size: 16
+  diffusion_steps: 20
+  kid:
+    image_shape: [75, 75, 3]
+    diffusion_steps: 5
+    enable: false
+
+sampling:
+  min_signal_rate: 0.02
+  max_signal_rate: 0.95
+
+model:
+  network_kwargs:
+    embedding_max_frequency: 1000.0
+    embedding_dims: 32
+    widths: [32, 64, 96, 128]
+    block_depth: 2
+
+optimization:
+  num_epochs: 500
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  loss: "mae"
+  steps_per_epoch: 5 #  10000 # approx 2h per epoch
+  validation_steps: 5
+
+device: "auto:1"
+hide_devices: null
+run_eagerly: false

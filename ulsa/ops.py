@@ -1,4 +1,4 @@
-from pathlib import Path
+"""Custom operations that can be used in a zea.Pipeline"""
 
 import jax
 import jax.numpy as jnp
@@ -6,7 +6,8 @@ import numpy as np
 from keras import ops
 
 import zea.ops
-from zea.utils import translate
+from zea.func import apply_along_axis, translate
+from zea.internal.core import DataTypes
 
 NOISE_ESTIMATION_NORMALIZER = (
     0.6745  # Used for robust noise estimation from median absolute deviation
@@ -89,7 +90,7 @@ class GetAutoDynamicRange(zea.ops.Operation):
     Only works when dynamic range is not already set in the parameters."""
 
     def __init__(self, low_pct=18, high_pct=95, exclude_zeros=True, **kwargs):
-        super().__init__(input_data_type=zea.ops.DataTypes.ENVELOPE_DATA, **kwargs)
+        super().__init__(input_data_type=DataTypes.ENVELOPE_DATA, **kwargs)
         self.low_pct = low_pct
         self.high_pct = high_pct
         self.exclude_zeros = exclude_zeros
@@ -133,69 +134,6 @@ class TranslateDynamicRange(zea.ops.Operation):
         return {self.output_key: data}
 
 
-class ExpandDims(zea.ops.Operation):
-    """Expand dimensions of the input data."""
-
-    def __init__(self, axis=-1, **kwargs):
-        super().__init__(**kwargs)
-        self.axis = axis
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-        expanded_data = ops.expand_dims(data, axis=self.axis)
-        return {self.output_key: expanded_data}
-
-
-class Squeeze(zea.ops.Operation):
-    """Squeeze dimensions of the input data."""
-
-    def __init__(self, axis=-1, **kwargs):
-        super().__init__(**kwargs)
-        self.axis = axis
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-        squeezed_data = ops.squeeze(data, axis=self.axis)
-        return {self.output_key: squeezed_data}
-
-
-class Resize(zea.ops.Operation):
-    """Resize the input data to a specified shape."""
-
-    def __init__(self, size, interpolation="bilinear", antialias=True, **kwargs):
-        super().__init__(**kwargs)
-        self.size = size
-        self.interpolation = interpolation
-        self.antialias = antialias
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-        resized_data = ops.image.resize(
-            data,
-            size=self.size,
-            interpolation=self.interpolation,
-            antialias=self.antialias,
-        )
-        return {self.output_key: resized_data}
-
-
-class Sharpen(zea.ops.Operation):
-    """Sharpen an image using unsharp masking."""
-
-    def __init__(self, sigma=1.0, amount=1.0, **kwargs):
-        super().__init__(**kwargs, jittable=False)
-        self.sigma = sigma
-        self.amount = amount
-
-    def call(self, **kwargs):
-        from skimage.filters import unsharp_mask  # pip install scikit-image
-
-        image = kwargs[self.key]
-        sharpened_image = unsharp_mask(image, radius=self.sigma, amount=self.amount)
-
-        return {self.output_key: sharpened_image}
-
-
 class WaveletDenoise(zea.ops.Operation):
     def __init__(self, wavelet="db4", level=4, threshold_factor=0.1, axis=-3, **kwargs):
         super().__init__(**kwargs)
@@ -216,164 +154,6 @@ class WaveletDenoise(zea.ops.Operation):
         return {self.output_key: denoised_signal}
 
 
-def apply_along_axis(func, axis, arr):
-    """Apply a function to 1-D slices along the given axis.
-
-    Based on [np.apply_along_axis](https://numpy.org/devdocs/reference/generated/numpy.apply_along_axis.html)
-    """
-    arr = ops.moveaxis(arr, axis, -1)
-    ndim = ops.ndim(arr)
-    for _ in range(ndim - 1):
-        func = jax.vmap(func)
-    result = func(arr)
-    return ops.moveaxis(result, -1, axis)
-
-
-class FirFilter(zea.ops.Operation):
-    def __init__(
-        self, axis=-3, complex_channels=False, filter_key="fir_filter_taps", **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.axis = axis
-        self.complex_channels = complex_channels
-        self.filter_key = filter_key
-
-    @property
-    def valid_keys(self):
-        """Get the valid keys for the `call` method."""
-        return self._valid_keys.union({self.filter_key})
-
-    def call(self, **kwargs):
-        signal = kwargs[self.key]
-        fir_filter_taps = kwargs.get(self.filter_key)
-
-        if self.complex_channels:
-            signal = zea.ops.channels_to_complex(signal)
-
-        def _convolve(signal):
-            """Apply the filter to the signal using correlation."""
-            return ops.correlate(signal, fir_filter_taps[::-1], mode="same")
-
-        filtered_signal = apply_along_axis(_convolve, self.axis, signal)
-
-        if self.complex_channels:
-            filtered_signal = zea.ops.complex_to_channels(filtered_signal)
-
-        return {self.output_key: filtered_signal}
-
-
-class LowPassFilter(FirFilter):
-    def __init__(self, num_taps=128, axis=-3, complex_channels=False):
-        super().__init__(
-            axis=axis,
-            complex_channels=complex_channels,
-            jittable=False,
-        )
-        self.num_taps = num_taps
-
-    def call(
-        self,
-        sampling_frequency=None,
-        center_frequency=None,
-        bandwidth=None,
-        factor=None,
-        **kwargs,
-    ):
-        if bandwidth is None:
-            bandwidth = sampling_frequency / factor
-
-        lpf = zea.ops.get_low_pass_iq_filter(
-            self.num_taps,
-            ops.convert_to_numpy(sampling_frequency).item(),
-            center_frequency,
-            bandwidth,
-        )
-        kwargs.pop("fir_filter_taps", None)  # Remove any existing fir_filter_taps
-        return super().call(fir_filter_taps=lpf, **kwargs)
-
-
-class HistogramMatching(zea.ops.Operation):
-    """Histogram matching operation."""
-
-    def __init__(self, reference_image, dynamic_range, **kwargs):
-        super().__init__(**kwargs, jittable=False)
-        self.reference_image = reference_image
-        self.dynamic_range = dynamic_range
-
-    def call(self, **kwargs):
-        from skimage import exposure  # pip install scikit-image
-
-        image = kwargs[self.key]
-
-        matched_image = exposure.match_histograms(image, self.reference_image)
-
-        return {self.output_key: matched_image, "dynamic_range": self.dynamic_range}
-
-
-def match_histogram_fn(src, target):
-    """
-    Return a function that matches the histogram of src to target. Can be used to compute a
-    matching based on a region of interest (ROI) in the source image, and apply it to the
-    entire source image.
-    """
-    # Get sorted unique values and their counts from the ROI of the source image
-    src_values, src_counts = np.unique(src.ravel(), return_counts=True)
-    # Get sorted unique values and their counts from the entire target image
-    target_values, target_counts = np.unique(target.ravel(), return_counts=True)
-
-    # Compute the cumulative distribution function (CDF) for the ROI of the source
-    src_cdf = np.cumsum(src_counts).astype(np.float64)
-    src_cdf /= src_cdf[-1]
-    # Compute the CDF for the target image
-    target_cdf = np.cumsum(target_counts).astype(np.float64)
-    target_cdf /= target_cdf[-1]
-
-    # Interpolate to find the target values that correspond to the quantiles of the source ROI
-    interp_t_values = np.interp(src_cdf, target_cdf, target_values)
-
-    def _match_histogram(src):
-        """Match histogram of src to target using the computed mapping."""
-        # Map all pixels in the source image to the new values using linear interpolation
-        matched = np.interp(src.ravel(), src_values, interp_t_values)
-        # Reshape to the original image shape and cast to the original dtype
-        return matched.reshape(src.shape).astype(src.dtype)
-
-    return _match_histogram
-
-
-class HistogramMatchingForModel(HistogramMatching):
-    def __init__(self, config_path: str, frame_idx: int = 0, **kwargs):
-        config = zea.Config.from_yaml(config_path)
-        data_paths = zea.set_data_paths("/ulsa/users.yaml")  # TODO hardcoded
-        dataset_folder = data_paths.data_root / config.data.train_folder
-        files = Path(dataset_folder).glob("*.hdf5")
-        reference_path = next(iter(files))
-        with zea.File(reference_path) as file:
-            reference_image = file.load_data(config.data.hdf5_key, indices=frame_idx)
-        super().__init__(reference_image, **kwargs)
-
-
-class LogCompressNoClip(zea.ops.Operation):
-    """Logarithmic compression of data."""
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-
-        small_number = ops.convert_to_tensor(1e-16, dtype=data.dtype)
-        data = ops.where(data == 0, small_number, data)
-        compressed_data = 20 * ops.log10(data)
-
-        return {self.output_key: compressed_data}
-
-
-class Copy(zea.ops.Operation):
-    """Copy the input data to the output key."""
-
-    def call(self, **kwargs):
-        data = kwargs[self.key]
-        return {self.output_key: data}
-
-
 def lines_rx_apo(n_tx, grid_size_z, grid_size_x):
     """
     Create a receive apodization for line scanning.
@@ -390,4 +170,45 @@ def lines_rx_apo(n_tx, grid_size_z, grid_size_x):
     for tx, line in zip(range(n_tx), range(0, grid_size_x, step)):
         rx_apo[tx, :, line : line + step] = 1.0
     rx_apo = rx_apo.reshape((n_tx, -1))
-    return rx_apo[..., None]  # shape (n_tx, n_pix, 1)
+    return rx_apo[..., None, None]  # shape (n_tx, n_pix, 1, 1)
+
+
+class Multiply(zea.ops.Operation):
+    """Multiply input data by a given factor."""
+
+    def __init__(self, other_key, **kwargs):
+        super().__init__(**kwargs)
+        self.other_key = other_key
+
+    @property
+    def valid_keys(self) -> set:
+        """Get a set of all valid input keys for the operation."""
+        return self._valid_keys.union({self.other_key})
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        multiplied_data = data * kwargs[self.other_key]
+        return {self.output_key: multiplied_data}
+
+
+class UndoTGC(zea.ops.Operation):
+    def __init__(self, axis, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+
+    def call(self, tgc_gain_curve, **kwargs):
+        data = kwargs[self.key]
+        data = zea.func.apply_along_axis(lambda x: x / tgc_gain_curve, self.axis, data)
+        return {self.output_key: data}
+
+
+class ApplyAlongAxis(zea.ops.Operation):
+    def __init__(self, axis, fn: callable, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+        self.fn = fn
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        data = zea.func.apply_along_axis(self.fn, self.axis, data)
+        return {self.output_key: data}

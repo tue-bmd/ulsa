@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="description"
+      content="EchoNet-Dynamic examples showing patient-adaptive echocardiography using cognitive ultrasound with different numbers of transmits."
+    />
+    <meta
+      name="keywords"
+      content="Beamforming, cognitive ultrasound, diffusion models, echocardiography"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EchoNet-Dynamic Examples - Patient-Adaptive Echocardiography</title>
+
+    <link
+      href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="./static/css/bulma.min.css" />
+    <link rel="stylesheet" href="./static/css/bulma-slider.min.css" />
+    <link rel="stylesheet" href="./static/css/fontawesome.all.min.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css"
+    />
+    <link rel="stylesheet" href="./static/css/index.css" />
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script defer src="./static/js/fontawesome.all.min.js"></script>
+    <script src="./static/js/bulma-slider.min.js"></script>
+    <script src="./static/js/echonet-examples.js"></script>
+  </head>
+  <body class="dark-mode">
+    <nav class="navbar" role="navigation" aria-label="main navigation">
+      <div class="navbar-brand">
+        <a
+          role="button"
+          class="navbar-burger"
+          aria-label="menu"
+          aria-expanded="false"
+        >
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </a>
+      </div>
+      <div class="navbar-menu">
+        <div class="navbar-start" style="flex-grow: 1; justify-content: center">
+          <a class="navbar-item" href="index.html">
+            <span class="icon">
+              <i class="fas fa-home"></i>
+            </span>
+            <span>Main Page</span>
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <div class="hero-body">
+        <div class="container is-max-desktop">
+          <div class="columns is-centered">
+            <div class="column has-text-centered">
+              <h1 class="title is-1 publication-title">
+                EchoNet-Dynamic Examples
+              </h1>
+              <p class="subtitle is-4">
+                Patient-Adaptive Echocardiography with Different Numbers of Transmits
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container is-max-desktop">
+        <div class="columns is-centered">
+          <div class="column">
+            <div class="content">
+              <h2 class="title is-3">Patient Selection</h2>
+              <div class="buttons is-centered" id="patient-buttons">
+                <!-- Buttons will be dynamically generated -->
+              </div>
+            </div>
+
+            <div class="content">
+              <p>
+                Use the slider to choose the number of transmits.
+              </p>
+            </div>
+
+            <div class="columns is-vcentered action-panel">
+              <div class="column action-video-column">
+                <div
+                  id="action-image-wrapper"
+                  data-video-folder="https://github.com/tue-bmd/ulsa/releases/download/assets"
+                  data-n-actions="7,14,28"
+                >
+                  Loading...
+                </div>
+                <div class="has-text-centered" style="margin-top: 1rem">
+                  <input
+                    class="slider is-large is-info"
+                    id="action-slider"
+                    step="1"
+                    min="0"
+                    max="2"
+                    value="1"
+                    type="range"
+                    list="slider-ticks"
+                    style="width: 60%; max-width: 400px"
+                  />
+                  <datalist id="slider-ticks">
+                    <option value="0" label="7"></option>
+                    <option value="1" label="14"></option>
+                    <option value="2" label="28"></option>
+                  </datalist>
+                </div>
+                <div class="has-text-centered" style="margin-top: 0.5em">
+                  <span id="slider-value-label">14</span> transmits
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="content has-text-centered">
+          <a href="index.html">Back to Main Page</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

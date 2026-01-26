@@ -6,12 +6,18 @@ users.yaml
 .vscode
 *.pdf
 !derivations/*.pdf
+!additional_results/*.png
+!assets/*
 *.npy
 *.pkl
 *.ttf
+*.egg-info
 
 # Ignore everything in the output directory
 output/*
+
+# Ignore wandb outputs
+wandb/
 
 # But not this file
 !output/README.md

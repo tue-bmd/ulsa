@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
+from ulsa.plotting.plot_utils import METRIC_NAMES
+
 
 def load_yaml(filepath):
     """Load YAML file."""
@@ -66,12 +68,7 @@ def extract_sweep_data(sweep_dir, keys_to_extract=["mse", "psnr"]):
 
 
 def plot_timings(
-    results: list,
-    names: list,
-    save_root=None,
-    metric="psnr",
-    context=None,
-    dark=False,
+    results: list, names: list, save_root=None, metric="psnr", context=None
 ):
     """Plots all sweeps on the same figure with error bars showing SEM."""
 
@@ -79,16 +76,9 @@ def plot_timings(
         context = {}
 
     markers = ["o", "x", "D", "^", "v", "x", "*"]
-    for i, (method, name) in enumerate(zip(results, names)):
-        result = method[0][metric]["greedy_entropy"]
-        psnr = np.stack(list(result.values()), axis=1)
-        psnr_mean = np.mean(psnr, axis=0)
-        sem_values = np.std(psnr, axis=0) / np.sqrt(len(psnr))
-
-        steps = np.array(list(result.keys()))
 
     with plt.style.context(context):
-        plt.figure(figsize=(3.5, 2.5))
+        plt.figure(figsize=(3.5, 2.0))
         # Create broken axis plot: left axis for steps < 100, right axis for step 500
         fig, (ax, ax2) = plt.subplots(
             1, 2, sharey=True, gridspec_kw={"width_ratios": [7, 1]}
@@ -119,7 +109,7 @@ def plot_timings(
         ax.set_xlim(0, 105)
         ax2.set_xlim(490, 510)
         fig.supxlabel("Diffusion Steps [-]")
-        ax.set_ylabel("PSNR [dB]")
+        ax.set_ylabel(METRIC_NAMES.get(metric, metric.upper()))
         ax.grid(True)
         ax2.grid(True)
         ax.spines["right"].set_visible(False)
@@ -149,21 +139,21 @@ def plot_timings(
             save_path = os.path.join(save_root, "ulsa_timings" + ext)
             plt.savefig(
                 save_path,
-                dpi=300,
-                transparent=True,
+                # transparent=True,
             )
             print(f"Saved to {save_path}")
 
 
 if __name__ == "__main__":
-    seqdiff = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/Wessel/output/lud/active_sampling/recon_vs_fps2/sweep_2025_04_08_124401"
-    normal_diff = "/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/Wessel/output/lud/active_sampling/normal_diffusion_num_steps2/sweep_2025_04_08_115535"
-    SAVE_ROOT = "."
+    seqdiff = "/mnt/z/usbmd/ulsa/timings/recon_vs_fps2/sweep_2025_04_08_124401"
+    normal_diff = (
+        "/mnt/z/usbmd/ulsa/timings/normal_diffusion_num_steps2/sweep_2025_04_08_115535"
+    )
+    SAVE_ROOT = "./output"
 
     x = extract_sweep_data(seqdiff)
     y = extract_sweep_data(normal_diff)
 
-    # context = Path("styles/nvmu.mplstyle")
     context = Path("styles/ieee-tmi.mplstyle")
     assert context.exists(), f"Context file {context} does not exist."
     plot_timings(
@@ -171,5 +161,4 @@ if __name__ == "__main__":
         ["SeqDiff", "Regular"],
         save_root=SAVE_ROOT,
         context=context,
-        dark=False,
     )

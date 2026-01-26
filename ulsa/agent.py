@@ -1,6 +1,10 @@
-from dataclasses import dataclass, replace
+"""Defines the Agent and AgentState dataclasses, containing the logic for
+action selection, reconstruction, and state management."""
+
+from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import Any, Callable, Tuple
+from pathlib import Path
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 import jax
 import keras
@@ -10,13 +14,13 @@ from rich.console import Console
 from rich.table import Table
 
 import zea
-from ulsa.buffer import FrameBuffer, lifo_shift
+from ulsa.buffer import FrameBuffer, fifo_shift
 from ulsa.selection import (
     DownstreamTaskSelection,
     GreedyVariance,
     selector_from_name,
 )
-from ulsa.utils import lines_to_pfield
+from zea import log, set_data_paths
 from zea.agent.selection import (
     CovarianceSamplingLines,
     EquispacedLines,
@@ -24,12 +28,148 @@ from zea.agent.selection import (
     LinesActionModel,
     UniformRandomLines,
 )
-from zea.backend import jit
 from zea.config import Config
+from zea.func import split_seed
 from zea.models.diffusion import DiffusionModel
-from zea.tensor_ops import split_seed
 
-DEBUGGING = False
+
+class Cfg:
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
+    def copy(self):
+        """Return a deep copy of this AgentConfig."""
+        from copy import deepcopy
+
+        return deepcopy(self)
+
+    def update_recursive(self, dictionary: dict | None = None, **kwargs):
+        if dictionary is None:
+            dictionary = {}
+        dictionary.update(kwargs)
+        for key, value in dictionary.items():
+            if hasattr(self, key) and isinstance(getattr(self, key), (Config, Cfg)):
+                attr = getattr(self, key)
+                attr.update_recursive(value)
+            else:
+                setattr(self, key, value)
+
+    def update_config_value_from_key_path(self, key_path: str, value):
+        """
+        Given a key path like 'a.b.c' and value X, sets self.a.b.c = X.
+
+        Args:
+            key_path: String of dot-separated keys (e.g. 'action_selection.selection_strategy')
+            value: Value to set at the specified path
+
+        Raises:
+            AttributeError: If any part of the key path doesn't exist
+        """
+        key_chain = key_path.split(".")
+        ref = self
+
+        # Traverse to the parent of the final attribute
+        for key in key_chain[:-1]:
+            if not hasattr(ref, key):
+                raise AttributeError(
+                    f"Config path '{key_path}' is invalid: '{key}' not found"
+                )
+            ref = getattr(ref, key)
+
+        # Set the final attribute
+        final_key = key_chain[-1]
+        if not hasattr(ref, final_key):
+            raise AttributeError(
+                f"Config path '{key_path}' is invalid: '{final_key}' not found"
+            )
+        setattr(ref, final_key, value)
+
+    def as_dict(self):
+        """Convert this Cfg dataclass to a dictionary (recursively)."""
+        from dataclasses import fields
+
+        result = {}
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if isinstance(value, Cfg):
+                result[f.name] = value.as_dict()
+            elif isinstance(value, Config):
+                result[f.name] = value.as_dict()
+            elif isinstance(value, list):
+                result[f.name] = [
+                    v.as_dict() if isinstance(v, (Cfg, Config)) else v for v in value
+                ]
+            else:
+                result[f.name] = value
+        return result
+
+    def save_to_yaml(self, path):
+        """Save config contents to yaml."""
+        import yaml
+
+        with open(Path(path), "w", encoding="utf-8") as save_file:
+            yaml.dump(
+                self.as_dict(),
+                save_file,
+                default_flow_style=False,
+                sort_keys=False,
+            )
+
+
+@dataclass
+class ActionSelectionConfig(Cfg):
+    n_possible_actions: int | str
+    n_actions: int
+    shape: List[Union[int, str]]
+    selection_strategy: str
+    kwargs: dict = field(default_factory=dict)
+
+    def set_n_tx(self, n_tx: int):
+        if self.n_possible_actions == "n_tx":
+            self.n_possible_actions = n_tx
+
+        self._orig_shape = self.shape.copy()
+
+        # For example: this converts [112, "2*n_tx"] to [112, 112] if n_tx=56
+        self.shape = [
+            s if "n_tx" not in str(s) else eval(s, {"n_tx": n_tx})
+            for s in self._orig_shape
+        ]
+
+
+@dataclass
+class AgentConfig(Cfg):
+    io_config: Config
+    action_selection: ActionSelectionConfig
+    diffusion_inference: Config
+    downstream_task: Optional[str] = None
+    data: Optional[Config] = None
+    is_3d: Optional[bool] = False
+
+    def fix_paths(self, data_paths=None):
+        if data_paths is None:
+            data_paths = set_data_paths("users.yaml", local=False)
+        output_dir = data_paths["output"]
+        self.diffusion_inference.run_dir = self.diffusion_inference.run_dir.format(
+            output_dir=output_dir
+        )
+        if self.data is not None and "target_sequence" in self.data:
+            self.data.target_sequence = self.data.target_sequence.format(
+                data_root=data_paths["data_root"]
+            )
+
+    @staticmethod
+    def from_yaml(path: str | Path):
+        cfg = Config.from_yaml(path)
+        action_selection_cfg = ActionSelectionConfig(**cfg.action_selection)
+        return AgentConfig(
+            io_config=cfg.io_config,
+            action_selection=action_selection_cfg,
+            diffusion_inference=cfg.diffusion_inference,
+            downstream_task=cfg.get("downstream_task", None),
+            data=cfg.get("data", None),
+            is_3d=cfg.get("is_3d", False),
+        )
 
 
 # Static agent properties go here
@@ -44,7 +184,6 @@ class Agent:
     pre_action: Callable
     post_action: Callable
     operator: Any
-    pfield: Any
 
     def print_summary(self):
         print("\n")
@@ -80,7 +219,6 @@ class AgentState:
     posterior_samples: Any  # tensor of shape [n_particles, height, width, n_frames]: these are used as initial samples for SeqDiff
     belief_distribution: Any  # tensor of shape [n_particles, height, width, 1]: posterior samples at time t
     pipeline_state: Any
-    target_pipeline_state: Any
     saliency_map: Any  # heatmap used to make action selection decisions
 
     def tree_flatten(self):
@@ -93,7 +231,6 @@ class AgentState:
             self.posterior_samples,
             self.belief_distribution,
             self.pipeline_state,
-            self.target_pipeline_state,
             self.saliency_map,
         )
         aux = None
@@ -233,26 +370,12 @@ def action_selection_pre_post(
     return wrapper
 
 
-def action_selection_pfield(action_selector, **kwargs):
-    """
-    This function is used to wrap the action selection function to return a
-    pfield instead of a mask.
-    """
-
-    def wrapper(particles, current_lines, seed):
-        selected_lines, _ = action_selector(particles, current_lines, seed)
-        pfield_mask = lines_to_pfield(selected_lines[None], **kwargs)
-        return selected_lines, pfield_mask
-
-    return wrapper
-
-
 def reset_agent_state(agent: Agent, seed, batch_size=None):
     _, _, n_frames = agent.input_shape
     selected_lines, mask_t, saliency_map = agent.initial_action_selection(
         particles=None, current_lines=None, seed=seed
     )
-    mask = lifo_shift(ops.zeros(agent.input_shape), mask_t)
+    mask = fifo_shift(ops.zeros(agent.input_shape), mask_t)
 
     return AgentState(
         measurement_buffer=FrameBuffer(
@@ -264,18 +387,12 @@ def reset_agent_state(agent: Agent, seed, batch_size=None):
         posterior_samples=None,
         belief_distribution=None,
         pipeline_state={},
-        target_pipeline_state={},
         saliency_map=saliency_map,
     )
 
 
 def get_operator_dict(agent_config):
-    if (
-        "pfield" in agent_config.action_selection
-        and agent_config.diffusion_inference.get("guidance_method", "dps") == "dps"
-    ):
-        return {"name": "soft_inpainting"}
-    elif agent_config.diffusion_inference.get("operator", "inpainting") == "blur_noise":
+    if agent_config.diffusion_inference.get("operator", "inpainting") == "blur_noise":
         psf = np.load("psf.npy")
         psf = ops.expand_dims(
             ops.repeat(
@@ -289,17 +406,29 @@ def get_operator_dict(agent_config):
 
 
 def setup_agent(
-    agent_config: Config,
+    agent_config: AgentConfig,
     seed,
     batch_size=None,
-    pfield=None,
     jit_mode="recover",  # recover or posterior_sample
     model=None,
+    map_type="vmap",
 ) -> Tuple[Agent, AgentState]:
     """
     Uses the parsed YAML config details stored in agent_config to initialise
     the functions in AgentConfig
     """
+
+    assert jit_mode in [None, "recover", "posterior_sample", "off"], (
+        f"Invalid jit_mode={jit_mode}"
+    )
+
+    if map_type == "map":
+        # NOTE: good for debugging!
+        map_fn = partial(zea.func.vmap, disable_jit=True)
+    elif map_type == "vmap":
+        map_fn = jax.vmap
+    else:
+        raise UserWarning(f"Invalid map_type={map_type}")
 
     if model is None:
         # 1: Set up perception model (posterior sampler)
@@ -308,7 +437,7 @@ def setup_agent(
 
         # NOTE: we now assume our posterior sampler to be a diffusion model, but other than this
         # setup function the code should be agnostic to this.
-        model = DiffusionModel.from_preset(
+        model: DiffusionModel = DiffusionModel.from_preset(
             model_path,
             guidance={
                 "name": guidance_method,
@@ -343,10 +472,21 @@ def setup_agent(
                     initial_samples, (n_part * n_batch, height, width, frame)
                 )
 
+        # First frame uses full diffusion steps, subsequent frames use SeqDiff
+        omega = agent_config.diffusion_inference.guidance_kwargs.omega
+        if initial_samples is not None:
+            # add dummy batch and particle dim
+            initial_samples = initial_samples[:, None, None]
+            initial_step = agent_config.diffusion_inference.initial_step
+        else:
+            initial_step = 0
+            omega = agent_config.diffusion_inference.guidance_kwargs.get(
+                "initial_omega", omega
+            )
+
         # we vmap the posterior sampling to make the guidance weight
         # omega independent of batch size.
-        def posterior_sample_individual(args):
-            measurement, seed_i, initial_sample, initial_step, omega = args
+        def posterior_sample_individual(measurement, seed_i, initial_sample):
             posterior_samples = model.posterior_sample(
                 measurements=measurement,
                 mask=mask[None],  # add dummy batch dim
@@ -361,50 +501,10 @@ def setup_agent(
 
         measurements = ops.expand_dims(measurements, axis=1)  # add dummy batch dim
         seeds = split_seed(seed, len(measurements))
-        omega = agent_config.diffusion_inference.guidance_kwargs.omega
-        if initial_samples is None:
-            initial_omega = agent_config.diffusion_inference.guidance_kwargs.get(
-                "initial_omega", omega
-            )
-            if DEBUGGING:
-                psi = lambda meas, seed: posterior_sample_individual(
-                    (meas, seed, None, 0, initial_omega)
-                )
-                posterior_samples = ops.stack(
-                    [psi(m, s) for m, s in zip(measurements, seeds)]
-                )
-            else:
-                posterior_samples = ops.vectorized_map(
-                    lambda meas_seed: posterior_sample_individual(
-                        (*meas_seed, None, 0, initial_omega)
-                    ),
-                    (measurements, seeds),
-                )
-        else:
-            initial_samples = initial_samples[
-                :, None, None
-            ]  # add dummy batch and particle dim
-            if DEBUGGING:
-                psi = lambda meas, seed, inits: posterior_sample_individual(
-                    (meas, seed, inits, 0, initial_omega)
-                )
-                posterior_samples = ops.stack(
-                    [
-                        psi(m, s, i)
-                        for m, s, i in zip(measurements, seeds, initial_samples)
-                    ]
-                )
-            else:
-                posterior_samples = ops.vectorized_map(
-                    lambda meas_seed_inits: posterior_sample_individual(
-                        (
-                            *meas_seed_inits,
-                            agent_config.diffusion_inference.initial_step,
-                            omega,
-                        )
-                    ),
-                    (measurements, seeds, initial_samples),
-                )
+
+        posterior_samples = map_fn(posterior_sample_individual)(
+            measurements, seeds, initial_samples
+        )
 
         # remove dummy batch dim
         posterior_samples = ops.squeeze(posterior_samples, axis=1)
@@ -434,39 +534,15 @@ def setup_agent(
         n_possible_actions=agent_config.action_selection.n_possible_actions,
         img_height=img_height,
         img_width=img_width,
-        **agent_config.action_selection.get("kwargs", {}),
+        **agent_config.action_selection.kwargs,
     )
     initial_action_selection = action_selection_wrapper(
         get_initial_action_selection_fn(action_selector),
-        is_3d=agent_config.get("is_3d", False),
+        is_3d=agent_config.is_3d,
     )
     action_selection = action_selection_wrapper(
-        action_selector, is_3d=agent_config.get("is_3d", False)
+        action_selector, is_3d=agent_config.is_3d
     )
-
-    if agent_config.action_selection.get("pfield"):
-        assert pfield is not None, "pfield must be provided"
-        # TODO: is resizing the pfield fine?
-        pfield = ops.image.resize(
-            pfield,  # (n_tx, grid_size_z, grid_size_x)
-            agent_config.action_selection.shape,
-            interpolation="bilinear",
-            antialias=True,
-            data_format="channels_first",  # n_tx is the channel dim
-        )
-
-        initial_action_selection = action_selection_pfield(
-            initial_action_selection,
-            pfield=pfield,
-            n_actions=agent_config.action_selection.n_actions,
-        )
-        action_selection = action_selection_pfield(
-            action_selection,
-            pfield=pfield,
-            n_actions=agent_config.action_selection.n_actions,
-        )
-    else:
-        pfield = None
 
     pre_action = keras.layers.CenterCrop(
         *agent_config.action_selection.shape, data_format="channels_first"
@@ -486,25 +562,25 @@ def setup_agent(
     )
 
     if jit_mode is None:
-        print(
-            "JIT is off, this is useful for debugging but slow for general use! "
-            "Cosider setting jit_mode to 'posterior_sample' such that atleast "
-            "the diffusion model is JIT compiled."
+        log.info(
+            log.red(
+                "JIT is off, this is useful for debugging but slow for general use! "
+                "Cosider setting jit_mode to 'posterior_sample' such that atleast "
+                "the diffusion model is JIT compiled."
+            )
         )
 
     if jit_mode == "posterior_sample":
-        posterior_sample = jit(posterior_sample)
+        posterior_sample = jax.jit(posterior_sample, static_argnames=("batched"))
 
     recover_p = partial(
         recover,
         reconstruction_method=agent_config.diffusion_inference.reconstruction_method,
-        posterior_sample=partial(
-            posterior_sample, batched=agent_config.get("is_3d", False)
-        ),
+        posterior_sample=posterior_sample,
         action_selection=action_selection,
     )
     if jit_mode == "recover":
-        recover_p = jit(recover_p)
+        recover_p = jax.jit(recover_p)
 
     agent = Agent(
         initial_action_selection=initial_action_selection,
@@ -516,7 +592,6 @@ def setup_agent(
         pre_action=pre_action,
         post_action=post_action,
         operator=model.operator,
-        pfield=pfield,
     )
 
     return agent, reset_agent_state(agent, seed, batch_size=batch_size)
@@ -562,7 +637,7 @@ def recover(
     new_selected_lines, new_mask_t, saliency_map = action_selection(
         belief_distribution[..., 0], selected_lines, seed_2
     )
-    new_mask = lifo_shift(mask, new_mask_t)
+    new_mask = fifo_shift(mask, new_mask_t)
 
     # 4. create a reconstruction from the beliefs
     recovered_frame = beliefs_to_recovered_frame(

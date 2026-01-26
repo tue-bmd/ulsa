@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run 3D benchmark evaluation.")
@@ -18,9 +17,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    sys.path.append("/ulsa")
     os.environ["KERAS_BACKEND"] = "jax"
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
     from zea import init_device, set_data_paths
 
     init_device()
@@ -28,8 +26,7 @@ if __name__ == "__main__":
 
 from pathlib import Path
 
-from benchmark_active_sampling_ultrasound import run_benchmark
-from zea import Config
+from ulsa.benchmark_active_sampling_ultrasound import AgentConfig, run_benchmark
 
 if __name__ == "__main__":
     if args.target_dir is not None:
@@ -39,22 +36,22 @@ if __name__ == "__main__":
     else:
         SAVE_DIR = data_paths.output / "ULSA_benchmarks" / "3d"
 
-    ulsa_agent_config = Config.from_yaml(Path("/ulsa/configs/elevation_3d.yaml"))
+    ulsa_agent_config = AgentConfig.from_yaml(Path("/ulsa/configs/elevation_3d.yaml"))
 
-    # sweep_save_dir, all_metrics_results = run_benchmark(
-    #     agent_config=ulsa_agent_config,
-    #     target_dir=TARGET_DIR,
-    #     save_dir=SAVE_DIR,
-    #     sweep_params={
-    #         "action_selection.n_actions": [3, 6, 12],
-    #         "action_selection.selection_strategy": ["greedy_entropy"],
-    #         "action_selection.kwargs": [{"average_across_batch": True}],
-    #         "diffusion_inference.batch_size": [4],
-    #     },
-    #     image_range=(0, 255),
-    #     data_type="data/image_3D",
-    #     validate_dataset=False,  # 3D data not in official USBMD format
-    # )
+    sweep_save_dir, all_metrics_results = run_benchmark(
+        agent_config=ulsa_agent_config,
+        target_dir=TARGET_DIR,
+        save_dir=SAVE_DIR,
+        sweep_params={
+            "action_selection.n_actions": [3, 6, 12],
+            "action_selection.selection_strategy": ["greedy_entropy"],
+            "action_selection.kwargs": [{"average_entropy_across_batch": True}],
+            "diffusion_inference.batch_size": [2],
+        },
+        image_range=(0, 255),
+        data_type="data/image_3D",
+        validate_dataset=False,  # 3D data not in official USBMD format
+    )
 
     sweep_save_dir, all_metrics_results = run_benchmark(
         agent_config=ulsa_agent_config,
@@ -66,7 +63,7 @@ if __name__ == "__main__":
                 "uniform_random",
                 "equispaced",
             ],
-            "diffusion_inference.batch_size": [4],
+            "diffusion_inference.batch_size": [2],
         },
         image_range=(0, 255),
         data_type="data/image_3D",
