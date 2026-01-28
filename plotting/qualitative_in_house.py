@@ -126,6 +126,7 @@ def stack_plot_from_npz(
     fig_height_per_row=1.5,
 ):
     plot_dir = Path(plot_dir)
+    plot_dir.mkdir(parents=True, exist_ok=True)
     plot_path = plot_dir / f"qualitative_in_house_{selection_strategy}"
 
     if context is None:
@@ -331,7 +332,7 @@ if __name__ == "__main__":
             "Fundamental",
         ],
         selection_strategy="greedy_entropy",
-        scan_convert_resolution=0.1,
+        scan_convert_resolution=0.5,
     )
 
     harmonic_files = [f for f in harmonic_dir.iterdir() if f.is_dir()]

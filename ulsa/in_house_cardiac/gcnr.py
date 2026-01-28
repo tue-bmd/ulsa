@@ -261,7 +261,7 @@ def load_results():
     )
 
 
-def main():
+def main(context="styles/ieee-tmi.mplstyle"):
     (
         subjects,
         group_names,
@@ -287,9 +287,9 @@ def main():
             SAVE_DIR / f"{key}_violin{ext}",
             x_label_values=_gncr_roman.keys(),
             metric_name=METRIC_LABEL,
-            context="styles/ieee-tmi.mplstyle",
+            context=context,
         )
-        with plt.style.context("styles/ieee-tmi.mplstyle"):
+        with plt.style.context(context):
             for subject in subjects:
                 if subject not in _gcnr:
                     continue
@@ -323,7 +323,7 @@ def main():
         "loc": "left",
         "x": 0.03,
     }
-    with plt.style.context("styles/ieee-tmi.mplstyle"):
+    with plt.style.context(context):
         fig, axs = plt.subplots(2, 1, sharex=True)
         plt.sca(axs[0])
         _sel_frames = selected_frames_all_roman["I"][

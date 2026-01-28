@@ -66,6 +66,8 @@ def print_mean_gcnr(
 
 
 if __name__ == "__main__":
+    context = "styles/ieee-tmi.mplstyle"
+    # context = "styles/slides.mplstyle"
     plt.rcdefaults()  # Reset to default matplotlib style
     subjects, group_names, relative_gncr_dict, _, _, gcnr_all, _ = (
         load_fundamental_results()
@@ -114,7 +116,7 @@ if __name__ == "__main__":
         "x": 0.03,
     }
 
-    with plt.style.context("styles/ieee-tmi.mplstyle"):
+    with plt.style.context(context):
         relative_gncr_dict_roman = {
             subject_ids_all[k]: v for k, v in relative_gncr_dict.items()
         }
@@ -125,7 +127,7 @@ if __name__ == "__main__":
             save_path=None,
             x_label_values=relative_gncr_dict_roman.keys(),
             metric_name=METRIC_LABEL,
-            context="styles/ieee-tmi.mplstyle",
+            context=context,
             ax=axs[0],
             legend_kwargs=None,
         )
@@ -139,7 +141,7 @@ if __name__ == "__main__":
             save_path=None,
             x_label_values=relative_gncr_dict_hi_roman.keys(),
             metric_name=None,
-            context="styles/ieee-tmi.mplstyle",
+            context=context,
             ax=axs[1],
             legend_kwargs=None,
         )
