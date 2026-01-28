@@ -336,7 +336,7 @@ if __name__ == "__main__":
     )
 
     harmonic_files = [f for f in harmonic_dir.iterdir() if f.is_dir()]
-    for harmonic_file in harmonic_files:
+    for harmonic_file in reversed(sorted(harmonic_files)):
         animated_plot_from_npz(
             harmonic_file,
             "output/in_house_cardiac/animations",
