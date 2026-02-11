@@ -64,16 +64,16 @@ python models/train_diffusion.py
 
 ## Inference
 
-The main file to use for inference is [`active_sampling_temporal.py`](./active_sampling_temporal.py) in combination with a config file.
+The main file to use for inference is [`ulsa/active_sampling_temporal.py`](./ulsa/active_sampling_temporal.py) in combination with a config file.
 
 ```bash
-python active_sampling_temporal.py --config "configs/echonet_3_frames.yaml"
+python ulsa/active_sampling_temporal.py --config "configs/echonet_3_frames.yaml"
 ```
 
-For the 3D model, use [`active_sampling_temporal_3d.py`](./active_sampling_temporal_3d.py).
+For the 3D model, use [`ulsa/active_sampling_temporal_3d.py`](./ulsa/active_sampling_temporal_3d.py).
 
 ```bash
-python active_sampling_temporal_3d.py --config "configs/elevation_3d.yaml"
+python ulsa/active_sampling_temporal_3d.py --config "configs/elevation_3d.yaml"
 ```
 
 For educational purposes, we have also created a simplified version of our algorithm [in this notebook](https://zea.readthedocs.io/en/latest/notebooks/agent/agent_example.html).
