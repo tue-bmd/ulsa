@@ -181,8 +181,6 @@ class Agent:
     input_range: Tuple
     n_particles: int
     selection_strategy: str
-    pre_action: Callable
-    post_action: Callable
     operator: Any
 
     def print_summary(self):
@@ -338,55 +336,24 @@ def identity(x):
     return x
 
 
-def action_selection_pre_post(
-    action_selector, pre: callable = identity, post: callable = identity
-):
-    """
-    This function is used to wrap the action selection function with a pre and post function
-    and applies them to the input and output of the action selection function.
-
-    Note that the selected_lines are not modified by the post function.
-    """
-
-    def wrapper(particles, current_lines, seed):
-        """
-        Args:
-            particles: tensor of shape [n_particles, batch_size, height, width]
-        """
-        # Apply pre function
-        if particles is not None:
-            particles = pre(particles)
-
-        # Call action selection function
-        selected_lines, mask_t, saliency_map = action_selector(
-            particles, current_lines, seed
-        )
-
-        # Apply post function
-        mask_t = post(mask_t)
-
-        return selected_lines, mask_t, saliency_map
-
-    return wrapper
-
-
-def reset_agent_state(agent: Agent, seed, batch_size=None):
+def reset_agent_state(agent: Agent, seed, batch_size=None, measurement_shape=None):
     _, _, n_frames = agent.input_shape
     selected_lines, mask_t, saliency_map = agent.initial_action_selection(
         particles=None, current_lines=None, seed=seed
     )
-    image_shape = agent.input_shape[:-1]
+    if measurement_shape is None:
+        measurement_shape = agent.input_shape[:-1]
     transition = False
     buffer_size = n_frames - int(transition)
 
     return AgentState(
         measurement_buffer=FrameBuffer(
-            image_shape=image_shape,
+            image_shape=measurement_shape,
             batch_size=batch_size,
             buffer_size=buffer_size,
         ),
         mask=FrameBuffer(
-            image_shape=image_shape,
+            image_shape=measurement_shape,
             batch_size=batch_size,
             buffer_size=buffer_size,
         ),
@@ -399,8 +366,9 @@ def reset_agent_state(agent: Agent, seed, batch_size=None):
     )
 
 
-def get_operator_dict(agent_config):
-    if agent_config.diffusion_inference.get("operator", "inpainting") == "blur_noise":
+def get_operator_dict(agent_config, output_shape=None):
+    operator = agent_config.diffusion_inference.get("operator", "inpainting")
+    if operator == "blur_noise":
         psf = np.load("psf.npy")
         psf = ops.expand_dims(
             ops.repeat(
@@ -409,8 +377,18 @@ def get_operator_dict(agent_config):
             axis=-1,
         )
         return {"name": "blur_noise", "params": {"psf": psf, "noise_std": 0.1}}
-    else:
+    elif operator == "inpainting":
         return {"name": "inpainting", "params": {"min_val": 0}}
+    elif operator == "inpainting_resized":
+        return {
+            "name": "inpainting_resized",
+            "params": {
+                "min_val": 0,
+                "output_shape": output_shape,
+            },
+        }
+    else:
+        raise UserWarning(f"Invalid operator: {operator}")
 
 
 def setup_agent(
@@ -420,6 +398,7 @@ def setup_agent(
     jit_mode="recover",  # recover or posterior_sample
     model=None,
     map_type="vmap",
+    measurement_shape=None,
 ) -> Tuple[Agent, AgentState]:
     """
     Uses the parsed YAML config details stored in agent_config to initialise
@@ -451,7 +430,7 @@ def setup_agent(
                 "name": guidance_method,
                 "params": {"disable_jit": True},
             },  # we jit later
-            operator=get_operator_dict(agent_config),
+            operator=get_operator_dict(agent_config, output_shape=measurement_shape),
         )
 
     n_particles = agent_config.diffusion_inference.batch_size
@@ -529,13 +508,7 @@ def setup_agent(
 
         return posterior_samples
 
-    # 2: set up action model
-    if agent_config.action_selection.get("shape"):
-        img_height, img_width = agent_config.action_selection.shape
-    else:
-        img_height, img_width, _ = model.input_shape
-        agent_config.action_selection.shape = (img_height, img_width)
-
+    img_height, img_width = measurement_shape
     action_selector = selector_from_name(
         agent_config.action_selection.selection_strategy,
         n_actions=agent_config.action_selection.n_actions,
@@ -550,23 +523,6 @@ def setup_agent(
     )
     action_selection = action_selection_wrapper(
         action_selector, is_3d=agent_config.is_3d
-    )
-
-    pre_action = keras.layers.CenterCrop(
-        *agent_config.action_selection.shape, data_format="channels_first"
-    )
-    post_action = lambda data: zea.ops.Pad(
-        model.input_shape[:-1],
-        axis=(-3, -2),
-        jit_compile=False,  # we jit later
-        # fail_on_bigger_shape=False,
-    )(data=data)["data"]
-
-    initial_action_selection = action_selection_pre_post(
-        initial_action_selection, pre_action, post_action
-    )
-    action_selection = action_selection_pre_post(
-        action_selection, pre_action, post_action
     )
 
     if jit_mode is None:
@@ -597,12 +553,12 @@ def setup_agent(
         input_range=model.input_range,
         n_particles=n_particles,
         selection_strategy=agent_config.action_selection.selection_strategy,
-        pre_action=pre_action,
-        post_action=post_action,
         operator=model.operator,
     )
 
-    return agent, reset_agent_state(agent, seed, batch_size=batch_size)
+    return agent, reset_agent_state(
+        agent, seed, batch_size=batch_size, measurement_shape=measurement_shape
+    )
 
 
 def beliefs_to_recovered_frame(belief_distribution, reconstruction_method):
@@ -659,8 +615,11 @@ def recover(
 
     # 3. pass those into action selection
     belief_distribution = new_posterior_samples[..., -1, None]  # x_t ~ p(x_t | y_<t)
+    belief_resized = ops.image.resize(
+        belief_distribution, agent_state.mask.shape[:2], interpolation="bilinear"
+    )
     new_selected_lines, new_mask_t, saliency_map = action_selection(
-        belief_distribution[..., 0], selected_lines, seed_2
+        ops.squeeze(belief_resized, axis=-1), selected_lines, seed_2
     )
     mask.shift(new_mask_t)
 

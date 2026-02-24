@@ -33,7 +33,7 @@ from ulsa.ops import lines_rx_apo
 from ulsa.pipeline import make_pipeline
 from ulsa.utils import update_scan_for_polar_grid
 from zea import File, Pipeline, Scan, init_device, log, set_data_paths
-from zea.func import func_with_one_batch_dim, vmap
+from zea.func import vmap
 from zea.metrics import Metrics
 from zea.utils import FunctionTimer
 
@@ -50,13 +50,13 @@ def parse_args():
     parser.add_argument(
         "--target_sequence",
         type=str,
-        default=None,
+        default="/mnt/z/Ultrasound-BMD/Ultrasound-BMd/data/tristan/Philips/CX/test_sample/data1_for_diffusion_new.h5",
         help="A hdf5 file containing an ordered sequence of frames to sample from.",
     )
     parser.add_argument(
         "--data_type",
         type=str,
-        default=None,
+        default="data/envelope_data",
         help="The type of data to load from the hdf5 file (e.g. data/raw_data or data/image).",
     )
     parser.add_argument(
@@ -79,7 +79,7 @@ def parse_args():
         "--precision",
         type=str,
         choices=["float32", "mixed_float16", "mixed_bfloat16"],
-        default="float32",
+        default="mixed_float16",
         help="Precision to use for inference: https://keras.io/api/mixed_precision/policy/",
     )
     parser.add_argument(
@@ -154,6 +154,53 @@ class AgentResults:
     measurements: np.ndarray
     saliency_map: np.ndarray
 
+    def resize(self, new_shape, antialias=True, **kwargs):
+        masks = ops.image.resize(
+            self.masks,
+            new_shape,
+            interpolation="nearest",
+            antialias=antialias,
+            **kwargs,
+        )  # TODO: resizing the masks is not nice
+        target_imgs = ops.image.resize(
+            self.target_imgs,
+            new_shape,
+            interpolation="lanczos3",
+            antialias=antialias,
+            **kwargs,
+        )
+        reconstructions = ops.image.resize(
+            self.reconstructions,
+            new_shape,
+            interpolation="lanczos3",
+            antialias=antialias,
+            **kwargs,
+        )
+        belief_distributions = jax.vmap(
+            lambda x: ops.image.resize(
+                x,
+                size=new_shape,
+                interpolation="lanczos3",
+                antialias=antialias,
+                **kwargs,
+            )
+        )(self.belief_distributions)
+        measurements = ops.image.resize(
+            self.measurements,
+            new_shape,
+            interpolation="lanczos3",
+            antialias=antialias,
+            **kwargs,
+        )
+        return AgentResults(
+            masks,
+            target_imgs,
+            reconstructions,
+            belief_distributions,
+            measurements,
+            self.saliency_map,
+        )
+
     def squeeze(self, axis=-1):
         if ops.all(self.saliency_map == None):
             self.saliency_map = ops.zeros_like(self.target_imgs)
@@ -207,7 +254,6 @@ def run_active_sampling(
     scan: Scan = None,
     hard_project=False,
     verbose=True,
-    post_pipeline: Pipeline = None,
     bandwidth: float = 2e6,
     return_timings=False,
 ) -> AgentResults:
@@ -301,18 +347,6 @@ def run_active_sampling(
         measurements,
         saliency_map,
     ) = outputs
-
-    if post_pipeline:
-        reconstructions = post_pipeline(data=reconstructions)["data"]
-        masks = post_pipeline(data=masks)["data"]
-        target_imgs = post_pipeline(data=target_imgs)["data"]
-        belief_distributions = func_with_one_batch_dim(
-            lambda data: post_pipeline(data=data)["data"],
-            belief_distributions,
-            n_batch_dims=2,
-            batch_size=belief_distributions.shape[0],
-        )
-        measurements = post_pipeline(data=measurements)["data"]
 
     agent_results = AgentResults(
         masks,
@@ -429,7 +463,10 @@ def active_sampling_single_file(
         n_frames = agent_config.io_config.get("frame_cutoff", "all")
         validation_sample_frames, scan = preload_data(file, n_frames, data_type)
         scan.dynamic_range = dynamic_range
-        agent_config.action_selection.set_n_tx(scan.n_tx)
+        # agent_config.action_selection.set_n_tx(scan.n_tx)
+
+        # TODO: only for images!
+        measurement_shape = validation_sample_frames.shape[1:]  # (h, w)
 
     if getattr(scan, "theta_range", None) is not None:
         theta_range_deg = np.rad2deg(scan.theta_range)
@@ -443,19 +480,14 @@ def active_sampling_single_file(
         seed=jax.random.PRNGKey(seed),
         jit_mode=jit_mode,
         map_type=map_type,
+        measurement_shape=measurement_shape,
     )
 
     pipeline = make_pipeline(
         data_type=data_type,
         output_range=agent.input_range,
         output_shape=agent.input_shape,
-        action_selection_shape=agent_config.action_selection.shape,
         **kwargs,
-    )
-
-    post_pipeline = Pipeline(
-        [zea.ops.Lambda(keras.layers.CenterCrop(*agent_config.action_selection.shape))],
-        with_batch_dim=True,
     )
 
     results = run_active_sampling(
@@ -464,8 +496,6 @@ def active_sampling_single_file(
         validation_sample_frames,
         pipeline=pipeline,
         scan=scan,
-        hard_project=agent_config.diffusion_inference.hard_project,
-        post_pipeline=post_pipeline,
         return_timings=return_timings,
     )
 
@@ -543,6 +573,9 @@ def save_results(
     run_dir, run_id = make_save_dir(save_dir)
     log.info(f"Run dir created at {log.yellow(run_dir)}")
 
+    results = results.resize(
+        (agent.input_shape[0], agent.input_shape[1]), antialias=True
+    )
     compute_metrics(results, agent)
 
     if agent_config.io_config.plot_frames_for_presentation:

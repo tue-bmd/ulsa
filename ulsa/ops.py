@@ -8,6 +8,7 @@ from keras import ops
 import zea.ops
 from zea.func import apply_along_axis, translate
 from zea.internal.core import DataTypes
+from zea.internal.operators import Operator, operator_registry
 
 NOISE_ESTIMATION_NORMALIZER = (
     0.6745  # Used for robust noise estimation from median absolute deviation
@@ -221,3 +222,24 @@ class Copy(zea.ops.Operation):
         data = kwargs[self.key]
         return {self.output_key: data}
 
+
+@operator_registry(name="inpainting_resized")
+class InpaintingResizeOperator(Operator):
+    def __init__(self, output_shape, min_val=0.0, **kwargs):
+        super().__init__(**kwargs)
+        self.min_val = min_val
+        self.output_shape = output_shape
+
+    def forward(self, data, mask):
+        resized = ops.image.resize(
+            data, self.output_shape, interpolation="lanczos3", antialias=True
+        )
+        masked = ops.where(mask, resized, self.min_val)
+        return masked
+
+    def transpose(self, data, mask):
+        # masking operation is diagonal --> A.T = A
+        return self.forward(data, mask)
+
+    def __str__(self):
+        return "y = Ax + n, where A = I * M"
