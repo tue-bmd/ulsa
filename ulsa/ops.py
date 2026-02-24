@@ -212,3 +212,12 @@ class ApplyAlongAxis(zea.ops.Operation):
         data = kwargs[self.key]
         data = zea.func.apply_along_axis(self.fn, self.axis, data)
         return {self.output_key: data}
+
+
+class Copy(zea.ops.Operation):
+    """Copy the input data to the output key."""
+
+    def call(self, **kwargs):
+        data = kwargs[self.key]
+        return {self.output_key: data}
+

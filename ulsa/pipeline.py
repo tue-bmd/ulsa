@@ -178,6 +178,21 @@ def make_pipeline(
             jit_options=jit_options,
             **kwargs,
         )
+    elif data_type == "data/envelope_data":
+        pipeline = Pipeline(
+            [
+                zea.ops.Normalize(),
+                ulsa.ops.Copy(key="maxval", output_key="_maxval"),
+                zea.ops.Normalize(input_range=(0.67, 0.95), output_range=output_range),
+                zea.ops.keras_ops.NanToNum(nan=output_range[0]),
+                zea.ops.keras_ops.ExpandDims(axis=-1),
+                *resize(action_selection_shape, output_shape),
+                ulsa.ops.Copy(key="_maxval", output_key="maxval"),
+            ],
+            with_batch_dim=with_batch_dim,
+            jit_options=jit_options,
+            **kwargs,
+        )
     elif data_type == "data/image_3D":
         pipeline = Pipeline(
             [

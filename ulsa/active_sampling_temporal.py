@@ -224,40 +224,32 @@ def run_active_sampling(
             bandwidth=bandwidth,
             minval=0,
         )
-
-        def acquire(full_data, mask, pipeline_state: dict):
-            # Run pipeline with full data
-            output = pipeline(data=full_data, **(base_params | pipeline_state))
-            target = output["data"]
-
-            # We use the same maxval & dynamic range for target and measurements.
-            # This is based on the first frame of the target sequence and should not change
-            # afterwards. You could predetermine it, so it is fine to use the target sequence
-            # for it here.
-            maxval = output["maxval"]
-            dynamic_range = output["dynamic_range"]
-            pipeline_state = {"maxval": maxval, "dynamic_range": dynamic_range}
-
-            # This is done to ensure that the measurements are 0 where the mask is 0.
-            # Assumes the pipeline beamforms the data to individual lines.
-            # In this repo we use `rx_apo` to achieve this.
-            measurements = target * mask
-
-            return measurements, target, pipeline_state
-
     else:
         if scan is not None:
-            params = pipeline.prepare_parameters(dynamic_range=scan.dynamic_range)
+            base_params = pipeline.prepare_parameters(dynamic_range=scan.dynamic_range)
         else:
-            params = {}
+            base_params = {}
 
-        def acquire(
-            full_data,
-            mask,
-            pipeline_state: dict,
-        ):
-            target = pipeline(data=full_data, **params, **pipeline_state)["data"]
-            return target * mask, target, {}
+    def acquire(full_data, mask, pipeline_state: dict):
+        # Run pipeline with full data
+        output = pipeline(data=full_data, **(base_params | pipeline_state))
+        target = output["data"]
+
+        # We use the same maxval & dynamic range for target and measurements.
+        # This is based on the first frame of the target sequence and should not change
+        # afterwards. You could predetermine it, so it is fine to use the target sequence
+        # for it here.
+        pipeline_state = {
+            "maxval": output["maxval"],
+            "dynamic_range": output["dynamic_range"],
+        }
+
+        # This is done to ensure that the measurements are 0 where the mask is 0.
+        # Assumes the pipeline beamforms the data to individual lines.
+        # In this repo we use `rx_apo` to achieve this.
+        measurements = target * mask
+
+        return measurements, target, pipeline_state
 
     def perception_action_step(agent_state: AgentState, target_data):
         # 1. Acquire measurements
@@ -610,7 +602,7 @@ def save_results(
             )
 
     with open(save_dir / run_id / "config.json", "w") as json_file:
-        json.dump(agent_config, json_file, indent=4)
+        json.dump(agent_config.as_dict(), json_file, indent=4)
 
     return run_dir, run_id
 
