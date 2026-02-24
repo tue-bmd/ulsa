@@ -117,7 +117,6 @@ class AgentCallback(keras.callbacks.Callback):
                 reconstructions,
                 measurements,
                 dpi=150,
-                context="active_sampling/ultrasound_line_scanning_agent/nvmu_assets/nvmu.mplstyle",
                 labels=[
                     "Target",
                     "Reconstruction",
