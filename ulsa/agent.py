@@ -213,7 +213,7 @@ class Agent:
 @dataclass
 class AgentState:
     measurement_buffer: FrameBuffer
-    mask: Any  # tensor of shape [height, width, n_frames]
+    mask: FrameBuffer  # tensor of shape [height, width, n_frames]
     seed: Any
     selected_lines: Any
     posterior_samples: Any  # tensor of shape [n_particles, height, width, n_frames]: these are used as initial samples for SeqDiff
@@ -375,13 +375,21 @@ def reset_agent_state(agent: Agent, seed, batch_size=None):
     selected_lines, mask_t, saliency_map = agent.initial_action_selection(
         particles=None, current_lines=None, seed=seed
     )
-    mask = fifo_shift(ops.zeros(agent.input_shape), mask_t)
+    image_shape = agent.input_shape[:-1]
+    transition = False
+    buffer_size = n_frames - int(transition)
 
     return AgentState(
         measurement_buffer=FrameBuffer(
-            image_shape=agent.input_shape, batch_size=batch_size, buffer_size=n_frames
+            image_shape=image_shape,
+            batch_size=batch_size,
+            buffer_size=buffer_size,
         ),
-        mask=mask,
+        mask=FrameBuffer(
+            image_shape=image_shape,
+            batch_size=batch_size,
+            buffer_size=buffer_size,
+        ),
         seed=seed,
         selected_lines=selected_lines,
         posterior_samples=None,
@@ -624,10 +632,27 @@ def recover(
 
     seed_1, seed_2, base_seed = split_seed(base_seed, 3)
 
+    transition = False
+    if transition:
+        measurement_buffer_in = ops.concatenate(
+            [
+                measurement_buffer.buffer,
+                ops.zeros(measurement_buffer.shape[:-1] + (1,)),
+            ],
+            axis=-1,
+        )
+        mask_buffer_in = ops.concatenate(
+            [mask.buffer, ops.zeros(mask.shape[:-1] + (1,))],
+            axis=-1,
+        )
+    else:
+        measurement_buffer_in = measurement_buffer.buffer
+        mask_buffer_in = mask.buffer
+
     # 2. recover current beliefs from measurements
     new_posterior_samples = posterior_sample(
-        measurement_buffer.buffer,
-        mask,
+        measurement_buffer_in,
+        mask_buffer_in,
         posterior_samples,
         seed=seed_1,
     )
@@ -637,18 +662,20 @@ def recover(
     new_selected_lines, new_mask_t, saliency_map = action_selection(
         belief_distribution[..., 0], selected_lines, seed_2
     )
-    new_mask = fifo_shift(mask, new_mask_t)
+    mask.shift(new_mask_t)
 
     # 4. create a reconstruction from the beliefs
+    frame_idx = -1 if not transition else -2
     recovered_frame = beliefs_to_recovered_frame(
-        belief_distribution, reconstruction_method=reconstruction_method
+        new_posterior_samples[..., frame_idx, None],
+        reconstruction_method=reconstruction_method,
     )
 
     # 5. update the state
     new_agent_state = replace(
         agent_state,
         measurement_buffer=measurement_buffer,
-        mask=new_mask,
+        mask=mask,
         selected_lines=new_selected_lines,
         posterior_samples=new_posterior_samples,
         belief_distribution=belief_distribution,
@@ -673,30 +700,3 @@ def hard_projection(image, masked_measurements):
         Tensor: The projected image with measurements inserted where they exist
     """
     return ops.where(masked_measurements != 0, masked_measurements, image)
-
-
-class Recover(zea.ops.Operation):
-    def __init__(self, agent: Agent, hard_projection: bool = False, **kwargs):
-        super().__init__(**kwargs)
-        self.agent = agent
-        self.hard_projection = hard_projection
-
-    def call(self, agent_state: AgentState, **kwargs):
-        measurements = kwargs[self.key]  # TODO: are measurements masked here?
-        recovered_frame, new_agent_state = self.agent.recover(measurements, agent_state)
-        if self.hard_projection:
-            recovered_frame = hard_projection(recovered_frame, measurements)
-        return {
-            self.output_key: recovered_frame,
-            "agent_state": new_agent_state,
-        }
-
-
-class AgentMask(zea.ops.Operation):
-    def call(self, agent_state: AgentState, **kwargs):
-        """
-        Returns the current mask of the agent.
-        """
-        data = kwargs[self.key]
-        current_mask = agent_state.mask[..., -1, None]
-        return {self.output_key: data * current_mask}

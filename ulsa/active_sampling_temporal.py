@@ -261,7 +261,7 @@ def run_active_sampling(
 
     def perception_action_step(agent_state: AgentState, target_data):
         # 1. Acquire measurements
-        current_mask = agent_state.mask[..., -1, None]
+        current_mask = agent_state.mask.latest()[..., None]
         measurements, target_img, pipeline_state = acquire(
             target_data, current_mask, agent_state.pipeline_state
         )
