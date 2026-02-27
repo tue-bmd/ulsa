@@ -220,7 +220,7 @@ def first_frames_for_slides(
     scan_convert_order=0,  # fixed to 0 for measurements!
     scan_convert_resolution=0.1,
     interpolation_matplotlib="nearest",
-    context="styles/nvmu.mplstyle",
+    context="styles/slides.mplstyle",
     postfix_filename=None,
 ):
     # Save first target frame as PNG
@@ -395,7 +395,7 @@ def plot_frames_for_presentation(
     scan_convert_resolution=0.1,
     interpolation_matplotlib="nearest",
     image_range=(0, 255),
-    context="styles/nvmu.mplstyle",
+    context="styles/slides.mplstyle",
     drop_first_n_frames=2,
     window_size=7,
     postfix_filename=None,

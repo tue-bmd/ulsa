@@ -6,3 +6,6 @@ ytick.color: white   # color of the ticks
 savefig.transparent: True
 axes.labelcolor: white
 font.serif: Arial
+savefig.dpi: 300
+figure.constrained_layout.use: True
+grid.alpha: 0.3
