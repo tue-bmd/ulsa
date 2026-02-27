@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
+from scipy.stats import wilcoxon
 
 from zea import init_device, log
 
@@ -192,6 +193,92 @@ if __name__ == "__main__":
                     f"{mean:.2f}",
                     f"{std:.2f}",
                     str(count),
+                )
+
+        console = Console()
+        console.print(table)
+
+    # Wilcoxon signed-rank test: Cognitive vs baselines (paired by patient)
+    cognitive_strategy = "greedy_entropy"
+    baseline_strategies = ["uniform_random", "equispaced"]
+
+    for metric_name in ["dice", "psnr", "lpips", "ssim"]:
+        table = Table(
+            title=f"Wilcoxon Signed-Rank Test — {metric_name.upper()} "
+            f"({STRATEGY_NAMES[cognitive_strategy]} vs baselines)",
+            show_lines=True,
+        )
+        table.add_column("Baseline", style="cyan", no_wrap=True)
+        table.add_column(get_axis_label(args.x_axis, AXIS_LABEL_MAP), style="magenta")
+        table.add_column("Cognitive Mean", style="green")
+        table.add_column("Baseline Mean", style="green")
+        table.add_column("N (paired)", style="white")
+        table.add_column("Statistic", style="yellow")
+        table.add_column("p-value", style="bold red")
+        table.add_column("Significant (p<0.05)", style="bold")
+
+        # Build per-patient metric values from the DataFrame
+        metric_col = metric_name
+        if metric_name in ["nrmse", "rmse"]:
+            # These are derived; skip if not a direct column
+            continue
+
+        cog_df = combined_results[
+            combined_results["selection_strategy"] == cognitive_strategy
+        ]
+
+        for baseline in baseline_strategies:
+            base_df = combined_results[
+                combined_results["selection_strategy"] == baseline
+            ]
+            x_values_available = sorted(
+                set(cog_df["x_value"].unique()) & set(base_df["x_value"].unique())
+            )
+
+            for x_val in x_values_available:
+                cog_subset = cog_df[cog_df["x_value"] == x_val][
+                    ["filestem", metric_col]
+                ].dropna()
+                base_subset = base_df[base_df["x_value"] == x_val][
+                    ["filestem", metric_col]
+                ].dropna()
+
+                # Pair by filestem (patient)
+                merged = pd.merge(
+                    cog_subset,
+                    base_subset,
+                    on="filestem",
+                    suffixes=("_cog", "_base"),
+                )
+
+                if len(merged) < 10:
+                    table.add_row(
+                        STRATEGY_NAMES.get(baseline, baseline),
+                        str(x_val),
+                        "-",
+                        "-",
+                        str(len(merged)),
+                        "-",
+                        "-",
+                        f"Too few pairs ({len(merged)})",
+                    )
+                    continue
+
+                cog_values = merged[f"{metric_col}_cog"].values
+                base_values = merged[f"{metric_col}_base"].values
+
+                stat, p_value = wilcoxon(cog_values, base_values)
+                significant = "✓ Yes" if p_value < 0.05 else "✗ No"
+
+                table.add_row(
+                    STRATEGY_NAMES.get(baseline, baseline),
+                    str(x_val),
+                    f"{np.mean(cog_values):.4f}",
+                    f"{np.mean(base_values):.4f}",
+                    str(len(merged)),
+                    f"{stat:.1f}",
+                    f"{p_value:.2e}",
+                    significant,
                 )
 
         console = Console()

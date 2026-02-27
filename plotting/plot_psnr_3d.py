@@ -5,8 +5,10 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from rich.console import Console
 from rich.table import Table
+from scipy.stats import wilcoxon
 
 from zea import init_device, log
 
@@ -28,6 +30,8 @@ AXIS_LABEL_MAP_3D = {
     "n_actions": "# Elevation Planes (out of 48)",
     # Add more mappings as needed
 }
+
+SIGNIFICANCE_LEVEL = 0.01
 
 
 if __name__ == "__main__":
@@ -139,10 +143,11 @@ if __name__ == "__main__":
             )
 
     # Find global min/max for PSNR for consistent binning and ticks
+    hist_data = df_to_dict(combined_results, metric_name)
     all_psnr_values = []
-    for group in combined_results[metric_name]:
-        for x_val in combined_results[metric_name][group]:
-            values = combined_results[metric_name][group][x_val]
+    for group in hist_data:
+        for x_val in hist_data[group]:
+            values = hist_data[group][x_val]
             flat_values = [item for sublist in values for item in sublist]
             all_psnr_values.extend(flat_values)
     global_min = np.min(all_psnr_values)
@@ -164,7 +169,7 @@ if __name__ == "__main__":
         density=True,
     )
     hist_plotter.plot_overlapping_histograms_by_xvalue(
-        combined_results[metric_name],
+        hist_data,
         save_path=f"./3d_{metric_name}_overlapping_histograms.pdf",
         x_label_values=x_values,
         metric_name=formatted_metric_name,
@@ -185,9 +190,10 @@ if __name__ == "__main__":
         table.add_column("Std", style="yellow")
         table.add_column("Count", style="white")
 
-        for group in combined_results[metric_name].keys():
-            for x_value in sorted(combined_results[metric_name][group].keys()):
-                values = combined_results[metric_name][group][x_value]
+        results = df_to_dict(combined_results, metric_name)
+        for group in results.keys():
+            for x_value in sorted(results[group].keys()):
+                values = results[group][x_value]
                 # sequences have different lengths in the 3d case
                 flat_values = [item for sublist in values for item in sublist]
                 mean = np.mean(flat_values)
@@ -199,6 +205,83 @@ if __name__ == "__main__":
                     f"{mean:.2f}",
                     f"{std:.2f}",
                     str(count),
+                )
+
+        console = Console()
+        console.print(table)
+
+    # Wilcoxon signed-rank test: Cognitive vs baselines (paired by volume)
+    cognitive_strategy = "greedy_entropy"
+    baseline_strategies = ["uniform_random", "equispaced"]
+
+    for metric_name in ["psnr", "lpips"]:
+        table = Table(
+            title=f"Wilcoxon Signed-Rank Test — {metric_name.upper()} "
+            f"({STRATEGY_NAMES[cognitive_strategy]} vs baselines)",
+            show_lines=True,
+        )
+        table.add_column("Baseline", style="cyan", no_wrap=True)
+        table.add_column(
+            get_axis_label(args.x_axis, AXIS_LABEL_MAP_3D), style="magenta"
+        )
+        table.add_column("Cognitive Mean", style="green")
+        table.add_column("Baseline Mean", style="green")
+        table.add_column("N (paired)", style="white")
+        table.add_column("Statistic", style="yellow")
+        table.add_column("p-value", style="bold red")
+        table.add_column(f"Significant (p<{SIGNIFICANCE_LEVEL:.2f})", style="bold")
+
+        cog_df = combined_results[
+            combined_results["selection_strategy"] == cognitive_strategy
+        ].copy()
+        # In 3D, metric values can be per-frame arrays; average to one scalar per volume
+        cog_df[metric_name + "_mean"] = cog_df[metric_name].apply(
+            lambda v: np.mean(v) if hasattr(v, "__len__") else v
+        )
+
+        for baseline in baseline_strategies:
+            base_df = combined_results[
+                combined_results["selection_strategy"] == baseline
+            ].copy()
+            base_df[metric_name + "_mean"] = base_df[metric_name].apply(
+                lambda v: np.mean(v) if hasattr(v, "__len__") else v
+            )
+
+            x_values_available = sorted(
+                set(cog_df["x_value"].unique()) & set(base_df["x_value"].unique())
+            )
+
+            for x_val in x_values_available:
+                cog_subset = cog_df[cog_df["x_value"] == x_val][
+                    ["filestem", metric_name + "_mean"]
+                ].dropna()
+                base_subset = base_df[base_df["x_value"] == x_val][
+                    ["filestem", metric_name + "_mean"]
+                ].dropna()
+
+                # Pair by filestem (volume)
+                merged = pd.merge(
+                    cog_subset,
+                    base_subset,
+                    on="filestem",
+                    suffixes=("_cog", "_base"),
+                )
+
+                cog_values = merged[f"{metric_name}_mean_cog"].values
+                base_values = merged[f"{metric_name}_mean_base"].values
+
+                stat, p_value = wilcoxon(cog_values, base_values)
+                significant = "✓ Yes" if p_value < SIGNIFICANCE_LEVEL else "✗ No"
+
+                table.add_row(
+                    STRATEGY_NAMES.get(baseline, baseline),
+                    str(x_val),
+                    f"{np.mean(cog_values):.4f}",
+                    f"{np.mean(base_values):.4f}",
+                    str(len(merged)),
+                    f"{stat:.1f}",
+                    f"{p_value:.2e}",
+                    significant,
                 )
 
         console = Console()
