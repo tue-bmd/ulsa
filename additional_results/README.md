@@ -28,3 +28,8 @@ The figure shows that the reconstruction quality is independent of the patientâ€
 The following figure shows the relation of the number of diffusion steps to the reconstruction quality in terms of PSNR for regular and [SeqDiff](https://ieeexplore.ieee.org/document/10889752/), when using our method, which motivates employing SeqDiff for enhanced reconstruction quality and speed.
 
 <img width="1050" height="750" alt="seqdiff_vs_regular_diffusion" src="https://github.com/user-attachments/assets/21307368-a0ef-4707-967c-4fb81834ad0c" />
+
+### Reconstruction Strategy Comparison: _First Particle_ versus _Posterior Mean_
+Here we show the effect of increasing $N_p$ on reconstruction metrics for both methods of determining a point estimate reconstruction to represent the posterior distribution. The methods are (i) choosing the first particle from the distribution, resulting effectively in a random choice of particle, labelled _Choose First_, and (ii) computing the sample posterior mean from the entire set of particles, labelled _Posterior Mean_. It is clear from the results that _Choose First_ generally achieves improved perceptual loss, at the expense of an increased distortion, both of which are invariant to $N_p$. _Posterior Mean_, on the other hand, is affected by $N_p$, with a slight improvement in distortion but disimprovement in perceptual similarity as $N_p$ increases, demonstrating the perception-distortion trade-off as the reconstruction becomes blurred by averaging across additional particles.
+
+<img width="1038" height="757" alt="choose_first_vs_posterior_mean" src="https://github.com/user-attachments/assets/537a1ffa-be34-4c3e-a5a0-904632ff8eab" />
