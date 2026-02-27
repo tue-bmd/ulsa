@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument(
         "--agent_config_path",
         type=str,
-        default="./configs/cardiac_112_frames_harmonic.yaml",
+        default="./configs/cardiac_112_3_frames_harmonic.yaml",
         help="Path to agent configuration file.",
     )
     parser.add_argument(
