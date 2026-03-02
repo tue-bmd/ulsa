@@ -167,6 +167,17 @@ def annotate_significance(
         ax.set_ylim(ymin, new_ymax)
 
 
+AXIS_LABEL_MAP_3D = {
+    "n_actions": "# Elevation Planes (out of 48)",
+}
+
+
+def get_axis_label_3d(key):
+    """Get friendly label for axis keys."""
+    base_key = key.split(".")[-1]
+    return AXIS_LABEL_MAP_3D.get(base_key, base_key.replace("_", " ").title())
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
