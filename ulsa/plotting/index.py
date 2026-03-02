@@ -323,6 +323,6 @@ def df_to_dict(df: pd.DataFrame, metric_name: str, filter_nan=True):
             result[strategy] = {}
         if x_value not in result[strategy]:
             result[strategy][x_value] = []
-        result[strategy][x_value].append(value)
+        result[strategy][x_value].append(np.mean(value))
 
     return result

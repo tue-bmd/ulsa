@@ -34,6 +34,139 @@ AXIS_LABEL_MAP_3D = {
 SIGNIFICANCE_LEVEL = 0.01
 
 
+def compute_paired_wilcoxon(
+    combined_results, metrics, cognitive_strategy, baseline_strategies
+):
+    """Compute paired Wilcoxon signed-rank tests between cognitive and baselines.
+
+    Returns:
+        dict: {(metric, baseline, x_val): (stat, p_value, n_pairs, cog_mean, base_mean)}
+    """
+    results = {}
+    cog_df = combined_results[
+        combined_results["selection_strategy"] == cognitive_strategy
+    ].copy()
+
+    for metric_name in metrics:
+        cog_df[metric_name + "_mean"] = cog_df[metric_name].apply(
+            lambda v: np.mean(v) if hasattr(v, "__len__") else v
+        )
+        for baseline in baseline_strategies:
+            base_df = combined_results[
+                combined_results["selection_strategy"] == baseline
+            ].copy()
+            base_df[metric_name + "_mean"] = base_df[metric_name].apply(
+                lambda v: np.mean(v) if hasattr(v, "__len__") else v
+            )
+            x_values_available = sorted(
+                set(cog_df["x_value"].unique()) & set(base_df["x_value"].unique())
+            )
+            for x_val in x_values_available:
+                cog_subset = cog_df[cog_df["x_value"] == x_val][
+                    ["filestem", metric_name + "_mean"]
+                ].dropna()
+                base_subset = base_df[base_df["x_value"] == x_val][
+                    ["filestem", metric_name + "_mean"]
+                ].dropna()
+                merged = pd.merge(
+                    cog_subset,
+                    base_subset,
+                    on="filestem",
+                    suffixes=("_cog", "_base"),
+                )
+                if len(merged) < 2:
+                    continue
+                cog_values = merged[f"{metric_name}_mean_cog"].values
+                base_values = merged[f"{metric_name}_mean_base"].values
+                stat, p_value = wilcoxon(cog_values, base_values)
+                results[(metric_name, baseline, x_val)] = (
+                    stat,
+                    p_value,
+                    len(merged),
+                    np.mean(cog_values),
+                    np.mean(base_values),
+                )
+    return results
+
+
+def annotate_significance(
+    ax,
+    wilcoxon_results,
+    metric_name,
+    sorted_groups,
+    x_label_values,
+    cognitive_strategy,
+    baseline_strategies,
+    width=0.5,
+):
+    """Add significance brackets (* p<0.05, ** p<0.01) to a violin plot axis."""
+    plot_positions = np.arange(len(x_label_values))
+    x_value_to_pos = dict(zip(x_label_values, plot_positions))
+
+    n_groups = len(sorted_groups)
+    if n_groups == 2:
+        group_offset = np.linspace(-width / 4, width / 4, 2)
+    else:
+        group_offset = np.linspace(-width / 2, width / 2, n_groups)
+
+    group_to_idx = {g: i for i, g in enumerate(sorted_groups)}
+    cog_idx = group_to_idx.get(cognitive_strategy)
+    if cog_idx is None:
+        return
+
+    ymin, ymax = ax.get_ylim()
+    y_range = ymax - ymin
+    bracket_height = 0.02 * y_range
+    bracket_spacing = 0.07 * y_range
+
+    max_level = 0
+    for x_val in x_label_values:
+        x_pos = x_value_to_pos[x_val]
+        level = 0
+        for baseline in baseline_strategies:
+            base_idx = group_to_idx.get(baseline)
+            if base_idx is None:
+                continue
+            key = (metric_name, baseline, x_val)
+            if key not in wilcoxon_results:
+                continue
+            _, p_value, _, _, _ = wilcoxon_results[key]
+            if p_value >= 0.05:
+                continue
+
+            stars = "**" if p_value < 0.01 else "*"
+
+            x1 = x_pos + group_offset[cog_idx]
+            x2 = x_pos + group_offset[base_idx]
+            y = ymax + level * bracket_spacing
+
+            ax.plot(
+                [x1, x1, x2, x2],
+                [y, y + bracket_height, y + bracket_height, y],
+                lw=0.8,
+                c="k",
+                clip_on=False,
+                marker="",
+                linestyle="-" if p_value < 0.01 else "--",
+            )
+            ax.text(
+                (x1 + x2) / 2,
+                y + bracket_height / 4,
+                stars,
+                ha="center",
+                va="bottom",
+                fontsize=7,
+            )
+
+            level += 1
+            max_level = max(max_level, level)
+
+    # Expand ylim to fit annotations
+    if max_level > 0:
+        new_ymax = ymax + max_level * bracket_spacing + bracket_height * 2
+        ax.set_ylim(ymin, new_ymax)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -56,6 +189,13 @@ if __name__ == "__main__":
         SWEEPS,
         keys_to_extract=keys_to_extract,
         x_axis_key=args.x_axis,
+    )
+
+    # Precompute Wilcoxon tests for significance annotations and tables
+    cognitive_strategy = "greedy_entropy"
+    baseline_strategies = ["uniform_random", "equispaced"]
+    wilcoxon_results = compute_paired_wilcoxon(
+        combined_results, keys_to_extract, cognitive_strategy, baseline_strategies
     )
 
     plotter = ViolinPlotter(
@@ -127,6 +267,17 @@ if __name__ == "__main__":
             ax=axs[1],
             legend_kwargs=None,
         )
+        # Add significance annotations (* p<0.05, ** p<0.01)
+        for ax_i, mn in zip(axs, ["psnr", "lpips"]):
+            annotate_significance(
+                ax_i,
+                wilcoxon_results,
+                mn,
+                order_by,
+                x_values,
+                cognitive_strategy,
+                baseline_strategies,
+            )
         h, l = axs[0].get_legend_handles_labels()
         fig.legend(
             h,
@@ -143,41 +294,41 @@ if __name__ == "__main__":
             )
 
     # Find global min/max for PSNR for consistent binning and ticks
-    hist_data = df_to_dict(combined_results, metric_name)
-    all_psnr_values = []
-    for group in hist_data:
-        for x_val in hist_data[group]:
-            values = hist_data[group][x_val]
-            flat_values = [item for sublist in values for item in sublist]
-            all_psnr_values.extend(flat_values)
-    global_min = np.min(all_psnr_values)
-    global_max = np.max(all_psnr_values)
-    bins = 30
-    bin_edges = np.linspace(global_min, global_max, bins + 1)
+    # hist_data = df_to_dict(combined_results, metric_name)
+    # all_psnr_values = []
+    # for group in hist_data:
+    #     for x_val in hist_data[group]:
+    #         values = hist_data[group][x_val]
+    #         flat_values = [item for sublist in values for item in sublist]
+    #         all_psnr_values.extend(flat_values)
+    # global_min = np.min(all_psnr_values)
+    # global_max = np.max(all_psnr_values)
+    # bins = 30
+    # bin_edges = np.linspace(global_min, global_max, bins + 1)
 
-    # Overlapping histogram plot (new)
-    hist_plotter = OverlappingHistogramPlotter(
-        xlabel="# Elevation Planes (out of 48)",
-        group_names=STRATEGY_NAMES,
-        group_colors=STRATEGY_COLORS,
-        context="styles/ieee-tmi.mplstyle",
-        alpha=0.4,
-        kde=True,
-        kde_lw=2,
-        figsize=(6, 5),
-        bins=bins,
-        density=True,
-    )
-    hist_plotter.plot_overlapping_histograms_by_xvalue(
-        hist_data,
-        save_path=f"./3d_{metric_name}_overlapping_histograms.pdf",
-        x_label_values=x_values,
-        metric_name=formatted_metric_name,
-        outer_y_label="# Elevation Planes",  # Large label for the stack
-        inner_y_label="Density",  # Small repeated label for each subplot
-        bin_edges=bin_edges,
-        density=True,
-    )
+    # # Overlapping histogram plot (new)
+    # hist_plotter = OverlappingHistogramPlotter(
+    #     xlabel="# Elevation Planes (out of 48)",
+    #     group_names=STRATEGY_NAMES,
+    #     group_colors=STRATEGY_COLORS,
+    #     context="styles/ieee-tmi.mplstyle",
+    #     alpha=0.4,
+    #     kde=True,
+    #     kde_lw=2,
+    #     figsize=(6, 5),
+    #     bins=bins,
+    #     density=True,
+    # )
+    # hist_plotter.plot_overlapping_histograms_by_xvalue(
+    #     hist_data,
+    #     save_path=f"./3d_{metric_name}_overlapping_histograms.pdf",
+    #     x_label_values=x_values,
+    #     metric_name=formatted_metric_name,
+    #     outer_y_label="# Elevation Planes",  # Large label for the stack
+    #     inner_y_label="Density",  # Small repeated label for each subplot
+    #     bin_edges=bin_edges,
+    #     density=True,
+    # )
 
     # Print results in a table format
     for metric_name in ["psnr"]:
@@ -195,10 +346,10 @@ if __name__ == "__main__":
             for x_value in sorted(results[group].keys()):
                 values = results[group][x_value]
                 # sequences have different lengths in the 3d case
-                flat_values = [item for sublist in values for item in sublist]
-                mean = np.mean(flat_values)
-                std = np.std(flat_values)
-                count = len(flat_values)
+                # flat_values = [item for sublist in values for item in sublist]
+                mean = np.mean(values)
+                std = np.std(values)
+                count = len(values)
                 table.add_row(
                     str(STRATEGY_NAMES.get(group, group)),
                     str(x_value),
@@ -210,10 +361,7 @@ if __name__ == "__main__":
         console = Console()
         console.print(table)
 
-    # Wilcoxon signed-rank test: Cognitive vs baselines (paired by volume)
-    cognitive_strategy = "greedy_entropy"
-    baseline_strategies = ["uniform_random", "equispaced"]
-
+    # Wilcoxon signed-rank test table (using precomputed results)
     for metric_name in ["psnr", "lpips"]:
         table = Table(
             title=f"Wilcoxon Signed-Rank Test — {metric_name.upper()} "
@@ -231,54 +379,23 @@ if __name__ == "__main__":
         table.add_column("p-value", style="bold red")
         table.add_column(f"Significant (p<{SIGNIFICANCE_LEVEL:.2f})", style="bold")
 
-        cog_df = combined_results[
-            combined_results["selection_strategy"] == cognitive_strategy
-        ].copy()
-        # In 3D, metric values can be per-frame arrays; average to one scalar per volume
-        cog_df[metric_name + "_mean"] = cog_df[metric_name].apply(
-            lambda v: np.mean(v) if hasattr(v, "__len__") else v
-        )
-
         for baseline in baseline_strategies:
-            base_df = combined_results[
-                combined_results["selection_strategy"] == baseline
-            ].copy()
-            base_df[metric_name + "_mean"] = base_df[metric_name].apply(
-                lambda v: np.mean(v) if hasattr(v, "__len__") else v
+            x_vals_for_baseline = sorted(
+                x_val
+                for (mn, bl, x_val) in wilcoxon_results
+                if mn == metric_name and bl == baseline
             )
-
-            x_values_available = sorted(
-                set(cog_df["x_value"].unique()) & set(base_df["x_value"].unique())
-            )
-
-            for x_val in x_values_available:
-                cog_subset = cog_df[cog_df["x_value"] == x_val][
-                    ["filestem", metric_name + "_mean"]
-                ].dropna()
-                base_subset = base_df[base_df["x_value"] == x_val][
-                    ["filestem", metric_name + "_mean"]
-                ].dropna()
-
-                # Pair by filestem (volume)
-                merged = pd.merge(
-                    cog_subset,
-                    base_subset,
-                    on="filestem",
-                    suffixes=("_cog", "_base"),
-                )
-
-                cog_values = merged[f"{metric_name}_mean_cog"].values
-                base_values = merged[f"{metric_name}_mean_base"].values
-
-                stat, p_value = wilcoxon(cog_values, base_values)
+            for x_val in x_vals_for_baseline:
+                stat, p_value, n_pairs, cog_mean, base_mean = wilcoxon_results[
+                    (metric_name, baseline, x_val)
+                ]
                 significant = "✓ Yes" if p_value < SIGNIFICANCE_LEVEL else "✗ No"
-
                 table.add_row(
                     STRATEGY_NAMES.get(baseline, baseline),
                     str(x_val),
-                    f"{np.mean(cog_values):.4f}",
-                    f"{np.mean(base_values):.4f}",
-                    str(len(merged)),
+                    f"{cog_mean:.4f}",
+                    f"{base_mean:.4f}",
+                    str(n_pairs),
                     f"{stat:.1f}",
                     f"{p_value:.2e}",
                     significant,
