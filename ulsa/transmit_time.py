@@ -1,9 +1,25 @@
 """Simple script to calculate transmit time for ultrasound imaging."""
 
+import numpy as np
+
+
+def n_lines(
+    sound_speed=1540,
+    aperture=0.02,
+    center_frequency=3e6,
+    sector_deg=83,
+):
+    """Calculate the number of lines that have to be acquired for a given aperture and center frequency."""
+    wavelength = sound_speed / center_frequency
+    angular_resolution = np.rad2deg(np.arcsin(wavelength / aperture))
+    n_lines = int(sector_deg * 2 / angular_resolution)
+    print(f"Number of lines that have to be acquired: {n_lines}")
+    return n_lines
+
 
 def max_fps(
     depth=0.15,
-    speed_of_sound=1540,
+    sound_speed=1540,
     n_tx=112,
     processing_overhead=1.0,
     verbose=True,
@@ -13,14 +29,14 @@ def max_fps(
 
     Parameters:
         depth (float): Imaging depth in meters. Default is 0.15 m (15 cm) for cardiac imaging.
-        speed_of_sound (float): Speed of sound in the medium in m/s.
+        sound_speed (float): Speed of sound in the medium in m/s.
             Default is 1540 m/s for soft tissue.
         n_tx (int): Number of transmits per frame.
             Default is 112 for a typical cardiac ultrasound probe.
         processing_overhead (float): Multiplier to account for processing overhead per transmit.
         verbose (bool): If True, print detailed timing information.
     """
-    transmit_time = (2 * depth) / speed_of_sound  # Convert cm to m
+    transmit_time = (2 * depth) / sound_speed
     transmit_time *= processing_overhead
 
     if verbose:
@@ -39,4 +55,4 @@ def max_fps(
 
 
 if __name__ == "__main__":
-    max_fps()
+    max_fps(n_tx=n_lines())
