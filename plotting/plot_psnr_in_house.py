@@ -95,7 +95,7 @@ combined_results = extract_sweep_data(
     keys_to_extract=["mse", "psnr", "dice", "lpips", "ssim"],
     x_axis_key="action_selection.n_actions",
 )
-metrics = ["lpips", "psnr"]
+metrics_ordered = ["psnr", "lpips"]  # PSNR top row, LPIPS bottom row
 
 
 # add RMSE
@@ -103,7 +103,10 @@ combined_results["rmse"] = np.sqrt(combined_results["mse"] / (255**2))
 
 
 wilcoxon_results = compute_paired_wilcoxon(
-    combined_results, metrics, "greedy_entropy", ["uniform_random", "equispaced"]
+    combined_results,
+    metrics_ordered,
+    "greedy_entropy",
+    ["uniform_random", "equispaced"],
 )
 print("Wilcoxon results:")
 for (metric_name, baseline, x_val), (
@@ -119,7 +122,7 @@ for (metric_name, baseline, x_val), (
 
 
 rng = np.random.default_rng(42)
-metrics_ordered = ["psnr", "lpips"]  # PSNR top row, LPIPS bottom row
+
 
 with plt.style.context("styles/ieee-tmi.mplstyle"):
     # Create paired dot plot with 2 rows (metrics) x 3 cols (x_values)

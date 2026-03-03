@@ -105,8 +105,13 @@ if __name__ == "__main__":
             acq_methods=acq_method,
         )
 
+        gcnr_improvement_absolute = mean_gcnr_act - mean_gcnr_div
         gcnr_improvement = ((mean_gcnr_act - mean_gcnr_div) / mean_gcnr_div) * 100.0
-        print(f"-- gCNR improvement ({acq_method}): {gcnr_improvement:.2f}%")
+        acq_method_str = " & ".join(acq_method)
+        print(
+            f"-- gCNR improvement (absolute) ({acq_method_str}): {gcnr_improvement_absolute:.4f}"
+        )
+        print(f"-- gCNR improvement ({acq_method_str}): {gcnr_improvement:.2f}%")
 
     group_names.update(group_names_hi)
 
