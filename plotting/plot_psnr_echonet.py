@@ -48,6 +48,46 @@ AXIS_LABEL_MAP = {
     # Add more mappings as needed
 }
 
+HIGHER_IS_BETTER = {
+    "psnr": True,
+    "ssim": True,
+    "dice": True,
+    "lpips": False,
+    "nrmse": False,
+    "rmse": False,
+    "mse": False,
+}
+
+
+def compute_win_rate(
+    cog_values: np.ndarray,
+    base_values: np.ndarray,
+    higher_is_better: bool = True,
+) -> tuple[int, int, int, int, float]:
+    """
+    Compute how many times the cognitive strategy beats, ties, or loses to the baseline.
+
+    Args:
+        cog_values: Array of metric values for the cognitive strategy (paired by patient).
+        base_values: Array of metric values for the baseline strategy (paired by patient).
+        higher_is_better: If True, cognitive wins when cog > base. If False, wins when cog < base.
+
+    Returns:
+        (wins, ties, losses, total, win_rate) where win_rate = wins / total.
+    """
+    assert len(cog_values) == len(base_values), "Arrays must be the same length."
+    diff = cog_values - base_values
+    if higher_is_better:
+        wins = int(np.sum(diff > 0))
+        losses = int(np.sum(diff < 0))
+    else:
+        wins = int(np.sum(diff < 0))
+        losses = int(np.sum(diff > 0))
+    ties = int(np.sum(diff == 0))
+    total = len(diff)
+    win_rate = wins / total if total > 0 else 0.0
+    return wins, ties, losses, total, win_rate
+
 
 def _log_too_many_blobs_count(results_df: pd.DataFrame):
     unique_filestems = results_df["filestem"].unique()
@@ -213,6 +253,8 @@ if __name__ == "__main__":
         table.add_column("Cognitive Mean", style="green")
         table.add_column("Baseline Mean", style="green")
         table.add_column("N (paired)", style="white")
+        table.add_column("Wins/Ties/Losses", style="blue")
+        table.add_column("Win Rate", style="bold blue")
         table.add_column("Statistic", style="yellow")
         table.add_column("p-value", style="bold red")
         table.add_column("Significant (p<0.05)", style="bold")
@@ -270,12 +312,20 @@ if __name__ == "__main__":
                 stat, p_value = wilcoxon(cog_values, base_values)
                 significant = "✓ Yes" if p_value < 0.05 else "✗ No"
 
+                wins, ties, losses, total, win_rate = compute_win_rate(
+                    cog_values,
+                    base_values,
+                    higher_is_better=HIGHER_IS_BETTER.get(metric_name, True),
+                )
+
                 table.add_row(
                     STRATEGY_NAMES.get(baseline, baseline),
                     str(x_val),
                     f"{np.mean(cog_values):.4f}",
                     f"{np.mean(base_values):.4f}",
                     str(len(merged)),
+                    f"{wins}/{ties}/{losses}",
+                    f"{win_rate:.1%}",
                     f"{stat:.1f}",
                     f"{p_value:.2e}",
                     significant,
