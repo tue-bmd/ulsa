@@ -445,6 +445,7 @@ def setup_agent(
             },  # we jit later
             operator=get_operator_dict(agent_config),
         )
+        # model.summary() # to show the number of parameters and layers in the model
 
     n_particles = agent_config.diffusion_inference.batch_size
 
