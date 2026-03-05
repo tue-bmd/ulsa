@@ -104,6 +104,133 @@ def _log_too_many_blobs_count(results_df: pd.DataFrame):
     )
 
 
+def compute_paired_winrate(
+    combined_results, metrics, cognitive_strategy, baseline_strategies
+):
+    """Compute paired win rates between cognitive and baseline strategies.
+
+    Returns:
+        dict: {(metric, baseline, x_val): (wins, ties, losses, total, win_rate)}
+    """
+    results = {}
+    cog_df = combined_results[
+        combined_results["selection_strategy"] == cognitive_strategy
+    ].copy()
+
+    for metric_name in metrics:
+        for baseline in baseline_strategies:
+            base_df = combined_results[
+                combined_results["selection_strategy"] == baseline
+            ].copy()
+            x_values_available = sorted(
+                set(cog_df["x_value"].unique()) & set(base_df["x_value"].unique())
+            )
+            for x_val in x_values_available:
+                cog_subset = cog_df[cog_df["x_value"] == x_val][
+                    ["filestem", metric_name]
+                ].dropna()
+                base_subset = base_df[base_df["x_value"] == x_val][
+                    ["filestem", metric_name]
+                ].dropna()
+                merged = pd.merge(
+                    cog_subset,
+                    base_subset,
+                    on="filestem",
+                    suffixes=("_cog", "_base"),
+                )
+                if len(merged) < 2:
+                    continue
+                cog_values = merged[f"{metric_name}_cog"].values
+                base_values = merged[f"{metric_name}_base"].values
+                higher = HIGHER_IS_BETTER.get(metric_name, True)
+                wins, ties, losses, total, win_rate = compute_win_rate(
+                    cog_values, base_values, higher_is_better=higher
+                )
+                results[(metric_name, baseline, x_val)] = (
+                    wins,
+                    ties,
+                    losses,
+                    total,
+                    win_rate,
+                )
+    return results
+
+
+def annotate_winrate(
+    ax,
+    winrate_results,
+    metric_name,
+    sorted_groups,
+    x_label_values,
+    cognitive_strategy,
+    baseline_strategies,
+    width=0.5,
+):
+    """Add win-rate brackets to a violin plot axis, using the same style as
+    significance brackets in the 3D plot."""
+    plot_positions = np.arange(len(x_label_values))
+    x_value_to_pos = dict(zip(x_label_values, plot_positions))
+
+    n_groups = len(sorted_groups)
+    if n_groups == 2:
+        group_offset = np.linspace(-width / 4, width / 4, 2)
+    else:
+        group_offset = np.linspace(-width / 2, width / 2, n_groups)
+
+    group_to_idx = {g: i for i, g in enumerate(sorted_groups)}
+    cog_idx = group_to_idx.get(cognitive_strategy)
+    if cog_idx is None:
+        return
+
+    ymin, ymax = ax.get_ylim()
+    y_range = ymax - ymin
+    bracket_height = 0.02 * y_range
+    bracket_spacing = 0.07 * y_range
+
+    max_level = 0
+    for x_val in x_label_values:
+        x_pos = x_value_to_pos[x_val]
+        level = 0
+        for baseline in baseline_strategies:
+            base_idx = group_to_idx.get(baseline)
+            if base_idx is None:
+                continue
+            key = (metric_name, baseline, x_val)
+            if key not in winrate_results:
+                continue
+            wins, ties, losses, total, win_rate = winrate_results[key]
+
+            x1 = x_pos + group_offset[cog_idx]
+            x2 = x_pos + group_offset[base_idx]
+            y = ymax + level * bracket_spacing
+
+            ax.plot(
+                [x1, x1, x2, x2],
+                [y, y + bracket_height, y + bracket_height, y],
+                lw=0.8,
+                c="k",
+                clip_on=False,
+                marker="",
+                linestyle="-",
+            )
+            ax.text(
+                (x1 + x2) / 2,
+                y + bracket_height,
+                f"{win_rate:.1%}",
+                ha="center",
+                va="bottom",
+                fontsize=5,
+            )
+
+            level += 1
+            max_level = max(max_level, level)
+
+    # Expand ylim to fit annotations
+    if max_level > 0:
+        new_ymax = ymax + max_level * bracket_spacing + bracket_height * 2
+        ax.set_ylim(ymin, new_ymax)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -132,6 +259,17 @@ if __name__ == "__main__":
     # Combined LPIPS and PSNR
     plt.close("all")
     x_values = [7, 14, 28]
+
+    # Precompute win rates for annotation brackets
+    cognitive_strategy = "greedy_entropy"
+    baseline_strategies = ["uniform_random", "equispaced"]
+    winrate_results = compute_paired_winrate(
+        combined_results,
+        ["psnr", "lpips"],
+        cognitive_strategy,
+        baseline_strategies,
+    )
+
     with plt.style.context("styles/ieee-tmi.mplstyle"):
         fig, axs = plt.subplots(1, 2)
         metric_name = "psnr"
@@ -159,6 +297,17 @@ if __name__ == "__main__":
             ax=axs[1],
             legend_kwargs=None,
         )
+        # Add win-rate brackets
+        for ax_i, mn in zip(axs, ["psnr", "lpips"]):
+            annotate_winrate(
+                ax_i,
+                winrate_results,
+                mn,
+                order_by,
+                x_values,
+                cognitive_strategy,
+                baseline_strategies,
+            )
         h, l = axs[0].get_legend_handles_labels()
         fig.legend(
             h,
