@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
+from scipy.stats import wilcoxon
 
 from zea import init_device, log
 
@@ -47,6 +48,46 @@ AXIS_LABEL_MAP = {
     # Add more mappings as needed
 }
 
+HIGHER_IS_BETTER = {
+    "psnr": True,
+    "ssim": True,
+    "dice": True,
+    "lpips": False,
+    "nrmse": False,
+    "rmse": False,
+    "mse": False,
+}
+
+
+def compute_win_rate(
+    cog_values: np.ndarray,
+    base_values: np.ndarray,
+    higher_is_better: bool = True,
+) -> tuple[int, int, int, int, float]:
+    """
+    Compute how many times the cognitive strategy beats, ties, or loses to the baseline.
+
+    Args:
+        cog_values: Array of metric values for the cognitive strategy (paired by patient).
+        base_values: Array of metric values for the baseline strategy (paired by patient).
+        higher_is_better: If True, cognitive wins when cog > base. If False, wins when cog < base.
+
+    Returns:
+        (wins, ties, losses, total, win_rate) where win_rate = wins / total.
+    """
+    assert len(cog_values) == len(base_values), "Arrays must be the same length."
+    diff = cog_values - base_values
+    if higher_is_better:
+        wins = int(np.sum(diff > 0))
+        losses = int(np.sum(diff < 0))
+    else:
+        wins = int(np.sum(diff < 0))
+        losses = int(np.sum(diff > 0))
+    ties = int(np.sum(diff == 0))
+    total = len(diff)
+    win_rate = wins / total if total > 0 else 0.0
+    return wins, ties, losses, total, win_rate
+
 
 def _log_too_many_blobs_count(results_df: pd.DataFrame):
     unique_filestems = results_df["filestem"].unique()
@@ -61,6 +102,133 @@ def _log_too_many_blobs_count(results_df: pd.DataFrame):
     log.info(
         f"Skipped a total of {unique_files_skipped} files due to poor segmentation masks."
     )
+
+
+def compute_paired_winrate(
+    combined_results, metrics, cognitive_strategy, baseline_strategies
+):
+    """Compute paired win rates between cognitive and baseline strategies.
+
+    Returns:
+        dict: {(metric, baseline, x_val): (wins, ties, losses, total, win_rate)}
+    """
+    results = {}
+    cog_df = combined_results[
+        combined_results["selection_strategy"] == cognitive_strategy
+    ].copy()
+
+    for metric_name in metrics:
+        for baseline in baseline_strategies:
+            base_df = combined_results[
+                combined_results["selection_strategy"] == baseline
+            ].copy()
+            x_values_available = sorted(
+                set(cog_df["x_value"].unique()) & set(base_df["x_value"].unique())
+            )
+            for x_val in x_values_available:
+                cog_subset = cog_df[cog_df["x_value"] == x_val][
+                    ["filestem", metric_name]
+                ].dropna()
+                base_subset = base_df[base_df["x_value"] == x_val][
+                    ["filestem", metric_name]
+                ].dropna()
+                merged = pd.merge(
+                    cog_subset,
+                    base_subset,
+                    on="filestem",
+                    suffixes=("_cog", "_base"),
+                )
+                if len(merged) < 2:
+                    continue
+                cog_values = merged[f"{metric_name}_cog"].values
+                base_values = merged[f"{metric_name}_base"].values
+                higher = HIGHER_IS_BETTER.get(metric_name, True)
+                wins, ties, losses, total, win_rate = compute_win_rate(
+                    cog_values, base_values, higher_is_better=higher
+                )
+                results[(metric_name, baseline, x_val)] = (
+                    wins,
+                    ties,
+                    losses,
+                    total,
+                    win_rate,
+                )
+    return results
+
+
+def annotate_winrate(
+    ax,
+    winrate_results,
+    metric_name,
+    sorted_groups,
+    x_label_values,
+    cognitive_strategy,
+    baseline_strategies,
+    width=0.5,
+):
+    """Add win-rate brackets to a violin plot axis, using the same style as
+    significance brackets in the 3D plot."""
+    plot_positions = np.arange(len(x_label_values))
+    x_value_to_pos = dict(zip(x_label_values, plot_positions))
+
+    n_groups = len(sorted_groups)
+    if n_groups == 2:
+        group_offset = np.linspace(-width / 4, width / 4, 2)
+    else:
+        group_offset = np.linspace(-width / 2, width / 2, n_groups)
+
+    group_to_idx = {g: i for i, g in enumerate(sorted_groups)}
+    cog_idx = group_to_idx.get(cognitive_strategy)
+    if cog_idx is None:
+        return
+
+    ymin, ymax = ax.get_ylim()
+    y_range = ymax - ymin
+    bracket_height = 0.02 * y_range
+    bracket_spacing = 0.07 * y_range
+
+    max_level = 0
+    for x_val in x_label_values:
+        x_pos = x_value_to_pos[x_val]
+        level = 0
+        for baseline in baseline_strategies:
+            base_idx = group_to_idx.get(baseline)
+            if base_idx is None:
+                continue
+            key = (metric_name, baseline, x_val)
+            if key not in winrate_results:
+                continue
+            wins, ties, losses, total, win_rate = winrate_results[key]
+
+            x1 = x_pos + group_offset[cog_idx]
+            x2 = x_pos + group_offset[base_idx]
+            y = ymax + level * bracket_spacing
+
+            ax.plot(
+                [x1, x1, x2, x2],
+                [y, y + bracket_height, y + bracket_height, y],
+                lw=0.8,
+                c="k",
+                clip_on=False,
+                marker="",
+                linestyle="-",
+            )
+            ax.text(
+                (x1 + x2) / 2,
+                y + bracket_height,
+                f"{win_rate:.1%}",
+                ha="center",
+                va="bottom",
+                fontsize=5,
+            )
+
+            level += 1
+            max_level = max(max_level, level)
+
+    # Expand ylim to fit annotations
+    if max_level > 0:
+        new_ymax = ymax + max_level * bracket_spacing + bracket_height * 2
+        ax.set_ylim(ymin, new_ymax)
 
 
 if __name__ == "__main__":
@@ -91,6 +259,17 @@ if __name__ == "__main__":
     # Combined LPIPS and PSNR
     plt.close("all")
     x_values = [7, 14, 28]
+
+    # Precompute win rates for annotation brackets
+    cognitive_strategy = "greedy_entropy"
+    baseline_strategies = ["uniform_random", "equispaced"]
+    winrate_results = compute_paired_winrate(
+        combined_results,
+        ["psnr", "lpips", "dice"],
+        cognitive_strategy,
+        baseline_strategies,
+    )
+
     with plt.style.context("styles/ieee-tmi.mplstyle"):
         fig, axs = plt.subplots(1, 2)
         metric_name = "psnr"
@@ -118,6 +297,17 @@ if __name__ == "__main__":
             ax=axs[1],
             legend_kwargs=None,
         )
+        # Add win-rate brackets
+        for ax_i, mn in zip(axs, ["psnr", "lpips"]):
+            annotate_winrate(
+                ax_i,
+                winrate_results,
+                mn,
+                order_by,
+                x_values,
+                cognitive_strategy,
+                baseline_strategies,
+            )
         h, l = axs[0].get_legend_handles_labels()
         fig.legend(
             h,
@@ -137,20 +327,38 @@ if __name__ == "__main__":
     metric_name = "dice"
     x_values = [2, 4, 7, 14]
     formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
-    plotter.plot(
-        df_to_dict(combined_results, metric_name),
-        save_path=f"./echonet_{metric_name}_violin_plot.pdf",
-        x_label_values=x_values,
-        metric_name=formatted_metric_name,
-        groups_to_plot=STRATEGIES_TO_PLOT,
-        ylim=[0.58, 1.02],
-        legend_kwargs={
-            "loc": "outside upper center",
-            "ncol": 3,
-            "frameon": False,
-        },
-        order_by=order_by,
-    )
+    with plt.style.context("styles/ieee-tmi.mplstyle"):
+        fig, ax = plt.subplots()
+        plotter.plot(
+            df_to_dict(combined_results, metric_name),
+            save_path=None,
+            x_label_values=x_values,
+            metric_name=formatted_metric_name,
+            groups_to_plot=STRATEGIES_TO_PLOT,
+            ylim=[0.58, 1.02],
+            ax=ax,
+            legend_kwargs=None,
+            order_by=order_by,
+        )
+        annotate_winrate(
+            ax,
+            winrate_results,
+            metric_name,
+            order_by,
+            x_values,
+            cognitive_strategy,
+            baseline_strategies,
+        )
+        fig.legend(
+            *ax.get_legend_handles_labels(),
+            loc="outside upper center",
+            ncol=3,
+            frameon=False,
+        )
+        save_path = f"./echonet_{metric_name}_violin_plot.pdf"
+        plt.savefig(save_path)
+        plt.close()
+        log.info(f"Saved DICE violin plot to {log.yellow(save_path)}")
 
     # Individual metrics plots
     x_values = [4, 7, 14, 28]
@@ -192,6 +400,102 @@ if __name__ == "__main__":
                     f"{mean:.2f}",
                     f"{std:.2f}",
                     str(count),
+                )
+
+        console = Console()
+        console.print(table)
+
+    # Wilcoxon signed-rank test: Cognitive vs baselines (paired by patient)
+    cognitive_strategy = "greedy_entropy"
+    baseline_strategies = ["uniform_random", "equispaced"]
+
+    for metric_name in ["dice", "psnr", "lpips", "ssim"]:
+        table = Table(
+            title=f"Wilcoxon Signed-Rank Test — {metric_name.upper()} "
+            f"({STRATEGY_NAMES[cognitive_strategy]} vs baselines)",
+            show_lines=True,
+        )
+        table.add_column("Baseline", style="cyan", no_wrap=True)
+        table.add_column(get_axis_label(args.x_axis, AXIS_LABEL_MAP), style="magenta")
+        table.add_column("Cognitive Mean", style="green")
+        table.add_column("Baseline Mean", style="green")
+        table.add_column("N (paired)", style="white")
+        table.add_column("Wins/Ties/Losses", style="blue")
+        table.add_column("Win Rate", style="bold blue")
+        table.add_column("Statistic", style="yellow")
+        table.add_column("p-value", style="bold red")
+        table.add_column("Significant (p<0.05)", style="bold")
+
+        # Build per-patient metric values from the DataFrame
+        metric_col = metric_name
+        if metric_name in ["nrmse", "rmse"]:
+            # These are derived; skip if not a direct column
+            continue
+
+        cog_df = combined_results[
+            combined_results["selection_strategy"] == cognitive_strategy
+        ]
+
+        for baseline in baseline_strategies:
+            base_df = combined_results[
+                combined_results["selection_strategy"] == baseline
+            ]
+            x_values_available = sorted(
+                set(cog_df["x_value"].unique()) & set(base_df["x_value"].unique())
+            )
+
+            for x_val in x_values_available:
+                cog_subset = cog_df[cog_df["x_value"] == x_val][
+                    ["filestem", metric_col]
+                ].dropna()
+                base_subset = base_df[base_df["x_value"] == x_val][
+                    ["filestem", metric_col]
+                ].dropna()
+
+                # Pair by filestem (patient)
+                merged = pd.merge(
+                    cog_subset,
+                    base_subset,
+                    on="filestem",
+                    suffixes=("_cog", "_base"),
+                )
+
+                if len(merged) < 10:
+                    table.add_row(
+                        STRATEGY_NAMES.get(baseline, baseline),
+                        str(x_val),
+                        "-",
+                        "-",
+                        str(len(merged)),
+                        "-",
+                        "-",
+                        f"Too few pairs ({len(merged)})",
+                    )
+                    continue
+
+                cog_values = merged[f"{metric_col}_cog"].values
+                base_values = merged[f"{metric_col}_base"].values
+
+                stat, p_value = wilcoxon(cog_values, base_values)
+                significant = "✓ Yes" if p_value < 0.05 else "✗ No"
+
+                wins, ties, losses, total, win_rate = compute_win_rate(
+                    cog_values,
+                    base_values,
+                    higher_is_better=HIGHER_IS_BETTER.get(metric_name, True),
+                )
+
+                table.add_row(
+                    STRATEGY_NAMES.get(baseline, baseline),
+                    str(x_val),
+                    f"{np.mean(cog_values):.4f}",
+                    f"{np.mean(base_values):.4f}",
+                    str(len(merged)),
+                    f"{wins}/{ties}/{losses}",
+                    f"{win_rate:.1%}",
+                    f"{stat:.1f}",
+                    f"{p_value:.2e}",
+                    significant,
                 )
 
         console = Console()

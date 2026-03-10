@@ -14,6 +14,7 @@ from itertools import product
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from scipy.stats import wilcoxon
 
 from ulsa.in_house_cardiac.gcnr import METRIC_LABEL, sort_by_names, swap_layer
 from ulsa.in_house_cardiac.gcnr import load_results as load_fundamental_results
@@ -76,6 +77,17 @@ if __name__ == "__main__":
         load_harmonic_results()
     )
 
+    # Compute Wilcoxon signed-rank test for each subject
+    cognitive_gcnr_values = []
+    diverging_gcnr_values = []
+    for subject_id, data in (gcnr_all | gcnr_all_hi).items():
+        key = "greedy_entropy" if "greedy_entropy" in data else "reconstructions"
+        cognitive_gcnr_values.append(data[key].mean())
+        diverging_gcnr_values.append(data["diverging"].mean())
+
+    stat, p_value = wilcoxon(cognitive_gcnr_values, diverging_gcnr_values)
+    print(f"Wilcoxon signed-rank test: statistic={stat:.4f}, p-value={p_value:.4f}")
+
     for acq_method in [("fundamental", "harmonic"), ("harmonic",), ("fundamental",)]:
         # mean gcnr for diverging
         _, _, mean_gcnr_div = print_mean_gcnr(
@@ -93,8 +105,13 @@ if __name__ == "__main__":
             acq_methods=acq_method,
         )
 
+        gcnr_improvement_absolute = mean_gcnr_act - mean_gcnr_div
         gcnr_improvement = ((mean_gcnr_act - mean_gcnr_div) / mean_gcnr_div) * 100.0
-        print(f"-- gCNR improvement ({acq_method}): {gcnr_improvement:.2f}%")
+        acq_method_str = " & ".join(acq_method)
+        print(
+            f"-- gCNR improvement (absolute) ({acq_method_str}): {gcnr_improvement_absolute:.4f}"
+        )
+        print(f"-- gCNR improvement ({acq_method_str}): {gcnr_improvement:.2f}%")
 
     group_names.update(group_names_hi)
 

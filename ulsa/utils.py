@@ -76,7 +76,7 @@ def update_scan_for_polar_grid(
     pfield_kwargs=None,
     f_number=0.3,
     ray_multiplier: int = 6,
-    pixels_per_wavelength=4,
+    pixels_per_wavelength=2,
     apply_lens_correction: bool = True,
 ):
     """Update the scan object for line scanning."""

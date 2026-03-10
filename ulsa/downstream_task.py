@@ -6,6 +6,7 @@ from abc import ABC
 import jax
 import numpy as np
 from keras import ops
+from scipy.optimize import curve_fit
 
 import zea
 from ulsa.io_utils import deg2rad
