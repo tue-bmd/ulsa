@@ -265,7 +265,7 @@ if __name__ == "__main__":
     baseline_strategies = ["uniform_random", "equispaced"]
     winrate_results = compute_paired_winrate(
         combined_results,
-        ["psnr", "lpips"],
+        ["psnr", "lpips", "dice"],
         cognitive_strategy,
         baseline_strategies,
     )
@@ -327,20 +327,38 @@ if __name__ == "__main__":
     metric_name = "dice"
     x_values = [2, 4, 7, 14]
     formatted_metric_name = METRIC_NAMES.get(metric_name, metric_name.upper())
-    plotter.plot(
-        df_to_dict(combined_results, metric_name),
-        save_path=f"./echonet_{metric_name}_violin_plot.pdf",
-        x_label_values=x_values,
-        metric_name=formatted_metric_name,
-        groups_to_plot=STRATEGIES_TO_PLOT,
-        ylim=[0.58, 1.02],
-        legend_kwargs={
-            "loc": "outside upper center",
-            "ncol": 3,
-            "frameon": False,
-        },
-        order_by=order_by,
-    )
+    with plt.style.context("styles/ieee-tmi.mplstyle"):
+        fig, ax = plt.subplots()
+        plotter.plot(
+            df_to_dict(combined_results, metric_name),
+            save_path=None,
+            x_label_values=x_values,
+            metric_name=formatted_metric_name,
+            groups_to_plot=STRATEGIES_TO_PLOT,
+            ylim=[0.58, 1.02],
+            ax=ax,
+            legend_kwargs=None,
+            order_by=order_by,
+        )
+        annotate_winrate(
+            ax,
+            winrate_results,
+            metric_name,
+            order_by,
+            x_values,
+            cognitive_strategy,
+            baseline_strategies,
+        )
+        fig.legend(
+            *ax.get_legend_handles_labels(),
+            loc="outside upper center",
+            ncol=3,
+            frameon=False,
+        )
+        save_path = f"./echonet_{metric_name}_violin_plot.pdf"
+        plt.savefig(save_path)
+        plt.close()
+        log.info(f"Saved DICE violin plot to {log.yellow(save_path)}")
 
     # Individual metrics plots
     x_values = [4, 7, 14, 28]
