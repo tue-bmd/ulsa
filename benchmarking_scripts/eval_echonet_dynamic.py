@@ -64,6 +64,12 @@ from ulsa.benchmark_active_sampling_ultrasound import AgentConfig, run_benchmark
 def parse_args():
     parser = argparse.ArgumentParser(description="Run ULSA benchmark for echonet.")
     parser.add_argument(
+        "--agent_config",
+        type=str,
+        default="/ulsa/configs/echonet_3_frames.yaml",
+        help="Path to the agent config YAML file.",
+    )
+    parser.add_argument(
         "--num_shards",
         type=int,
         default=None,
