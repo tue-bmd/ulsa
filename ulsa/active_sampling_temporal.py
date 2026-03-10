@@ -240,8 +240,8 @@ def run_active_sampling(
         # afterwards. You could predetermine it, so it is fine to use the target sequence
         # for it here.
         pipeline_state = {
-            "maxval": output["maxval"],
-            "dynamic_range": output["dynamic_range"],
+            "maxval": output.get("maxval", None),
+            "dynamic_range": output.get("dynamic_range", None),
         }
 
         # This is done to ensure that the measurements are 0 where the mask is 0.
