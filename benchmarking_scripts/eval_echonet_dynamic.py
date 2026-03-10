@@ -115,12 +115,35 @@ def parse_args():
         default="val",
         help="Dataset split to use for the benchmark, e.g. 'train', 'val', 'test'.",
     )
+    parser.add_argument(
+        "--downstream_task",
+        type=str,
+        nargs="*",
+        default=["echonet_segmentation"],
+        help="Downstream task(s) to evaluate additionally, e.g. --downstream_task echonet_segmentation",
+    )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        choices=["float32", "mixed_float16", "mixed_bfloat16"],
+        default="float32",
+        help="Precision to use for inference: https://keras.io/api/mixed_precision/policy/",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    keras.mixed_precision.set_global_policy("float32")  # echonet-dynamic uses float32
+    if "echonet_segmentation" in args.downstream_task:
+        # echonet-dynamic uses float32
+        if args.precision != "float32":
+            print(
+                f"Warning: echonet_segmentation downstream task is only compatible with float32 "
+                "precision. Overriding precision to float32."
+            )
+        keras.mixed_precision.set_global_policy("float32")
+    else:
+        keras.mixed_precision.set_global_policy(args.precision)
 
     TARGET_DIR = (
         data_paths.data_root
@@ -140,7 +163,7 @@ if __name__ == "__main__":
             "action_selection.n_actions": args.n_actions,
             "action_selection.selection_strategy": args.selection_strategy,
             "diffusion_inference.batch_size": [2],
-            "downstream_task": ["echonet_segmentation"],  # just runs additionally
+            "downstream_task": args.downstream_task,  # just runs additionally
         },
         limit_n_samples=args.limit_n_samples,  # set to None to use all samples
         limit_n_frames=args.limit_n_frames,  # makes sure every patient is equally represented

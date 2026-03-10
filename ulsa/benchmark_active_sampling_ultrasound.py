@@ -42,8 +42,26 @@ def setup_sweep(agent_config: AgentConfig, sweep_params) -> List[AgentConfig]:
     if not sweep_params:
         return [agent_config], None
 
-    param_paths = list(sweep_params.keys())
-    param_values = list(sweep_params.values())
+    param_paths = []
+    param_values = []
+
+    # Validate sweep_params format
+    for param_path, param_value in sweep_params.items():
+        if not isinstance(param_path, str):
+            raise ValueError(
+                f"Keys of sweep_params must be parameter paths as strings, but got {param_path}"
+            )
+        if not isinstance(param_value, list):
+            raise ValueError(
+                f"Each value in sweep_params must be a list, but got {param_value}"
+            )
+        if len(param_value) == 0:
+            log.warning(
+                f"No values provided for parameter {param_path}, skipping this parameter."
+            )
+            continue
+        param_paths.append(param_path)
+        param_values.append(param_value)
 
     # Generate all combinations
     sweep_configs: List[AgentConfig] = []
