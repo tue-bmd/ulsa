@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from ulsa.downstream_task import compute_dice_score
 from zea import Config, log
+from zea.data.datasets import _file_hash
 from zea.internal.cache import cache_output
 
 
@@ -23,7 +24,6 @@ def get_config_value(config, key_path: str):
     return ref
 
 
-@cache_output(verbose=True)
 def index_sweep_data(sweep_dirs: str | List[str]):
     if isinstance(sweep_dirs, str):
         sweep_dirs = [sweep_dirs]
@@ -256,7 +256,6 @@ def extract_run_dir(
     }
 
 
-@cache_output(verbose=True)
 def extract_sweep_data(sweep_dirs: str, **kwargs):
     """Load all the metrics from the run_benchmark function, using in-file ground truth masks.
 
@@ -273,16 +272,22 @@ def extract_sweep_data(sweep_dirs: str, **kwargs):
             - max_bad_frames (int): Maximum number of bad frames allowed
     """
 
-    generator = index_sweep_data(sweep_dirs)
-    _extract_run_dir = lambda run: extract_run_dir(run, **kwargs)
+    @cache_output(verbose=True)
+    def _extract_sweep_data(sweep_dirs, _hash):
+        assert _hash is not None, "Hash must be provided for caching."
 
-    print("Extracting sweep data...")
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        results = list(
-            tqdm(executor.map(_extract_run_dir, generator), total=len(generator))
-        )
-    results = [r for r in results if r is not None]
-    return pd.DataFrame(results)
+        generator = index_sweep_data(sweep_dirs)
+        _extract_run_dir = lambda run: extract_run_dir(run, **kwargs)
+
+        print("Extracting sweep data...")
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            results = list(
+                tqdm(executor.map(_extract_run_dir, generator), total=len(generator))
+            )
+        results = [r for r in results if r is not None]
+        return pd.DataFrame(results)
+
+    return _extract_sweep_data(sweep_dirs, _file_hash(sweep_dirs))
 
 
 def sort_by_names(combined_results, names):
