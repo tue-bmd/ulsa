@@ -8,6 +8,7 @@ from keras import ops
 import zea.ops
 from zea.func import apply_along_axis, translate
 from zea.internal.core import DataTypes
+from zea.ops import ops_registry
 
 NOISE_ESTIMATION_NORMALIZER = (
     0.6745  # Used for robust noise estimation from median absolute deviation
@@ -85,6 +86,7 @@ def wavelet_denoise_full(data, axis, **kwargs):
     return apply_along_axis(lambda x: wavelet_denoise_rf(x, **kwargs), axis, data)
 
 
+@ops_registry("get_auto_dynamic_range")
 class GetAutoDynamicRange(zea.ops.Operation):
     """Compute dynamic range based on percentiles of the input data.
     Only works when dynamic range is not already set in the parameters."""
@@ -117,6 +119,7 @@ class GetAutoDynamicRange(zea.ops.Operation):
         return {"dynamic_range": [vmin, vmax]}
 
 
+@ops_registry("translate_dynamic_range")
 class TranslateDynamicRange(zea.ops.Operation):
     """Translate data from one range to another.
 
@@ -134,6 +137,7 @@ class TranslateDynamicRange(zea.ops.Operation):
         return {self.output_key: data}
 
 
+@ops_registry("wavelet_denoise")
 class WaveletDenoise(zea.ops.Operation):
     def __init__(self, wavelet="db4", level=4, threshold_factor=0.1, axis=-3, **kwargs):
         super().__init__(**kwargs)
@@ -173,6 +177,7 @@ def lines_rx_apo(n_tx, grid_size_z, grid_size_x):
     return rx_apo[..., None, None]  # shape (n_tx, n_pix, 1, 1)
 
 
+@ops_registry("multiply")
 class Multiply(zea.ops.Operation):
     """Multiply input data by a given factor."""
 
@@ -191,6 +196,7 @@ class Multiply(zea.ops.Operation):
         return {self.output_key: multiplied_data}
 
 
+@ops_registry("undo_tgc")
 class UndoTGC(zea.ops.Operation):
     def __init__(self, axis, **kwargs):
         super().__init__(**kwargs)
@@ -202,6 +208,7 @@ class UndoTGC(zea.ops.Operation):
         return {self.output_key: data}
 
 
+@ops_registry("apply_along_axis")
 class ApplyAlongAxis(zea.ops.Operation):
     def __init__(self, axis, fn: callable, **kwargs):
         super().__init__(**kwargs)
@@ -214,10 +221,10 @@ class ApplyAlongAxis(zea.ops.Operation):
         return {self.output_key: data}
 
 
+@ops_registry("copy")
 class Copy(zea.ops.Operation):
     """Copy the input data to the output key."""
 
     def call(self, **kwargs):
         data = kwargs[self.key]
         return {self.output_key: data}
-
